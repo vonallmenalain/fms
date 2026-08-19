@@ -47,8 +47,15 @@ function GastApp() {
   // keine Neuanmeldung. Angemeldet wird erst beim ersten Buchen (siehe firebase.ts).
   useEffect(() => {
     bestehenderBenutzer()
-      .then((u) => { setBenutzer(u); setAuthGeprueft(true); })
-      .catch(() => setAuthGeprueft(true));
+      .then((u) => {
+        setBenutzer(u);
+        // Gab es beim Laden keine Sitzung, ist dies ein neues Gerät: dann darf die
+        // Ticket-Wiederherstellung unten später nicht mehr auslösen, sonst springt sie
+        // nach der ersten Buchung fälschlich ans Ende.
+        if (!u) startGesetzt.current = true;
+        setAuthGeprueft(true);
+      })
+      .catch(() => { startGesetzt.current = true; setAuthGeprueft(true); });
   }, []);
 
   // Bestehendes Ticket auf diesem Gerät? Dann direkt dorthin — einmalig beim Laden.

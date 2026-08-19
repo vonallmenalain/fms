@@ -15,7 +15,7 @@ import { readFile } from 'node:fs/promises';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 import {
-  getFirestore, collection, doc, getDocs, onSnapshot, runTransaction, serverTimestamp,
+  getFirestore, collection, doc, getDoc, getDocs, onSnapshot, runTransaction, serverTimestamp,
   connectFirestoreEmulator,
 } from 'firebase/firestore';
 import { connectAuthEmulator } from 'firebase/auth';
@@ -30,6 +30,15 @@ const ANTEIL_HEISS = Number(arg('heiss', 0.15));
 const ANTEIL_UM    = Number(arg('umbuchen', 0.30));
 const ZUHOERER   = Number(arg('zuhoerer', 5));
 const DENKZEIT   = Number(arg('denkzeit', 4000));
+// Verteilung der Gruppengrössen. Standard entspricht dem erwarteten Bild am Eventtag:
+// die meisten kommen allein oder zu zweit. --maxgruppe 4 erzwingt Gleichverteilung 1-4
+// und damit eine deutlich stärkere Überbuchung als real zu erwarten.
+const MAXGRUPPE  = Number(arg('maxgruppe', 0));
+const gruppengroesse = () => {
+  if (MAXGRUPPE) return 1 + Math.floor(Math.random() * MAXGRUPPE);
+  const w = Math.random();
+  return w < 0.55 ? 1 : w < 0.85 ? 2 : w < 0.96 ? 3 : 4;   // Mittel ≈ 1.6
+};
 const ANLAUF     = Number(arg('anlauf', 20000));
 const NUR_AUFRAEUMEN = process.argv.includes('--aufraeumen');
 
@@ -68,7 +77,7 @@ const schlafen = (ms) => new Promise((r) => setTimeout(r, ms));
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const code = () => Array.from({ length: 6 }, () => zufall([...ALPHABET])).join('');
 
-const mess = { dauer: [], ausgebucht: 0, fehler: 0, sichtbar: [], gebucht: 0, anmeldeFehler: 0 };
+const mess = { dauer: [], ausgebucht: 0, fehler: 0, sichtbar: [], gebucht: 0, anmeldeFehler: 0, gesperrt: 0 };
 // Zeitpunkt des letzten bestätigten Schreibvorgangs je Angebot — daraus misst der
 // Zuhörer, wie lange eine fremde Änderung bis zum Bildschirm braucht (Kriterium L6).
 const schreibZeit = new Map();
@@ -160,7 +169,7 @@ async function client(nr, startsignal) {
   const uid = await anmelden(a, nr);
   if (!uid) { await deleteApp(app); return; }
   await startsignal;                       // alle buchen gemeinsam los — der Andrangsfall
-  const plaetze = 1 + Math.floor(Math.random() * 4);
+  const plaetze = gruppengroesse();
   const heiss = Math.random() < ANTEIL_HEISS;
   const gewaehlteFaecher = { atelier: new Set(), lektion: new Set() };
 
@@ -169,7 +178,21 @@ async function client(nr, startsignal) {
     const gruppe = blockId.startsWith('a') ? 'atelier' : 'lektion';
     const moeglich = proBlock[blockId].filter((id) => !gewaehlteFaecher[gruppe].has(fachVon[id]));
     if (!moeglich.length) continue;
-    const ziel = heiss ? (BELIEBT.find((id) => moeglich.includes(id)) ?? zufall(moeglich)) : zufall(moeglich);
+    let ziel = heiss ? (BELIEBT.find((id) => moeglich.includes(id)) ?? zufall(moeglich)) : zufall(moeglich);
+
+    // Vorprüfung wie in der App: Zeigt die Anzeige zu wenig freie Plätze, ist die Karte
+    // gesperrt und es wird gar keine Transaktion gestartet (docs/05 §5, Massnahme 1).
+    // Ohne diese Nachbildung misst der Lasttest ein Verhalten, das die App nie erzeugt.
+    const frei = async (id) => {
+      const s = await getDoc(doc(db, 'slots', id));
+      return s.exists() ? (s.data().kapazitaet ?? 0) - (s.data().belegt ?? 0) : kapVon[id];
+    };
+    if ((await frei(ziel)) < plaetze) {
+      const andere = [];
+      for (const id of moeglich) if (id !== ziel && (await frei(id)) >= plaetze) andere.push(id);
+      if (!andere.length) { mess.gesperrt++; continue; }     // alles voll: gar nicht erst tippen
+      ziel = zufall(andere);
+    }
 
     const t0 = performance.now();
     try {
@@ -277,7 +300,7 @@ const summeGebucht = buchungen
 
 console.log(`
 Anmeldephase ${((tBuchung - t0) / 1000).toFixed(0)} s · Buchungsphase ${dauer.toFixed(1)} s · gesamt ${gesamt.toFixed(1)} s
-${mess.gebucht} Buchungen · ${mess.ausgebucht} ausgebucht · ${mess.fehler} Fehler · ${mess.anmeldeFehler} Anmeldefehler
+${mess.gebucht} Buchungen · ${mess.gesperrt} vorab gesperrt · ${mess.ausgebucht} beim Buchen ausgebucht · ${mess.fehler} Fehler · ${mess.anmeldeFehler} Anmeldefehler
 
 L1 Summe belegt / gebucht   ${summeBelegt} / ${summeGebucht ?? 'n/a (nur als Admin prüfbar: npm run pruefe)'}   ${summeGebucht === null ? '—' : ok(summeBelegt === summeGebucht)}
 L2 belegt > kapazitaet      ${ueber.length} Fälle                ${ok(ueber.length === 0)}
