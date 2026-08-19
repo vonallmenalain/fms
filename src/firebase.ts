@@ -31,19 +31,52 @@ if (env.VITE_EMULATOR) {
 }
 
 /**
- * Meldet das Gerät anonym an, falls noch niemand angemeldet ist, und liefert den Benutzer.
- * Die anonyme UID ist die Geräte-Kennung: Sie überlebt das Schliessen des Browsers und ist
- * gleichzeitig das request.auth, an dem die Security Rules die Buchung festmachen.
+ * Liefert die bereits bestehende Anmeldung dieses Geräts — ohne Netzaufruf.
+ * Firebase legt die anonyme Sitzung lokal ab; ein wiederkehrendes Gerät findet so sein
+ * Ticket wieder, ohne sich neu anzumelden.
  */
-export function benutzerBereit(): Promise<User> {
-  return new Promise((fertig, fehler) => {
-    const ab = onAuthStateChanged(
-      auth,
-      (u) => {
-        if (u) { ab(); fertig(u); return; }
-        signInAnonymously(auth).catch((f) => { ab(); fehler(f); });
-      },
-      (f) => { ab(); fehler(f); },
-    );
+export function bestehenderBenutzer(): Promise<User | null> {
+  return new Promise((fertig) => {
+    const ab = onAuthStateChanged(auth, (u) => { ab(); fertig(u); }, () => { ab(); fertig(null); });
   });
+}
+
+export class AnmeldeAndrangFehler extends Error {
+  readonly name = 'AnmeldeAndrangFehler';
+  constructor() { super('Zu viele gleichzeitige Anmeldungen von diesem Netz'); }
+}
+
+/**
+ * Meldet das Gerät anonym an — bewusst ERST beim ersten Schreibvorgang, nicht beim Laden.
+ *
+ * Grund: Firebase Auth drosselt anonyme Neuanmeldungen pro IP-Adresse. Im Gast-WLAN der
+ * Schule teilen sich alle Geräte eine einzige öffentliche IP; würden sich 150 Geräte im
+ * selben Moment beim Scannen des QR-Codes anmelden, blockiert Firebase mit
+ * auth/too-many-requests. Weil das Programm und die freien Plätze ohne Anmeldung lesbar
+ * sind (siehe firestore.rules), verteilt sich die Anmeldung so von selbst über die Zeit,
+ * die die Leute zum Lesen und Auswählen brauchen. Zusätzlich Wiederholung mit Streuung.
+ */
+const ANMELDE_WARTE_MS = [400, 1200, 2600, 5000];
+
+export async function benutzerBereit(): Promise<User> {
+  if (auth.currentUser) return auth.currentUser;
+  const vorhanden = await bestehenderBenutzer();
+  if (vorhanden) return vorhanden;
+
+  let letzter: unknown;
+  for (let versuch = 0; versuch <= ANMELDE_WARTE_MS.length; versuch++) {
+    try {
+      const ergebnis = await signInAnonymously(auth);
+      return ergebnis.user;
+    } catch (fehler) {
+      letzter = fehler;
+      const code = (fehler as { code?: string })?.code;
+      if (code !== 'auth/too-many-requests' && code !== 'auth/network-request-failed') break;
+      if (versuch === ANMELDE_WARTE_MS.length) break;
+      const ms = ANMELDE_WARTE_MS[versuch];
+      await new Promise((r) => setTimeout(r, ms * (0.6 + Math.random() * 0.8)));
+    }
+  }
+  if ((letzter as { code?: string })?.code === 'auth/too-many-requests') throw new AnmeldeAndrangFehler();
+  throw letzter;
 }

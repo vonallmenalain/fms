@@ -1,6 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import type { User } from 'firebase/auth';
-import { benutzerBereit } from './firebase';
+import { AnmeldeAndrangFehler, benutzerBereit, bestehenderBenutzer } from './firebase';
 import { BLOCK_IDS, programm, type BlockId } from './programm';
 import { useAppConfig } from './hooks/useAppConfig';
 import { useBuchung } from './hooks/useBuchung';
@@ -32,7 +32,7 @@ export default function App() {
 
 function GastApp() {
   const [benutzer, setBenutzer] = useState<User | null>(null);
-  const [authFehler, setAuthFehler] = useState<string | null>(null);
+  const [authGeprueft, setAuthGeprueft] = useState(false);
   const { config, veraltet } = useAppConfig();
   const { buchung, geladen: buchungGeladen } = useBuchung(benutzer?.uid ?? null);
 
@@ -43,10 +43,12 @@ function GastApp() {
   const [meldung, setMeldung] = useState<string | null>(null);
   const startGesetzt = useRef(false);
 
+  // Beim Laden NUR nachsehen, ob dieses Gerät schon eine Sitzung hat — kein Netzaufruf,
+  // keine Neuanmeldung. Angemeldet wird erst beim ersten Buchen (siehe firebase.ts).
   useEffect(() => {
-    benutzerBereit()
-      .then(setBenutzer)
-      .catch(() => setAuthFehler('Keine Verbindung zur Anmeldung. Bitte Seite neu laden.'));
+    bestehenderBenutzer()
+      .then((u) => { setBenutzer(u); setAuthGeprueft(true); })
+      .catch(() => setAuthGeprueft(true));
   }, []);
 
   // Bestehendes Ticket auf diesem Gerät? Dann direkt dorthin — einmalig beim Laden.
@@ -82,16 +84,20 @@ function GastApp() {
   }, [ausTicket]);
 
   const waehlen = useCallback(async (blockId: BlockId, angebotId: string | null) => {
-    if (!benutzer) return;
     const schonGewaehlt = buchung?.wahl?.[blockId] ?? null;
     if (angebotId && schonGewaehlt === angebotId) { weiter(blockId); return; }
 
     setLaeuftFuer(angebotId);
     try {
-      await waehle(benutzer.uid, blockId, angebotId, plaetze);
+      // Anmeldung erst hier — das verteilt die Anmeldungen über die Auswahlzeit.
+      const u = benutzer ?? (await benutzerBereit());
+      if (!benutzer) setBenutzer(u);
+      await waehle(u.uid, blockId, angebotId, plaetze);
       if (angebotId) weiter(blockId);
     } catch (fehler) {
-      if (fehler instanceof AusgebuchtFehler) {
+      if (fehler instanceof AnmeldeAndrangFehler) {
+        setMeldung('Gerade melden sich sehr viele gleichzeitig an. Bitte in ein paar Sekunden nochmals tippen.');
+      } else if (fehler instanceof AusgebuchtFehler) {
         const a = angebot(fehler.angebotId);
         setMeldung(`${a?.fach ?? 'Das Angebot'} ist leider gerade eben ausgebucht. Bitte wähle etwas anderes.`);
       } else if (fehler instanceof RechteFehler) {
@@ -110,7 +116,7 @@ function GastApp() {
   }, [benutzer, buchung, plaetze, weiter, config.anmeldungOffen]);
 
   const plaetzeAendern = useCallback((n: number) => {
-    setPlaetzeLokal(n);
+    setPlaetzeLokal(n);   // vor der ersten Buchung nur lokal — es gibt noch kein Dokument
     if (benutzer && buchung) setzePlaetze(benutzer.uid, n).catch(() => undefined);
   }, [benutzer, buchung]);
 
@@ -123,14 +129,8 @@ function GastApp() {
     setMeldung('Alle Plätze wurden freigegeben.');
   }, [benutzer, buchung]);
 
-  if (authFehler) {
-    return (
-      <div className="seite">
-        <div className="hinweis hinweis--fehler">{authFehler}</div>
-      </div>
-    );
-  }
-  if (!benutzer || !buchungGeladen) return <Laden />;
+  // Auf die Buchung warten wir nur, wenn dieses Gerät überhaupt schon angemeldet ist.
+  if (!authGeprueft || (benutzer && !buchungGeladen)) return <Laden />;
 
   const etwasGewaehlt = buchung ? Object.values(buchung.wahl).some(Boolean) : false;
 

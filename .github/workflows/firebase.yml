@@ -24,7 +24,11 @@ on:
           - nur-rules
           - nur-seed
           - pruefen
+          - anmeldung-oeffnen
+          - anmeldung-schliessen
+          - live-zaehler-aus
           - reset
+          - reset-und-oeffnen
 
 concurrency:
   group: firebase
@@ -68,9 +72,25 @@ jobs:
         if: env.AKTION == 'pruefen'
         run: node scripts/pruefe.mjs --project "$PROJEKT"
 
+      - name: Anmeldung öffnen
+        if: env.AKTION == 'anmeldung-oeffnen'
+        run: node scripts/schalter.mjs --offen --project "$PROJEKT"
+
+      - name: Anmeldung schliessen
+        if: env.AKTION == 'anmeldung-schliessen'
+        run: node scripts/schalter.mjs --zu --project "$PROJEKT"
+
+      - name: Live-Zähler abschalten (Reserveschalter)
+        if: env.AKTION == 'live-zaehler-aus'
+        run: node scripts/schalter.mjs --live-aus --project "$PROJEKT"
+
       - name: Alles zurücksetzen
-        if: env.AKTION == 'reset'
+        if: env.AKTION == 'reset' || env.AKTION == 'reset-und-oeffnen'
         run: node scripts/reset.mjs --ja --project "$PROJEKT"
+
+      - name: Nach dem Zurücksetzen wieder öffnen
+        if: env.AKTION == 'reset-und-oeffnen'
+        run: node scripts/schalter.mjs --offen --project "$PROJEKT"
 
       - name: Schlüssel entfernen
         if: always()

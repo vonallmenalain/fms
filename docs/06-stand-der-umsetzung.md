@@ -21,8 +21,20 @@ wie man es startet und wo bewusst vom Konzept abgewichen wurde.
 | Lasttest mit Invariantenprüfung | ✅ |
 | Netlify-Deploy aus `main` | ✅ |
 
-**Noch offen:** Lasttest gegen die echte Datenbank mit 200/400 Clients (Phase 6),
-Generalprobe, CI-Grün aus dem Original-Logo, Blaze-Tarif.
+**Noch offen:** Latenzmessung gegen die echte Datenbank mit 200/400 Clients (muss von einem
+gewöhnlichen Anschluss aus laufen, siehe unten), Generalprobe, CI-Grün aus dem
+Original-Logo, Blaze-Tarif.
+
+> ### Fund aus dem Lasttest: Anmelde-Drosselung pro IP
+> Firebase Auth blockiert anonyme Neuanmeldungen, wenn zu viele von **derselben IP-Adresse**
+> kommen (`auth/too-many-requests`). Im Gast-WLAN teilen sich alle Geräte eine IP — beim
+> gleichzeitigen QR-Scan wäre das am Eventtag aufgetreten.
+> **Behoben:** Die App meldet sich jetzt **erst beim ersten Buchen** an, nicht beim Laden
+> der Seite. Da Programm und freie Plätze ohne Anmeldung lesbar sind, verteilen sich die
+> Anmeldungen über die Auswahlzeit. Dazu Wiederholung mit Streuung und eine verständliche
+> Meldung. Vollständige Analyse: [05 §5a](05-last-und-performance.md).
+> **Bleibt zu prüfen:** ob das Gast-WLAN der Schule betroffen ist — nur vor Ort messbar,
+> gehört in die Generalprobe.
 
 ## 2. Lokal starten
 

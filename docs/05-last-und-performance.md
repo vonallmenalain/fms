@@ -146,6 +146,44 @@ Verbindungen sind vier Zehntausendstel der Verbindungsgrenze. Wir sind nirgends 
 einer Grenze — ausser beim Andrang auf ein einzelnes Dokument, und genau dafür sind die vier
 Massnahmen oben da.
 
+## 5a. Der Fund aus dem ersten Lasttest: Anmelde-Drosselung pro IP
+
+Beim ersten Lauf gegen die echte Datenbank brach der Test sofort ab:
+
+```
+FirebaseError: Firebase: Error (auth/too-many-requests)
+```
+
+**Firebase Auth drosselt anonyme Neuanmeldungen pro IP-Adresse.** 150 Anmeldungen
+innerhalb von 20 Sekunden von einer einzigen IP wurden blockiert — und die Sperre hielt
+danach über eine Stunde an.
+
+**Warum das für den 28. Oktober zählt:** Im Gast-WLAN der Schule teilen sich **alle Geräte
+eine einzige öffentliche IP** (NAT). Melden sich 150 Personen im Moment des QR-Scans
+gleichzeitig an, sieht Firebase genau das Muster, das es eben blockiert hat. Über das
+Mobilfunknetz besteht das Problem nicht — dort hat jedes Gerät eine eigene Adresse.
+
+**Was daraufhin geändert wurde:**
+
+1. **Anmeldung erst beim ersten Buchen, nicht beim Laden der Seite.** Das ist die
+   wirksamste Massnahme. Programm und freie Plätze sind laut `firestore.rules` ohne
+   Anmeldung lesbar; angemeldet wird erst, wenn jemand wirklich ein Angebot antippt.
+   Damit verteilen sich die Anmeldungen von selbst über die Zeit, die die Leute zum Lesen,
+   Gruppengrösse-Wählen und Aussuchen brauchen — aus einem Schwall von 15 Sekunden werden
+   zwei bis drei Minuten.
+2. **Wiederholung mit Streuung** (400 / 1200 / 2600 / 5000 ms ± 40 %) bei
+   `auth/too-many-requests`.
+3. **Verständliche Meldung**, falls es trotzdem klemmt: «Gerade melden sich sehr viele
+   gleichzeitig an. Bitte in ein paar Sekunden nochmals tippen.» — kein Absturz, kein
+   Datenverlust, die Auswahl bleibt stehen.
+
+**Was noch offen ist:** Die Drosselschwelle ist von Google nicht dokumentiert und für
+Rechenzentrums-IPs strenger als für gewöhnliche Anschlüsse. Ob das Gast-WLAN der Schule
+betroffen ist, lässt sich nur vor Ort messen. **Deshalb gehört in die Generalprobe: 20
+echte Handys, alle im Gast-WLAN, alle innerhalb einer Minute anmelden.** Das ist der
+einzige belastbare Test. Auf der QR-Folie soll ausserdem stehen, dass Mobilfunk der
+bevorzugte Weg ist und das WLAN nur die Ergänzung für Geräte ohne Datenverbindung.
+
 ## 6. Der Beweis: Lasttest mit 200 und 400 Geräten
 
 Argumente ersetzen keine Messung. `scripts/lasttest.mjs` startet echte Firebase-Clients gegen das
@@ -180,8 +218,15 @@ Zeit bis fremde Änderung sichtbar · verbrauchte Lese- und Schreibvorgänge lau
 2. **400 Clients** — doppelter Sicherheitsfaktor; hier darf es langsamer werden, aber L1–L4 müssen halten
 3. **200 Clients mit gedrosseltem Netz** (3G-Profil, 10 % Paketverlust) — der Turnhallenfall
 
+> **Hinweis zum Ausführungsort:** Der Lasttest meldet echte anonyme Nutzer an und läuft
+> deshalb gegen die Drosselung aus §5a, wenn alle Anmeldungen von einer IP kommen. Er
+> nimmt sich dafür Zeit (`--anlauf`), aber aus einem Rechenzentrum heraus greift die
+> Sperre trotzdem früh. **Gegen die echte Datenbank deshalb von einem gewöhnlichen
+> Anschluss aus laufen lassen** — oder gegen die Emulator Suite, wo die Drosselung nicht
+> greift und die Korrektheitsprüfungen L1–L4 vollständig gelten.
+
 **Zusätzlich, weil Skripte nicht alles zeigen:** an der Generalprobe rund 20 echte Handys im
-Gast-WLAN. Das findet die Dinge, die kein Lasttest findet — winzige Tap-Ziele, ein iPhone mit
+Gast-WLAN — mit besonderem Blick auf §5a: alle innerhalb einer Minute anmelden lassen. Das findet die Dinge, die kein Lasttest findet — winzige Tap-Ziele, ein iPhone mit
 gesperrtem Zwischenspeicher, ein Android, das die Verbindung im Hintergrund kappt.
 
 ## 7. Leistungsbudget des Frontends
@@ -213,12 +258,15 @@ beides in Phase 6, beides wiederholbar.
 
 Zwei Dinge kann die beste App nicht lösen — beide gehören vor dem Event geklärt:
 
-1. **Das Gast-WLAN.** 200 gleichzeitige Geräte an einem Zugangspunkt sind für viele
-   Schul-Installationen die Belastungsgrenze — nicht wegen der Datenmenge (die App ist winzig),
-   sondern wegen der Anzahl Verbindungen. **Vor dem Event mit der Schul-IT klären**, wie viele
-   gleichzeitige Geräte das Gast-WLAN in der Aula verkraftet. Das Mobilfunknetz ist in der Stadt
-   Bern die verlässlichere Variante — deshalb steht das WLAN auf der Folie als Ergänzung, nicht
-   als Hauptweg.
+1. **Das Gast-WLAN.** Zwei getrennte Probleme, beide vor dem Event zu klären:
+   *(a)* 200 gleichzeitige Geräte an einem Zugangspunkt sind für viele Schul-Installationen
+   die Belastungsgrenze — nicht wegen der Datenmenge (die App ist winzig), sondern wegen der
+   Anzahl Verbindungen. **Mit der Schul-IT klären**, wie viele gleichzeitige Geräte das
+   Gast-WLAN in der Aula verkraftet.
+   *(b)* Alle Geräte teilen sich dahinter **eine öffentliche IP**, was die Anmelde-Drosselung
+   aus §5a auslösen kann. Das Mobilfunknetz ist in der Stadt Bern die verlässlichere Variante
+   und löst beide Probleme — deshalb steht das WLAN auf der Folie als Ergänzung, nicht als
+   Hauptweg.
 2. **Der Andrang selbst.** Eine Ansage in der Aula («es hat gut doppelt so viele Plätze wie
    Personen, in Ruhe») verteilt die Last über zwei Minuten statt über zwei Sekunden — wirksamer
    als jede technische Optimierung.

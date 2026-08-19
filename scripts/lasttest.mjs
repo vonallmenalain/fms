@@ -68,7 +68,7 @@ const schlafen = (ms) => new Promise((r) => setTimeout(r, ms));
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const code = () => Array.from({ length: 6 }, () => zufall([...ALPHABET])).join('');
 
-const mess = { dauer: [], ausgebucht: 0, fehler: 0, sichtbar: [], gebucht: 0 };
+const mess = { dauer: [], ausgebucht: 0, fehler: 0, sichtbar: [], gebucht: 0, anmeldeFehler: 0 };
 // Zeitpunkt des letzten bestätigten Schreibvorgangs je Angebot — daraus misst der
 // Zuhörer, wie lange eine fremde Änderung bis zum Bildschirm braucht (Kriterium L6).
 const schreibZeit = new Map();
@@ -133,11 +133,33 @@ async function buchen(db, uid, blockId, neuesAngebot, plaetze) {
   for (const id of fertig ?? []) if (!schreibZeit.has(id)) schreibZeit.set(id, jetzt);
 }
 
-async function client(nr) {
+/**
+ * Anmeldung mit Wiederholung. Firebase Auth drosselt anonyme Neuanmeldungen pro IP —
+ * im Gast-WLAN teilen sich alle Geräte eine IP, deshalb gehört das mitgetestet.
+ * Entspricht der Logik in src/firebase.ts.
+ */
+async function anmelden(a, nr) {
+  const warte = [400, 1200, 2600, 5000, 9000];
+  for (let i = 0; i <= warte.length; i++) {
+    try { return (await signInAnonymously(a)).user.uid; }
+    catch (f) {
+      if (f?.code !== 'auth/too-many-requests' || i === warte.length) {
+        mess.anmeldeFehler++;
+        if (mess.anmeldeFehler < 4) console.error(`Anmeldung ${nr}:`, f?.code || f?.message);
+        return null;
+      }
+      await schlafen(warte[i] * (0.6 + Math.random() * 0.8));
+    }
+  }
+  return null;
+}
+
+async function client(nr, startsignal) {
   const app = initializeApp(CONFIG, `c${nr}`);
   const { db, a } = verbinde(app);
-  await signInAnonymously(a);
-  const uid = a.currentUser.uid;
+  const uid = await anmelden(a, nr);
+  if (!uid) { await deleteApp(app); return; }
+  await startsignal;                       // alle buchen gemeinsam los — der Andrangsfall
   const plaetze = 1 + Math.floor(Math.random() * 4);
   const heiss = Math.random() < ANTEIL_HEISS;
   const gewaehlteFaecher = { atelier: new Set(), lektion: new Set() };
@@ -176,9 +198,9 @@ async function client(nr) {
 
 /** Misst, wie schnell fremde Änderungen ankommen (Kriterium L6). */
 async function zuhoerer(nr, bis) {
+  // Zuhörer brauchen keine Anmeldung: slots sind laut Rules öffentlich lesbar.
   const app = initializeApp(CONFIG, `h${nr}`);
-  const { db, a } = verbinde(app);
-  await signInAnonymously(a);
+  const { db } = verbinde(app);
   let ersterSchnappschuss = true;
   const ab = onSnapshot(collection(db, 'slots'), (snap) => {
     const jetzt = performance.now();
@@ -199,8 +221,7 @@ async function zuhoerer(nr, bis) {
 async function aufraeumen() {
   console.log('Räume auf: alle Plätze der Testclients werden freigegeben …');
   const app = initializeApp(CONFIG, 'putz');
-  const { db, a } = verbinde(app);
-  await signInAnonymously(a);
+  const { db } = verbinde(app);
   const slots = await getDocs(collection(db, 'slots'));
   let n = 0;
   for (const d of slots.docs) {
@@ -213,18 +234,33 @@ async function aufraeumen() {
 
 if (NUR_AUFRAEUMEN) { await aufraeumen(); process.exit(0); }
 
-console.log(`Lasttest: ${ANZAHL} Clients + ${ZUHOERER} Zuhörer, Anlauf ${ANLAUF / 1000}s, ${Math.round(ANTEIL_HEISS * 100)}% auf beliebte Angebote`);
+console.log(`Lasttest: ${ANZAHL} Clients + ${ZUHOERER} Zuhörer`);
+console.log(`Phase 1: Anmeldung über ${ANLAUF / 1000}s verteilt (Firebase drosselt pro IP)`);
+console.log(`Phase 2: alle buchen gleichzeitig los, ${Math.round(ANTEIL_HEISS * 100)}% gezielt auf dieselben Angebote`);
+
+let losgehts;
+const startsignal = new Promise((r) => { losgehts = r; });
 const t0 = performance.now();
+
 const clients = Promise.all(
-  Array.from({ length: ANZAHL }, (_, i) => schlafen((i / ANZAHL) * ANLAUF).then(() => client(i))),
+  Array.from({ length: ANZAHL }, (_, i) =>
+    schlafen((i / ANZAHL) * ANLAUF).then(() => client(i, startsignal))),
 );
-await Promise.all([clients, ...Array.from({ length: ZUHOERER }, (_, i) => zuhoerer(i, clients))]);
-const dauer = (performance.now() - t0) / 1000;
+const hoerer = Array.from({ length: ZUHOERER }, (_, i) => zuhoerer(i, clients));
+
+// Warten, bis die Anmeldungen durch sind, dann gemeinsam starten.
+await schlafen(ANLAUF + 3000);
+const tBuchung = performance.now();
+losgehts();
+await Promise.all([clients, ...hoerer]);
+const dauer = (performance.now() - tBuchung) / 1000;
+const gesamt = (performance.now() - t0) / 1000;
 
 // -------- Invarianten --------
+// Auch der Prüfer kommt ohne Anmeldung aus: slots sind öffentlich lesbar,
+// die Buchungsliste ist ohnehin nur für Admins (npm run pruefe).
 const app = initializeApp(CONFIG, 'pruefer');
-const { db, a: authP } = verbinde(app);
-await signInAnonymously(authP);
+const { db } = verbinde(app);
 const [slots, buchungen] = await Promise.all([
   getDocs(collection(db, 'slots')),
   getDocs(collection(db, 'bookings')).catch(() => null),   // nur Admins dürfen listen
@@ -240,7 +276,8 @@ const summeGebucht = buchungen
   : null;
 
 console.log(`
-Laufzeit ${dauer.toFixed(1)} s · ${mess.gebucht} Buchungen · ${mess.ausgebucht} ausgebucht · ${mess.fehler} Fehler
+Anmeldephase ${((tBuchung - t0) / 1000).toFixed(0)} s · Buchungsphase ${dauer.toFixed(1)} s · gesamt ${gesamt.toFixed(1)} s
+${mess.gebucht} Buchungen · ${mess.ausgebucht} ausgebucht · ${mess.fehler} Fehler · ${mess.anmeldeFehler} Anmeldefehler
 
 L1 Summe belegt / gebucht   ${summeBelegt} / ${summeGebucht ?? 'n/a (nur als Admin prüfbar: npm run pruefe)'}   ${summeGebucht === null ? '—' : ok(summeBelegt === summeGebucht)}
 L2 belegt > kapazitaet      ${ueber.length} Fälle                ${ok(ueber.length === 0)}
