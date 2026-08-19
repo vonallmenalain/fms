@@ -1,0 +1,79 @@
+{
+  "$comment": "Einzige Quelle der Wahrheit für das Programm des Besuchsmorgens. Wird ins Frontend-Bundle importiert UND vom Seed-Skript nach Firestore gespiegelt (nur id + capacity). Änderungen = Commit + Deploy.",
+  "version": "2026-08-19",
+  "event": {
+    "titel": "Besuchsmorgen FMS Neufeld",
+    "datum": "2026-10-28",
+    "wochentag": "Mittwoch",
+    "adresse": "Bremgartenstrasse 133, 3012 Bern",
+    "erwarteteBesuchende": 120,
+    "infostand": "GN, 2. Etage – betreut von FMS-Schüler:innen"
+  },
+  "rahmenprogramm": [
+    { "von": "08:15", "bis": "08:40", "ort": "Aula", "was": "Allgemeine Informationen über die Schule und den Besuchsmorgen (Schulleitung)" },
+    { "von": "09:40", "bis": "09:55", "ort": "–", "was": "Pause" }
+  ],
+  "raumlegende": {
+    "GN": "Gebäude Nord",
+    "GS": "Gebäude Süd",
+    "TH": "Turnhalle",
+    "hinweis": "Zahl vor dem Punkt = Etage, «-» bedeutet Untergeschoss (z. B. GN -1.55 = Gebäude Nord, 1. UG)."
+  },
+  "hinweise": [
+    "Bei den Unterrichtsbesuchen darf die Lektion nach 20 Minuten gewechselt werden – dafür braucht es keine Anmeldung.",
+    "Das Ticket muss nirgends vorgezeigt werden."
+  ],
+  "blocks": [
+    { "id": "a1", "art": "atelier", "label": "Atelier 1", "von": "08:50", "bis": "09:10", "kapazitaet": 35, "pflicht": false },
+    { "id": "a2", "art": "atelier", "label": "Atelier 2", "von": "09:20", "bis": "09:40", "kapazitaet": 35, "pflicht": false },
+    { "id": "l1", "art": "lektion", "label": "Unterrichtsbesuch 1", "von": "09:55", "bis": "10:40", "kapazitaet": 20, "pflicht": false },
+    { "id": "l2", "art": "lektion", "label": "Unterrichtsbesuch 2", "von": "10:50", "bis": "11:35", "kapazitaet": 20, "pflicht": false }
+  ],
+  "dedupeGruppen": [
+    { "id": "ateliers", "blocks": ["a1", "a2"], "regel": "fachKey" },
+    { "id": "lektionen", "blocks": ["l1", "l2"], "regel": "fachKey" }
+  ],
+  "offerings": [
+    { "id": "a1-humanbiologie",  "blockId": "a1", "fach": "Humanbiologie",          "fachKey": "humanbiologie",         "lehrperson": "GOR", "raum": "GN 1.52", "kapazitaet": 35 },
+    { "id": "a1-chemie",         "blockId": "a1", "fach": "Chemie",                 "fachKey": "chemie",                "lehrperson": "ZUC", "raum": "GN 1.53", "kapazitaet": 35 },
+    { "id": "a1-physik",         "blockId": "a1", "fach": "Physik",                 "fachKey": "physik",                "lehrperson": "MOS", "raum": "GN 1.54", "kapazitaet": 35 },
+    { "id": "a1-psychologie",    "blockId": "a1", "fach": "Psychologie",            "fachKey": "psychologie",           "lehrperson": "KLN", "raum": "GN 0.54", "kapazitaet": 35 },
+    { "id": "a1-philosophie",    "blockId": "a1", "fach": "Philosophie",            "fachKey": "philosophie",           "lehrperson": "JAK", "raum": "GN 2.55", "kapazitaet": 35 },
+    { "id": "a1-paed-sozio",     "blockId": "a1", "fach": "Pädagogik/Soziologie",   "fachKey": "paedagogik-soziologie", "lehrperson": "VAB", "raum": "GN 2.57", "kapazitaet": 35 },
+    { "id": "a1-wirtschaftrecht","blockId": "a1", "fach": "Wirtschaft und Recht",   "fachKey": "wirtschaft-recht",      "lehrperson": "HET", "raum": "GN 0.52", "kapazitaet": 35 },
+
+    { "id": "a2-humanbiologie",  "blockId": "a2", "fach": "Humanbiologie",          "fachKey": "humanbiologie",         "lehrperson": "GOR", "raum": "GN 1.52", "kapazitaet": 35 },
+    { "id": "a2-chemie",         "blockId": "a2", "fach": "Chemie",                 "fachKey": "chemie",                "lehrperson": "ZUC", "raum": "GN 1.53", "kapazitaet": 35 },
+    { "id": "a2-physik",         "blockId": "a2", "fach": "Physik",                 "fachKey": "physik",                "lehrperson": "MOS", "raum": "GN 1.54", "kapazitaet": 35 },
+    { "id": "a2-psychologie",    "blockId": "a2", "fach": "Psychologie",            "fachKey": "psychologie",           "lehrperson": "KLN", "raum": "GN 0.54", "kapazitaet": 35 },
+    { "id": "a2-philosophie",    "blockId": "a2", "fach": "Philosophie",            "fachKey": "philosophie",           "lehrperson": "JAK", "raum": "GN 2.55", "kapazitaet": 35 },
+    { "id": "a2-paed-sozio",     "blockId": "a2", "fach": "Pädagogik/Soziologie",   "fachKey": "paedagogik-soziologie", "lehrperson": "VAB", "raum": "GN 2.57", "kapazitaet": 35 },
+    { "id": "a2-wirtschaftrecht","blockId": "a2", "fach": "Wirtschaft und Recht",   "fachKey": "wirtschaft-recht",      "lehrperson": "HET", "raum": "GN 0.52", "kapazitaet": 35 },
+
+    { "id": "l1-27fa", "blockId": "l1", "klasse": "27Fa", "fach": "Französisch",        "fachKey": "franzoesisch",      "lehrperson": "WIN", "raum": "GS 3.04",  "kapazitaet": 20 },
+    { "id": "l1-27fb", "blockId": "l1", "klasse": "27Fb", "fach": "Chemie",             "fachKey": "chemie",            "lehrperson": "VUA", "raum": "GN -1.55", "kapazitaet": 20 },
+    { "id": "l1-27fc", "blockId": "l1", "klasse": "27Fc", "fach": "Deutsch",            "fachKey": "deutsch",           "lehrperson": "MIS", "raum": "GN 2.57",  "kapazitaet": 20 },
+    { "id": "l1-27fd", "blockId": "l1", "klasse": "27Fd", "fach": "Mathematik",         "fachKey": "mathematik",        "lehrperson": "BRJ", "raum": "GN 2.52",  "kapazitaet": 20 },
+    { "id": "l1-28fa", "blockId": "l1", "klasse": "28Fa", "fach": "Deutsch",            "fachKey": "deutsch",           "lehrperson": "KAS", "raum": "GN 2.56",  "kapazitaet": 20 },
+    { "id": "l1-28fb", "blockId": "l1", "klasse": "28Fb", "fach": "Pädagogik",          "fachKey": "paedagogik",        "lehrperson": "KLN", "raum": "GN 2.53",  "kapazitaet": 20 },
+    { "id": "l1-28fc", "blockId": "l1", "klasse": "28Fc", "fach": "Englisch",           "fachKey": "englisch",          "lehrperson": "NEE", "raum": "GN 2.55",  "kapazitaet": 20 },
+    { "id": "l1-28fd", "blockId": "l1", "klasse": "28Fd", "fach": "Soziologie",         "fachKey": "soziologie",        "lehrperson": "HÄY", "raum": "GN 1.57",  "kapazitaet": 20 },
+    { "id": "l1-29fa", "blockId": "l1", "klasse": "29Fa", "fach": "Geschichte/Politik", "fachKey": "geschichte-politik","lehrperson": "SHJ", "raum": "GN 2.54",  "kapazitaet": 20 },
+    { "id": "l1-29fb", "blockId": "l1", "klasse": "29Fb", "fach": "Physik",             "fachKey": "physik",            "lehrperson": "MOS", "raum": "GS 2.28",  "kapazitaet": 20 },
+    { "id": "l1-29fc", "blockId": "l1", "klasse": "29Fc", "fach": "Musik",              "fachKey": "musik",             "lehrperson": "SEK", "raum": "GN -1.57", "kapazitaet": 20 },
+    { "id": "l1-29fd", "blockId": "l1", "klasse": "29Fd", "fach": "Biologie",           "fachKey": "biologie",          "lehrperson": "GOR", "raum": "GS 1.02",  "kapazitaet": 20 },
+
+    { "id": "l2-27fa", "blockId": "l2", "klasse": "27Fa", "fach": "Wirtschaft/Recht",   "fachKey": "wirtschaft-recht",  "lehrperson": "KRS", "raum": "GN 1.55",  "kapazitaet": 20 },
+    { "id": "l2-27fb", "blockId": "l2", "klasse": "27Fb", "fach": "Mathematik",         "fachKey": "mathematik",        "lehrperson": "BRJ", "raum": "GN 2.52",  "kapazitaet": 20 },
+    { "id": "l2-27fc", "blockId": "l2", "klasse": "27Fc", "fach": "Deutsch",            "fachKey": "deutsch",           "lehrperson": "MIS", "raum": "GN 2.57",  "kapazitaet": 20 },
+    { "id": "l2-27fd", "blockId": "l2", "klasse": "27Fd", "fach": "Sport",              "fachKey": "sport",             "lehrperson": "INS", "raum": "TH 1",     "kapazitaet": 20 },
+    { "id": "l2-28fa", "blockId": "l2", "klasse": "28Fa", "fach": "Pädagogik",          "fachKey": "paedagogik",        "lehrperson": "VAB", "raum": "GN 1.56",  "kapazitaet": 20 },
+    { "id": "l2-28fb", "blockId": "l2", "klasse": "28Fb", "fach": "Pädagogik",          "fachKey": "paedagogik",        "lehrperson": "KLN", "raum": "GN 2.53",  "kapazitaet": 20 },
+    { "id": "l2-28fc", "blockId": "l2", "klasse": "28Fc", "fach": "Englisch",           "fachKey": "englisch",          "lehrperson": "NEE", "raum": "GN 2.55",  "kapazitaet": 20 },
+    { "id": "l2-28fd", "blockId": "l2", "klasse": "28Fd", "fach": "Soziologie",         "fachKey": "soziologie",        "lehrperson": "HÄY", "raum": "GN 1.57",  "kapazitaet": 20 },
+    { "id": "l2-29fa", "blockId": "l2", "klasse": "29Fa", "fach": "Geschichte/Politik", "fachKey": "geschichte-politik","lehrperson": "SHJ", "raum": "GN 2.54",  "kapazitaet": 20 },
+    { "id": "l2-29fb", "blockId": "l2", "klasse": "29Fb", "fach": "Physik",             "fachKey": "physik",            "lehrperson": "MOS", "raum": "GS 2.28",  "kapazitaet": 20 },
+    { "id": "l2-29fc", "blockId": "l2", "klasse": "29Fc", "fach": "Musik",              "fachKey": "musik",             "lehrperson": "SEK", "raum": "GN -1.57", "kapazitaet": 20 },
+    { "id": "l2-29fd", "blockId": "l2", "klasse": "29Fd", "fach": "Biologie",           "fachKey": "biologie",          "lehrperson": "GOR", "raum": "GS 1.02",  "kapazitaet": 20 }
+  ]
+}

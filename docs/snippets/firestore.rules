@@ -1,0 +1,121 @@
+rules_version = '2';
+
+// Firestore Security Rules — Besuchsmorgen FMS Neufeld
+// ENTWURF. In Phase 4 gegen die Emulator-Tests T1–T8 aus docs/03-umsetzungsplan.md prüfen,
+// erst danach deployen. Diese Datei ist der einzige wirksame Schutz gegen Überbuchung —
+// das UI ist es ausdrücklich nicht.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Helfer ----------
+
+    function istAngemeldet() {
+      return request.auth != null;            // anonym reicht
+    }
+
+    function istAdmin() {
+      return istAngemeldet()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Muss mit config/app.maxPlaetzeProGeraet übereinstimmen (Entscheid D3).
+    function maxPlaetze() { return 3; }
+
+    function anmeldungOffen() {
+      return get(/databases/$(database)/documents/config/app).data.anmeldungOffen == true;
+    }
+
+    function nurGeaendert(felder) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(felder);
+    }
+
+    function keineWahl(d) {
+      return d.wahl.a1 == null && d.wahl.a2 == null
+          && d.wahl.l1 == null && d.wahl.l2 == null;
+    }
+
+    // ---------- config/app : Notbremse, Banner ----------
+
+    match /config/{dok} {
+      allow read:  if true;                   // jedes Gerät liest den Zustand
+      allow write: if istAdmin();
+    }
+
+    // ---------- admins : nur über die Firebase-Konsole pflegbar ----------
+
+    match /admins/{uid} {
+      allow read:  if istAdmin();
+      allow write: if false;
+    }
+
+    // ---------- slots : die Zähler ----------
+
+    match /slots/{slotId} {
+      allow read: if true;
+
+      // Gäste dürfen ausschliesslich das Feld "belegt" verschieben,
+      // nie über die Kapazität hinaus und nie um mehr als eine Gruppengrösse.
+      allow update: if istAngemeldet()
+        && anmeldungOffen()
+        && nurGeaendert(['belegt'])
+        && request.resource.data.belegt is int
+        && request.resource.data.belegt >= 0
+        && request.resource.data.belegt <= resource.data.kapazitaet
+        && math.abs(request.resource.data.belegt - resource.data.belegt) <= maxPlaetze();
+
+      // Admins dürfen zusätzlich die Kapazität anpassen (z. B. 20 -> 24) und seeden.
+      allow create, update, delete: if istAdmin();
+    }
+
+    // ---------- bookings : eine Anmeldung pro Gerät ----------
+
+    match /bookings/{uid} {
+
+      allow read: if request.auth.uid == uid || istAdmin();
+
+      allow create: if istAngemeldet()
+        && anmeldungOffen()
+        && request.auth.uid == uid
+        && request.resource.data.plaetze is int
+        && request.resource.data.plaetze >= 1
+        && request.resource.data.plaetze <= maxPlaetze()
+        && request.resource.data.quelle == 'gast'
+        && request.resource.data.keys().hasOnly(
+             ['plaetze','code','wahl','erstelltAm','geaendertAm','quelle','notiz']);
+
+      allow update: if istAngemeldet()
+        && anmeldungOffen()
+        && request.auth.uid == uid
+        && request.resource.data.quelle == resource.data.quelle
+        && request.resource.data.code == resource.data.code
+        // Gruppengrösse nur ändern, solange noch nichts gebucht ist
+        && (request.resource.data.plaetze == resource.data.plaetze
+            || (keineWahl(resource.data)
+                && request.resource.data.plaetze >= 1
+                && request.resource.data.plaetze <= maxPlaetze()));
+
+      allow delete: if request.auth.uid == uid || istAdmin();
+
+      // Admins erfassen Anmeldungen für Gäste ohne Handy (eigene Dokument-ID, quelle='admin').
+      allow create, update: if istAdmin();
+    }
+
+    // ---------- codes : Rettungscode -> uid ----------
+
+    match /codes/{code} {
+      allow read: if istAdmin();              // nicht durchprobierbar
+      allow create: if istAngemeldet()
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if istAdmin();
+      allow create: if istAdmin();          // Admin erfasst Anmeldung ohne Handy
+    }
+
+    // ---------- alles Übrige ----------
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
