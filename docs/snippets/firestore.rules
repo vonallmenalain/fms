@@ -19,9 +19,12 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    // Muss mit config/app.maxPlaetzeProGeraet übereinstimmen (Entscheid D3).
-    function maxPlaetze() { return 3; }
+    // Harte Decke aus Entscheid D3. config/app.maxPlaetzeProGeraet ist zur Laufzeit
+    // auf 1-4 einstellbar; diese Konstante ist die Obergrenze, die niemand überschreiten kann.
+    function maxPlaetze() { return 4; }
 
+    // Entscheid D4: manueller Schalter. Ist er aus, sind sämtliche Gastschreibvorgänge gesperrt -
+    // die Notbremse wirkt damit serverseitig und nicht nur im Bildschirm.
     function anmeldungOffen() {
       return get(/databases/$(database)/documents/config/app).data.anmeldungOffen == true;
     }

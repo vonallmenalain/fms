@@ -88,15 +88,16 @@ QR-Code (Folie in der Aula, 08:15–08:40)
 
 ## 5. Gruppen-Anmeldung (2–3 Personen auf einem Gerät)
 
-Auf der Startseite: **«Für wie viele Personen meldest du an?» [1] [2] [3]** (Standard 1, änderbar bis
-zur ersten Buchung, danach nur noch über «Alles zurücksetzen»).
+Auf der Startseite: **«Für wie viele Personen meldest du an?» [1] [2] [3] [4]** (Standard 1,
+änderbar bis zur ersten Buchung, danach nur noch über «Alles zurücksetzen»).
 
 - Die Gruppe bucht **gemeinsam dieselben Angebote** — sie will ja zusammen hingehen.
 - Es werden `n` Plätze pro Angebot belegt. Reichen die freien Plätze nicht für die ganze Gruppe,
-  ist die Karte gesperrt mit Hinweis «nur noch 2 Plätze frei — für 3 Personen zu wenig».
-- Das Ticket zeigt «Gültig für 3 Personen».
-- Obergrenze **3** ist konfigurierbar (`config/app.maxSeatsPerDevice`) und schützt gleichzeitig
-  vor versehentlicher oder mutwilliger Massenbuchung.
+  ist die Karte gesperrt mit Hinweis «nur noch 2 Plätze frei — für 4 Personen zu wenig».
+- Das Ticket zeigt «Gültig für 4 Personen».
+- Obergrenze **4**, zur Laufzeit auf 1–4 einstellbar (`config/app.maxPlaetzeProGeraet`) — die
+  Security Rules erzwingen 4 als absolute Decke, unabhängig von der Einstellung. Das schützt
+  zugleich vor versehentlicher oder mutwilliger Massenbuchung.
 
 ## 6. Regeln (verbindlich)
 
@@ -105,9 +106,11 @@ zur ersten Buchung, danach nur noch über «Alles zurücksetzen»).
 | Kapazität Atelier | **35** Plätze | Word-Doc §5 |
 | Kapazität Lektion | **20** Plätze | Word-Doc §5 |
 | Zuteilung | First Come, First Serve — kein Losverfahren | Word-Doc §5 |
-| Doppelwahl Ateliers | dasselbe **Fach** nicht zweimal (A1 ≠ A2) | Word-Doc §3 |
-| Doppelwahl Lektionen | dasselbe **Fach** nicht zweimal (L1 ≠ L2) | Word-Doc §3 |
-| Atelier vs. Lektion | **erlaubt** — z. B. Atelier Physik + Lektion Physik | Auslegung, s. §11 |
+| Doppelwahl Ateliers | dasselbe **Fach** nicht zweimal (A1 ≠ A2) | Word-Doc §3 · Entscheid **D1** |
+| Doppelwahl Lektionen | dasselbe **Fach** nicht zweimal (L1 ≠ L2) — nicht die Klasse | Entscheid **D1** |
+| Atelier vs. Lektion | **erlaubt** — Atelier Physik + Lektion Physik geht | Entscheid **D2** |
+| Gruppengrösse pro Gerät | 1–4, zur Laufzeit einstellbar | Entscheid **D3** |
+| Freigabe der Anmeldung | manueller Schalter in der Admin-Ansicht | Entscheid **D4** |
 | Pflicht zur Wahl | **keine** — jeder Block darf leer bleiben | Word-Doc §5 |
 | Änderungen | jederzeit möglich, alter Platz wird sofort frei | Word-Doc §5 |
 | Kontrolle vor Ort | keine; Ticket muss nicht gezeigt werden | Word-Doc §5 |
@@ -175,6 +178,20 @@ ist die einzige echte Desktop-Ansicht.
 
 **Sprache.** Nur Deutsch, «du»-Form, kurze Sätze. Schweizer Rechtschreibung (ss statt ß).
 
+**Was auf einer Angebots-Karte steht.** Bewusst knapp — drei Zeilen, mehr nicht:
+
+```
+  Musik                     ← Fach, gross
+  29Fc · GN -1.57           ← Klasse und Zimmer, kleiner und grau
+  14 freie Plätze           ← Live-Zahl, feste Breite
+```
+
+**Ohne Lehrpersonen-Kürzel** (Entscheid der Schule). Sie bleiben in `data/programm.json`
+erhalten, weil sie für die internen Listen und den Info-Stand nützlich sind, werden den Gästen
+aber nirgends angezeigt — gesteuert über `anzeige.lehrpersonKuerzel: false`.
+Bei den Ateliers entfällt die Klasse, dort steht nur Fach und Zimmer.
+«TH 1» wird als **«Turnhalle 1»** ausgeschrieben.
+
 ## 9. Barrierefreiheit (Minimum, aber echt)
 
 - Bedienbar mit Tastatur; jede Karte ist ein `<button>`, kein `div` mit Click-Handler
@@ -193,21 +210,24 @@ ist die einzige echte Desktop-Ansicht.
 - **Löschung:** Alle Buchungen werden 7 Tage nach dem Event gelöscht (Skript `npm run reset`).
 - Serverstandort Firestore: **`eur3` (europe-west)** wählen — Daten bleiben in der EU.
 
-## 11. Offene Entscheide
+## 11. Getroffene Entscheide
 
-Diese vier Punkte brauchen ein Ja/Nein von der Schule, bevor Phase 3 beginnt.
-Vorschlag jeweils **fett**.
+Alle am 19.08.2026 durch die Schule entschieden — damit ist die Fachseite vollständig geklärt.
 
-| # | Frage | Optionen | Vorschlag |
+| # | Frage | **Entscheid** | Auswirkung |
 |---|---|---|---|
-| **D1** | Was gilt als «schon gewählt» bei Lektionen? | (a) gleiche **Klasse** sperren (27Fc L1 sperrt 27Fc L2) · (b) gleiches **Fach** sperren (auch 28Fb Pädagogik ↔ 28Fa Pädagogik) | **(b) Fach** — entspricht «2 unterschiedliche Fächer» wörtlich. Betrifft konkret: Pädagogik (28Fa/28Fb), Mathematik (27Fd L1 / 27Fb L2), Wirtschaft/Recht. |
-| **D2** | Darf man Atelier Physik **und** Lektion Physik wählen? | (a) ja · (b) nein | **(a) ja** — Atelier (20 Min. Info) und Unterrichtsbesuch (45 Min. echte Lektion) sind verschiedene Formate. |
-| **D3** | Max. Gruppengrösse pro Gerät | 2 · **3** · 4 | **3** (aus dem Word-Doc), als Konfigwert jederzeit änderbar |
-| **D4** | Wann öffnet die Anmeldung? | (a) ab sofort/Vorabend · (b) **erst wenn die Schulleitung den QR-Code zeigt** | **(b)** — Schalter in der Admin-Ansicht, ca. 08:35. Verhindert, dass ein früh geöffnetes Handy die Info-Runde stört. |
+| **D1** | Was gilt bei Lektionen als «schon gewählt»? | **nur dasselbe Fach** — nicht die Klasse | Wer 28Fb Pädagogik in Block 1 wählt, sieht 28Fa Pädagogik in Block 2 gesperrt. Verschiedene Klassen mit verschiedenen Fächern bleiben frei wählbar. |
+| **D2** | Atelier Physik **und** Lektion Physik? | **erlaubt** (vorerst) | Die Sperre wirkt nur *innerhalb* der Ateliers und *innerhalb* der Lektionen, nie quer darüber. Umstellbar über `dedupeGruppen` in `data/programm.json`, ohne Kodeänderung. |
+| **D3** | Max. Personen pro Gerät | **4**, einstellbar 1–4 | `config/app.maxPlaetzeProGeraet` ist zur Laufzeit änderbar (Admin-Ansicht), die Security Rules erzwingen 4 als harte Decke. |
+| **D4** | Freigabe der Anmeldung | **manueller Schalter** | Kein Zeitplan, keine Automatik: Die Organisation schaltet frei, wenn die QR-Folie erscheint — und kann jederzeit wieder schliessen. |
 
-**Klärungen zu den Daten aus dem PPT** (bitte bestätigen):
-- `Franz (WIN)` → im Programm als **«Französisch»** ausgeschrieben. OK?
-- `TH 1` → **Turnhalle 1**. Steht sie im selben Gebäude oder braucht es einen Wegtext?
-- Lehrpersonen-Kürzel (GOR, ZUC …): Gästen sagen die nichts. Vorschlag: klein und grau unter dem
-  Fach anzeigen (hilft den Lehrpersonen beim Info-Stand). Volle Namen wären schöner — falls
-  vorhanden, einfach in `data/programm.json` ergänzen.
+**Ebenfalls geklärt (Programmdaten):**
+
+| Frage | Antwort | umgesetzt in `data/programm.json` |
+|---|---|---|
+| `Franz (WIN)` | **Französisch** | `l1-27fa` → `"fach": "Französisch"` |
+| `TH 1` | **Turnhalle 1**, kein Weghinweis nötig | `l2-27fd` → `"raum": "Turnhalle 1"`, `"raumKurz": "TH 1"` |
+| Lehrpersonen-Kürzel | **nicht anzeigen** | `anzeige.lehrpersonKuerzel: false`; Daten bleiben für interne Listen erhalten |
+
+> Wird die Sperre bei D2 später doch gewünscht, ist es ein Eintrag in `dedupeGruppen`:
+> beide Blockpaare in **eine** Gruppe legen. Keine Kodeänderung, ein Commit.

@@ -3,8 +3,9 @@
 Web-App zur Selbst-Anmeldung der Besuchenden am **Besuchsmorgen vom Mittwoch, 28. Oktober 2026**
 an der FMS Neufeld, Bremgartenstrasse 133, 3012 Bern.
 
-> **Status:** Konzept — noch kein Code. Nächster Schritt: die vier Entscheide **D1–D4**
-> ([01-fachkonzept §11](docs/01-fachkonzept.md#11-offene-entscheide)) klären, danach Phase 1.
+> **Status:** Konzept vollständig, alle Entscheide getroffen (19.08.2026). Kein Code.
+> Nächster Schritt: **Phase 0** — Firebase-Projekte anlegen, Blaze-Tarif und Budget-Alarm
+> einrichten, CI-Grün und Logo besorgen. Danach Phase 1.
 
 ## Das Vorhaben in fünf Zeilen
 
@@ -18,11 +19,12 @@ ohne Handy selbst eintragen.
 | | |
 |---|---|
 | **Frontend + Hosting** | Vite + React + TypeScript auf **Netlify** — Gratis-Tier |
-| **Backend** | **Firebase Firestore** + Firebase Auth (anonym) — Spark-Plan, keine Kreditkarte |
+| **Backend** | **Firebase Firestore** + Firebase Auth (anonym für Gäste, E-Mail für Organisierende) — **Blaze-Tarif**, keine Cloud Functions |
 | **Domain** | `fms.alae.app` |
-| **Laufende Kosten** | **CHF 0.—** ([Rechnung](docs/02-technisches-konzept.md#6-kapazitäts--und-kostenrechnung-gratis-plan)) |
-| **Aufwand** | **26–28 h**, verteilt auf 8 Phasen |
+| **Kosten** | **< CHF 1 für den ganzen Anlass** ([Rechnung](docs/05-last-und-performance.md)) |
+| **Aufwand** | **27–29 h**, verteilt auf 8 Phasen |
 | **Klickbarer Prototyp** | nach ca. 8 h (Phase 2), noch ganz ohne Datenbank |
+| **Belastbarkeit** | im Lasttest mit **200 und 400** gleichzeitigen Clients belegt (Phase 6) |
 
 ## Die Dokumente
 
@@ -32,27 +34,49 @@ ohne Handy selbst eintragen.
 | **[docs/02-technisches-konzept.md](docs/02-technisches-konzept.md)** | Architektur, Technologiewahl mit Begründung, Firestore-Datenmodell, Transaktionslogik gegen Überbuchung, Security Rules, **Quota-Rechnung**, Deployment, Störungsverhalten |
 | **[docs/03-umsetzungsplan.md](docs/03-umsetzungsplan.md)** | 8 Phasen mit konkreten Befehlen und Abnahmekriterien, **Terminplan bis zum 28.10.**, Aufwand pro Phase, Risikoliste |
 | **[docs/04-eventtag-runbook.md](docs/04-eventtag-runbook.md)** | Ablauf des Morgens, Text der QR-Folie, die 5 häufigsten Supportfälle, Eskalationsstufen, **Papier-Fallback** |
+| **[docs/05-last-und-performance.md](docs/05-last-und-performance.md)** | Warum kein Cloud-Functions-Backend, warum Blaze, wie «wirklich live» entsteht, der Engpass bei 200 Geräten, **Lasttest mit Abnahmekriterien**, Leistungsbudget |
 | **[data/programm.json](data/programm.json)** | Das vollständige Programm: 14 Atelier- und 24 Lektionsangebote mit Fach, Klasse, Zimmer, Lehrperson, Kapazität — aus der Programm-PPT übernommen |
-| **[docs/snippets/](docs/snippets/)** | Startfertige `firestore.rules`, `netlify.toml`, `seed.mjs`, `.env`-Vorlage |
+| **[docs/snippets/](docs/snippets/)** | Startfertige `firestore.rules`, `netlify.toml`, `seed.mjs`, `lasttest.mjs`, `wiederholung.ts`, `.env`-Vorlage |
 
-## Die vier Entscheide, die jetzt anstehen
+## Getroffene Entscheide (19.08.2026)
 
-| # | Frage | Vorschlag |
+| # | Frage | Entscheid |
 |---|---|---|
-| **D1** | Was gilt bei den Lektionen als «schon gewählt» — dieselbe Klasse oder dasselbe Fach? | dasselbe **Fach** |
-| **D2** | Darf jemand Atelier Physik **und** Lektion Physik wählen? | **ja** — verschiedene Formate |
-| **D3** | Wie viele Personen darf ein Gerät anmelden? | **3** |
-| **D4** | Wann wird die Anmeldung freigeschaltet? | **08:35**, per Schalter, wenn die QR-Folie erscheint |
+| **D1** | Sperre bei den Lektionen | **nur dasselbe Fach** — nicht die Klasse |
+| **D2** | Atelier Physik *und* Lektion Physik | **erlaubt** (vorerst; umstellbar ohne Kodeänderung) |
+| **D3** | Personen pro Gerät | **max. 4**, zur Laufzeit einstellbar 1–4 |
+| **D4** | Freigabe der Anmeldung | **manueller Schalter** in der Admin-Ansicht |
+| — | `Franz (WIN)` | **Französisch** |
+| — | `TH 1` | **Turnhalle 1**, kein Weghinweis nötig |
+| — | Lehrpersonen-Kürzel | **nicht anzeigen** (bleiben in den Daten für interne Listen) |
 
-Dazu drei kleine Rückfragen zu den Programmdaten (siehe [01-fachkonzept §11](docs/01-fachkonzept.md#11-offene-entscheide)):
-`Franz (WIN)` → «Französisch»? · `TH 1` → Turnhalle 1, Weg dorthin? · Lehrpersonen-Kürzel anzeigen
-oder ausgeschriebene Namen?
+Alles davon steckt bereits in [`data/programm.json`](data/programm.json) unter `regeln` und `anzeige`.
+
+## Wie die App 200 gleichzeitige Geräte trägt
+
+Die drei Prioritäten — sauber und flüssig, wirklich live, kein Limit — sind in
+[docs/05](docs/05-last-und-performance.md) im Detail beantwortet. Die Kurzfassung:
+
+1. **Kein Serverkode zwischen App und Datenbank.** Cloud Functions würden bei 200 Geräten
+   bremsen (zusätzliche Runde, Kaltstart 1–3 s, begrenzter Instanzen-Pool), nicht schützen.
+   Die Buchung läuft als Firestore-Transaktion direkt aus der App; die Kapazitätsgrenze
+   erzwingen die Security Rules.
+2. **Blaze-Tarif, aber als Versicherung.** Bei 200 Geräten landet der Verbrauch mit ~50 000
+   Lesevorgängen genau auf der Gratis-Kante — und ein erschöpftes Kontingent hiesse: die App hört
+   mitten im Anlass auf zu funktionieren. Im Blaze-Tarif kostet der ungünstigste Fall rund
+   **0.08 USD**. Dazu ein Budget-Alarm auf CHF 5 / CHF 20.
+3. **Der echte Engpass ist nicht das Kontingent, sondern der Andrang auf ein einzelnes
+   Angebot.** Dagegen: Vorprüfung aus der Live-Anzeige, Wiederholung mit Streuung, ein Vorgang
+   pro Gerät, sauberes Scheitern.
+4. **Bewiesen statt behauptet:** Lasttest mit 200 **und** 400 echten Clients gegen dieselben
+   Security Rules, mit sieben Abnahmekriterien (L1–L7) — unter anderem «Summe der Zähler
+   entspricht exakt den gebuchten Plätzen» und «p95 der Buchungsdauer ≤ 1.5 s».
 
 ## Antworten auf die Fragen aus dem Word-Dokument
 
 | Frage | Antwort |
 |---|---|
-| Anmeldung für 2–3 Personen auf einem Gerät? | **Ja** — Gruppengrösse auf der Startseite, die Gruppe belegt entsprechend viele Plätze |
+| Anmeldung für mehrere Personen auf einem Gerät? | **Ja** — Gruppengrösse 1–4 auf der Startseite, die Gruppe belegt entsprechend viele Plätze |
 | 3–4 Lehrpersonen als Admin, die Gäste eintragen? | **Ja** — eigener Admin-Bereich mit Login, «+ Anmeldung erfassen» |
 | Lehrpersonen sehen live, wer wohin kommt? | **Ja** — Live-Dashboard, Druckansicht und CSV-Export. Kostet fast nichts extra |
 | Slots wieder freigeben und neu buchen? | **Ja** — beim Wechsel wird der alte Platz in derselben Transaktion frei |

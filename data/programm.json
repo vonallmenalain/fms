@@ -1,6 +1,6 @@
 {
   "$comment": "Einzige Quelle der Wahrheit für das Programm des Besuchsmorgens. Wird ins Frontend-Bundle importiert UND vom Seed-Skript nach Firestore gespiegelt (nur id + capacity). Änderungen = Commit + Deploy.",
-  "version": "2026-08-19",
+  "version": "2026-08-20",
   "event": {
     "titel": "Besuchsmorgen FMS Neufeld",
     "datum": "2026-10-28",
@@ -8,6 +8,20 @@
     "adresse": "Bremgartenstrasse 133, 3012 Bern",
     "erwarteteBesuchende": 120,
     "infostand": "GN, 2. Etage – betreut von FMS-Schüler:innen"
+  },
+  "anzeige": {
+    "$comment": "Steuert, was Gäste sehen. Lehrpersonen-Kürzel sind bewusst ausgeblendet (Entscheid der Schule) - das Feld bleibt in den Daten, weil es für die internen Listen und den Info-Stand nützlich ist.",
+    "lehrpersonKuerzel": false,
+    "klasse": true,
+    "raumlegendeAufTicket": true
+  },
+  "regeln": {
+    "$comment": "Entscheide D1-D4 vom 19.08.2026.",
+    "doppelwahl": "fachKey",
+    "doppelwahlNurInnerhalbGruppe": true,
+    "maxPlaetzeProGeraet": 4,
+    "maxPlaetzeProGeraetEinstellbar": [1, 2, 3, 4],
+    "freigabe": "manuell"
   },
   "rahmenprogramm": [
     { "von": "08:15", "bis": "08:40", "ort": "Aula", "was": "Allgemeine Informationen über die Schule und den Besuchsmorgen (Schulleitung)" },
@@ -66,7 +80,7 @@
     { "id": "l2-27fa", "blockId": "l2", "klasse": "27Fa", "fach": "Wirtschaft/Recht",   "fachKey": "wirtschaft-recht",  "lehrperson": "KRS", "raum": "GN 1.55",  "kapazitaet": 20 },
     { "id": "l2-27fb", "blockId": "l2", "klasse": "27Fb", "fach": "Mathematik",         "fachKey": "mathematik",        "lehrperson": "BRJ", "raum": "GN 2.52",  "kapazitaet": 20 },
     { "id": "l2-27fc", "blockId": "l2", "klasse": "27Fc", "fach": "Deutsch",            "fachKey": "deutsch",           "lehrperson": "MIS", "raum": "GN 2.57",  "kapazitaet": 20 },
-    { "id": "l2-27fd", "blockId": "l2", "klasse": "27Fd", "fach": "Sport",              "fachKey": "sport",             "lehrperson": "INS", "raum": "TH 1",     "kapazitaet": 20 },
+    { "id": "l2-27fd", "blockId": "l2", "klasse": "27Fd", "fach": "Sport",              "fachKey": "sport",             "lehrperson": "INS", "raum": "Turnhalle 1", "raumKurz": "TH 1", "kapazitaet": 20 },
     { "id": "l2-28fa", "blockId": "l2", "klasse": "28Fa", "fach": "Pädagogik",          "fachKey": "paedagogik",        "lehrperson": "VAB", "raum": "GN 1.56",  "kapazitaet": 20 },
     { "id": "l2-28fb", "blockId": "l2", "klasse": "28Fb", "fach": "Pädagogik",          "fachKey": "paedagogik",        "lehrperson": "KLN", "raum": "GN 2.53",  "kapazitaet": 20 },
     { "id": "l2-28fc", "blockId": "l2", "klasse": "28Fc", "fach": "Englisch",           "fachKey": "englisch",          "lehrperson": "NEE", "raum": "GN 2.55",  "kapazitaet": 20 },

@@ -1,7 +1,7 @@
 # 03 · Umsetzungsplan — konkrete Vorgehensweise
 
 **Heute:** 19.08.2026 · **Event:** 28.10.2026 · **Zeit:** 10 Wochen
-**Aufwand:** ca. **22–28 Stunden** — verteilbar auf 6–8 Abende.
+**Aufwand:** ca. **27–29 Stunden** — verteilbar auf 6–8 Abende.
 
 Die Reihenfolge ist bewusst so gewählt, dass nach **Phase 2 (ca. 8 h)** bereits eine klickbare,
 online erreichbare App existiert, die man der Schulleitung zeigen und mit einer Klasse testen kann —
@@ -12,17 +12,22 @@ gegen den bereits abgenommenen Prototypen prüfen.
 
 ## Phase 0 · Entscheide & Zugänge  (1 h, blockiert alles Weitere)
 
-1. Die vier Entscheide **D1–D4** aus [01-fachkonzept.md §11](01-fachkonzept.md) mit der Schule klären.
+1. ~~Die vier Entscheide **D1–D4** klären~~ — **erledigt am 19.08.2026**, siehe
+   [01-fachkonzept §11](01-fachkonzept.md). Damit ist die Fachseite vollständig geklärt.
 2. Das **CI-Grün** aus dem Logo-Original besorgen (SVG/AI oder CI-Manual) — Platzhalter ist `#B4BD00`.
 3. Logo als **SVG** und als PNG (512 px, für das Favicon/Startsymbol) ablegen unter `public/`.
 4. Zugänge anlegen:
    - Firebase-Projekte **`fms-besuchstag-test`** und **`fms-besuchstag-prod`**,
      Firestore-Standort **`eur3` (Europa)** — *dieser Standort lässt sich später nicht mehr ändern.*
    - In beiden: **Authentication → Anonym** aktivieren, **E-Mail/Passwort** aktivieren
+   - **Blaze-Tarif** auf beiden Projekten aktivieren ([Begründung: 05 §3](05-last-und-performance.md))
+   - **Budget-Alarm** in der Google-Cloud-Konsole auf **CHF 5 und CHF 20** mit E-Mail —
+     Blaze kennt keine harte Ausgabengrenze, der Alarm ist das Sicherheitsnetz
    - Netlify-Konto mit GitHub verbinden
    - DNS-Zugriff für `alae.app` bereitlegen
 
-**Fertig, wenn:** D1–D4 schriftlich beantwortet sind und beide Firebase-Projekte existieren.
+**Fertig, wenn:** beide Firebase-Projekte existieren, auf Blaze laufen und der Budget-Alarm
+eine Testmail ausgelöst hat.
 
 ---
 
@@ -132,26 +137,41 @@ und den Info-Stand-Ausdruck erzeugt.
 
 ---
 
-## Phase 6 · Härten & Lasttest  (3 h)
+## Phase 6 · Lasttest & Härten  (4 h) ⭐
+
+Die Phase, die die Zusage «läuft flüssig bei 200 Geräten» **belegt** statt behauptet.
+Vollständige Spezifikation: [05 §6](05-last-und-performance.md).
 
 ```bash
-node scripts/lasttest.mjs --geraete 150 --projekt fms-besuchstag-test
+node scripts/lasttest.mjs --clients 200 --projekt fms-besuchstag-test
+node scripts/lasttest.mjs --clients 400 --projekt fms-besuchstag-test   # doppelter Sicherheitsfaktor
+node scripts/lasttest.mjs --clients 200 --netz 3g --projekt fms-besuchstag-test
 ```
-Simuliert 150 Geräte, die innerhalb von 60 Sekunden je 4 Buchungen machen, davon 30 % mit
-nachträglicher Änderung. **Danach prüfen:**
 
-- [ ] Summe `belegt` über alle Slots = Summe der Plätze aus allen Buchungen — **exakt**
-- [ ] Kein Slot mit `belegt > kapazitaet`
-- [ ] Read-/Write-Verbrauch in der Firebase-Konsole ablesen und mit [02 §6](02-technisches-konzept.md) vergleichen
-- [ ] Kein Transaktionsfehler nach 5 Wiederholungen
+Echte Firebase-Clients mit anonymer Anmeldung — **nicht** das Admin-SDK, das würde die Security
+Rules umgehen und am Kern vorbeitesten. 15 % der Clients stürzen sich absichtlich auf dieselben
+drei Angebote, um Andrang zu erzwingen.
 
-Ausserdem:
-- Flugmodus-Test: mitten in der Auswahl offline gehen, wieder online → Buchung darf nicht verloren gehen
-- Test auf echten Geräten: **iPhone Safari, Android Chrome, ein altes Gerät** (langsames Rendering!)
-- Lighthouse: Performance ≥ 90, Accessibility ≥ 95
-- `config/app.liveZaehler = false` testen (Reserve-Schalter)
+**Abnahmekriterien — alle sieben müssen halten:**
 
----
+| # | Prüfung | Erwartung |
+|---|---|---|
+| L1 | Summe `belegt` = Summe gebuchter Plätze | **exakt gleich** |
+| L2 | Kein `belegt > kapazitaet` | 0 Fälle |
+| L3 | Kein `belegt < 0` | 0 Fälle |
+| L4 | Fehlgeschlagene Buchungen trotz freier Plätze | 0 |
+| L5 | p95 Buchungsdauer | ≤ 1.5 s |
+| L6 | p95 bis fremde Änderung sichtbar | ≤ 1.0 s |
+| L7 | Verbrauch gegen die Schätzung aus 05 §3 | Abweichung < 30 % |
+
+**Ausserdem in dieser Phase:**
+- Leistungsbudget prüfen: JS auf dem kritischen Pfad ≤ 200 KB gepackt, Admin-Bereich per
+  `lazy()` ausserhalb des Gast-Bundles (`npx vite-bundle-visualizer`)
+- Lighthouse Mobil: Leistung ≥ 90, Bedienhilfen ≥ 95
+- Flugmodus-Test: mitten in der Auswahl offline gehen, wieder online → keine Buchung verloren
+- Echte Geräte: **iPhone Safari, Android Chrome, ein altes langsames Gerät**
+- Reserveschalter `config/app.liveZaehler = false` testen
+- Kein Layoutsprung, wenn ein Zähler sich ändert (feste Breite, keine Umsortierung)
 
 ## Phase 7 · Produktion, Domain, Generalprobe  (2 h)
 
@@ -197,18 +217,20 @@ dank `data/programm.json` im Bundle ist eine Programmänderung noch am Vorabend 
 | 3 Firebase | 4 |
 | 4 Rules & Tests | 3 |
 | 5 Admin | 4 |
-| 6 Härten & Lasttest | 3 |
+| 6 Lasttest & Härten | 4 |
 | 7 Produktion & Generalprobe | 2 |
 | Reserve / Feedback-Einarbeitung | 2–3 |
-| **Total** | **26–28 h** |
+| **Total** | **27–29 h** |
 
 ## Risiken
 
 | Risiko | Wahrsch. | Wirkung | Gegenmassnahme |
 |---|---|---|---|
 | Programm ändert spät | hoch | klein | Programm im Bundle → Commit + Deploy in 5 Min. |
-| Firestore-Read-Quota erschöpft | mittel | **gross** | Listener-Disziplin (Phase 3), Reserve-Schalter `liveZaehler`, Konsole am Morgen im Blick |
-| 120 Geräte gleichzeitig um 08:40 | mittel | mittel | Lasttest Phase 6; Aula-Ansage «in Ruhe, es hat doppelt so viele Plätze wie Leute» |
+| Firestore-Kontingent erschöpft | **entfällt** | — | Blaze-Tarif: wird abgerechnet statt abgeschaltet. Budget-Alarm CHF 5/20 |
+| Andrang auf ein einzelnes Angebot | mittel | mittel | Vorprüfung aus der Live-Anzeige + Wiederholung mit Streuung; im Lasttest mit 400 Clients belegt ([05 §5](05-last-und-performance.md)) |
+| 200 Geräte gleichzeitig um 08:35 | mittel | mittel | Lasttest Phase 6 mit 200 **und** 400 Clients; Aula-Ansage «in Ruhe, es hat gut doppelt so viele Plätze wie Leute» |
+| Gast-WLAN verkraftet 200 Verbindungen nicht | mittel | mittel | **Vorab mit der Schul-IT klären** ([05 §9](05-last-und-performance.md)); Mobilfunknetz ist der Hauptweg, WLAN die Ergänzung |
 | WLAN im Gebäude überlastet | mittel | mittel | App lädt < 200 KB, funktioniert über Mobilnetz; Gast-WLAN auf der QR-Folie |
 | Gäste ohne Handy | sicher | klein | Admin-Erfassung durch Lehrpersonen (Phase 5) |
 | Ticket verloren (Browserdaten weg) | klein | klein | Rettungscode + Admin-Suche |

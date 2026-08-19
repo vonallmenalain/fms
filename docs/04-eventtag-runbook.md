@@ -6,10 +6,10 @@ Eine Seite, die man ausdruckt und den 3–4 Lehrpersonen am Info-Stand in die Ha
 
 | Zeit | Was passiert | Wer macht was |
 |---|---|---|
-| 07:45 | Technik: Firebase-Konsole öffnen, Verbrauch notieren, App auf 2 Geräten testen | Technik |
+| 07:45 | Technik: Firebase-Konsole (Nutzung) öffnen, Verbrauch notieren, App auf 2 Geräten testen | Technik |
 | 08:00 | Support online und erreichbar | Technik |
 | 08:15 | Begrüssung in der Aula durch die Schulleitung | Schulleitung |
-| **08:35** | **QR-Folie einblenden** + Admin schaltet `Anmeldung offen` ein | Organisation |
+| **08:35** | **QR-Folie einblenden** + Admin schaltet `Anmeldung offen` ein (manueller Schalter, D4) | Organisation |
 | 08:35–08:50 | Anmeldephase, 3–4 Lehrpersonen im Saal und am Info-Stand | Betreuung |
 | 08:45 | Admin druckt/exportiert die Belegungsliste (Papier-Backup) | Betreuung |
 | 08:50 | Atelier 1 startet | — |
@@ -34,8 +34,11 @@ Eine Seite, die man ausdruckt und den 3–4 Lehrpersonen am Info-Stand in die Ha
 ```
 
 Zusätzlich mündlich ansagen — das entschärft 80 % der Hektik:
-> «Es hat für alle Platz — mehr als doppelt so viele Plätze wie Personen.
-> Wer zu zweit oder zu dritt unterwegs ist, meldet sich auf **einem** Handy für alle an.»
+> «Es hat für alle Platz — mehr als doppelt so viele Plätze wie Personen. Nehmt euch Zeit.
+> Wer zu zweit, zu dritt oder zu viert unterwegs ist, meldet sich auf **einem** Handy für alle an.»
+
+Die Aufforderung «nehmt euch Zeit» ist nicht nur nett gemeint: Sie verteilt 200 gleichzeitige
+Zugriffe auf zwei Minuten statt auf zwei Sekunden — wirksamer als jede technische Optimierung.
 
 ## 3. Die fünf häufigsten Supportfälle
 
@@ -45,7 +48,7 @@ Zusätzlich mündlich ansagen — das entschärft 80 % der Hektik:
 | «Mein Ticket ist weg» | Ticket-Seite über `fms.alae.app` erneut öffnen — sie kommt automatisch zurück. Sonst: Rettungscode am Info-Stand suchen |
 | «Das Fach ist ausgebucht» | Nachbar-Angebot vorschlagen; im Notfall Admin → Kapazität +2 (Zimmergrösse beachten!) |
 | «Ich will wechseln» | Auf dem Ticket **Ändern** tippen — der alte Platz wird sofort frei |
-| «Wir sind zu dritt» | Startseite → «Für wie viele Personen?» → **3**, danach gemeinsam wählen |
+| «Wir sind zu viert» | Startseite → «Für wie viele Personen?» → **1 bis 4**, danach gemeinsam wählen |
 
 ## 4. Wenn etwas grösser schiefgeht
 
@@ -54,8 +57,11 @@ Admin → `Live-Zähler` ausschalten. Platzzahlen zeigen dann «Stand 08:47» st
 Buchen funktioniert unverändert. → halbiert die Last sofort.
 
 **Stufe 2 — Buchen schlägt bei mehreren Personen fehl**
-Firebase-Konsole → *Nutzung*. Ist die Read-Quota bei 100 %, hilft nur Stufe 1 (sofort) oder
-Stufe 3. Ist es ein Rules-Fehler, sieht man ihn in der Browserkonsole eines betroffenen Geräts.
+Firebase-Konsole → *Nutzung*. Dank Blaze-Tarif kann kein Kontingent mehr auslaufen — es wird
+abgerechnet statt abgeschaltet. Bleibt also: ein Rules-Fehler (sichtbar in der Browserkonsole
+eines betroffenen Geräts) oder Andrang auf ein einzelnes, fast volles Angebot. Im zweiten Fall
+zeigt das Admin-Dashboard das betroffene Angebot sofort — Kapazität um 2 erhöhen oder die Leute
+auf ein Nachbarangebot lenken.
 
 **Stufe 3 — Nichts geht mehr**
 Admin → `Anmeldung geschlossen` + Banner «Bitte beim Info-Stand melden», dann Papier (§5).
@@ -65,6 +71,7 @@ Admin → `Anmeldung geschlossen` + Banner «Bitte beim Info-Stand melden», dan
 Ja — vorbereiten. Er kostet fast nichts und nimmt allen Beteiligten die Nervosität.
 
 - **Pro Lektion 20 Zettel**, pro Atelier 35 Zettel, je mit Fach · Klasse · Zimmer · Zeit
+  (ohne Lehrpersonen-Kürzel, gleich wie in der App)
 - 38 Bündel mit Gummiband, beschriftet, in 4 Kisten (A1 · A2 · L1 · L2)
 - Wer einen Zettel nimmt, hat den Platz. Ist ein Bündel leer, ist das Angebot ausgebucht.
   **Exakt dieselbe Logik wie die App** — das macht den Umstieg trivial.

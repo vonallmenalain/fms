@@ -3,7 +3,7 @@
 ## 1. Architektur in einem Bild
 
 ```
-   Handy des Gasts                    Netlify (CDN)              Firebase (Spark, gratis)
+   Handy des Gasts                    Netlify (CDN)              Firebase (Blaze-Tarif)
  ┌──────────────────┐            ┌────────────────────┐        ┌──────────────────────────┐
  │  Browser         │            │  statische Dateien │        │  Auth (anonym + Admin)   │
  │  React-SPA       │◄──HTTPS────┤  HTML/JS/CSS       │        │                          │
@@ -37,14 +37,17 @@ Vorteile — und alle drei sind hier wichtig:
 | Build | **Vite + React + TypeScript** | 4 Screens mit Live-Daten; TS verhindert genau die Tippfehler (`l1-27fc` vs. `l1-27Fc`), die am Eventtag weh tun |
 | Styling | **Tailwind CSS** | keine separate CSS-Datei zu pflegen, konsistente Tap-Grössen |
 | Routing | **react-router** | 6 Routen inkl. `/admin`, `/ticket` |
-| Backend | **Firebase Firestore** (Spark/gratis) | Echtzeit-Zähler + atomare Transaktionen ohne eigenen Server |
+| Backend | **Firebase Firestore** (Blaze, s. [05 §3](05-last-und-performance.md)) | Echtzeit-Zähler + atomare Transaktionen ohne eigenen Server |
 | Auth | **Firebase Auth**: anonym (Gäste) + E-Mail/Passwort (Admin) | anonyme UID = stabile Geräte-ID **und** Basis für die Security Rules |
 | Hosting | **Netlify** | Git-Deploy, Deploy-Previews pro Branch, Gratis-Tier reicht um Faktor 1000 |
 | Tests | **Vitest** + **Firebase Emulator Suite** | Rules-Tests und der Lasttest laufen lokal, ohne Quota zu verbrauchen |
 
 **Bewusst nicht gewählt**
-- *Cloud Functions* — bräuchten den **Blaze-Plan** (Kreditkarte hinterlegt). Die Kapazitätsprüfung
-  geht auch clientseitig sicher, siehe §4/§5. Also: nicht nötig, keine Kreditkarte.
+- *Cloud Functions* — **auch mit aktiviertem Blaze-Tarif nicht.** Serverkode zwischen App und
+  Datenbank macht die Buchung bei 200 Geräten langsamer (zusätzliche Runde, Kaltstart 1–3 s,
+  begrenzter Instanzen-Pool) und fügt einen zweiten Ausfallpunkt hinzu. Die serverseitige
+  Autorität, ihr einziger echter Vorteil, kommt bei uns aus den Security Rules — ohne Runde.
+  Ausführliche Begründung mit Zahlen: [05 §2](05-last-und-performance.md).
 - *Next.js / SSR* — für 6 statische Screens unnötiger Ballast.
 - *Supabase / Netlify Blobs* — funktionierten ebenfalls, aber Firestore hat mit
   `onSnapshot` + `runTransaction` genau die zwei Bausteine, die dieses Projekt braucht,
@@ -73,7 +76,7 @@ Vier Collections plus ein Konfigdokument. Alles bewusst flach.
 ```jsonc
 // bookings/AbC123...  (uid = anonyme Firebase-ID = Gerät)
 {
-  "plaetze": 2,                       // Gruppengrösse 1–3
+  "plaetze": 2,                       // Gruppengrösse 1–4 (Entscheid D3)
   "code": "K7F2QP",                   // Rettungscode fürs Ticket
   "wahl": {
     "a1": "a1-psychologie",
@@ -97,8 +100,9 @@ Vier Collections plus ein Konfigdokument. Alles bewusst flach.
 ### `config/app` — Laufzeitsteuerung (1 Dokument)
 ```jsonc
 {
-  "anmeldungOffen": false,          // Notbremse / Freigabe um 08:35
-  "maxPlaetzeProGeraet": 3,
+  "anmeldungOffen": false,          // manueller Schalter (D4) — Notbremse und Freigabe
+  "maxPlaetzeProGeraet": 4,        // 1–4, zur Laufzeit einstellbar (D3)
+  "liveZaehler": true,             // Reserveschalter: false = keine Live-Updates
   "banner": "",                     // Freitext an alle Gäste, "" = aus
   "programmVersion": "2026-08-19"   // Warnung, falls Gerät veraltetes Bundle hat
 }
@@ -116,35 +120,43 @@ und zwar **alles zusammen oder gar nicht**. Genau dafür ist `runTransaction` da
 
 ```ts
 async function waehle(blockId: BlockId, neuesAngebot: string | null) {
-  await runTransaction(db, async (tx) => {
-    const bookingRef = doc(db, 'bookings', uid);
-    const booking    = (await tx.get(bookingRef)).data() ?? neueBuchung();
-    const plaetze    = booking.plaetze;
-    const altesAngebot = booking.wahl[blockId];
+  await mitWiederholung(() =>                                     // 4 Versuche mit Streuung, s. 05 §5
+    runTransaction(db, async (tx) => {
+      const bookingRef = doc(db, 'bookings', uid);
 
-    if (altesAngebot === neuesAngebot) return;                    // nichts zu tun
+      // ---- 1. ALLE Lesevorgänge zuerst -------------------------------------
+      // Firestore verlangt das: sobald geschrieben wurde, ist kein tx.get() mehr erlaubt.
+      const bookingSnap  = await tx.get(bookingRef);
+      const booking      = bookingSnap.data() ?? neueBuchung();
+      const plaetze      = booking.plaetze;                        // 1-4
+      const altesAngebot = booking.wahl[blockId];
 
-    // 1) Kapazität des neuen Angebots prüfen — im selben Lesevorgang
-    if (neuesAngebot) {
-      const slotRef  = doc(db, 'slots', neuesAngebot);
-      const slot     = (await tx.get(slotRef)).data();
-      if (slot.belegt + plaetze > slot.kapazitaet) {
-        throw new AusgebuchtFehler(neuesAngebot);                 // → freundliche Meldung
+      if (altesAngebot === neuesAngebot) return;                   // nichts zu tun
+
+      const neuRef  = neuesAngebot  ? doc(db, 'slots', neuesAngebot)  : null;
+      const altRef  = altesAngebot  ? doc(db, 'slots', altesAngebot)  : null;
+      const neuSnap = neuRef ? await tx.get(neuRef) : null;
+      const altSnap = altRef ? await tx.get(altRef) : null;
+
+      // ---- 2. Prüfen -------------------------------------------------------
+      if (neuSnap) {
+        const { belegt, kapazitaet } = neuSnap.data()!;
+        if (belegt + plaetze > kapazitaet) {
+          throw new AusgebuchtFehler(neuesAngebot!);               // -> freundliche Meldung
+        }
       }
-      tx.update(slotRef, { belegt: slot.belegt + plaetze });
-    }
 
-    // 2) Alten Platz freigeben
-    if (altesAngebot) {
-      const altRef = doc(db, 'slots', altesAngebot);
-      const alt    = (await tx.get(altRef)).data();
-      tx.update(altRef, { belegt: Math.max(0, alt.belegt - plaetze) });
-    }
+      // ---- 3. ALLE Schreibvorgänge danach ----------------------------------
+      if (neuRef && neuSnap) tx.update(neuRef, { belegt: neuSnap.data()!.belegt + plaetze });
+      if (altRef && altSnap) tx.update(altRef, { belegt: Math.max(0, altSnap.data()!.belegt - plaetze) });
 
-    // 3) Buchung schreiben
-    tx.set(bookingRef, { ...booking, wahl: { ...booking.wahl, [blockId]: neuesAngebot },
-                         geaendertAm: serverTimestamp() }, { merge: true });
-  });
+      tx.set(bookingRef, {
+        ...booking,
+        wahl: { ...booking.wahl, [blockId]: neuesAngebot },
+        geaendertAm: serverTimestamp(),
+      }, { merge: true });
+    })
+  );
 }
 ```
 
@@ -154,7 +166,16 @@ Transaktion ab und führt sie automatisch neu aus (bis zu 5×). Die Prüfung `be
 kapazitaet` läuft also immer gegen den aktuellen Stand. Zwei Personen können nicht denselben
 letzten Platz bekommen.
 
-**Fehlerbehandlung im UI:** `AusgebuchtFehler` → Karte wird sofort rot markiert, Toast
+**Zwei Fallstricke, die genau hier sitzen:**
+1. **Lesen vor Schreiben.** Ein `tx.get()` nach dem ersten `tx.update()` lässt die Transaktion
+   zur Laufzeit scheitern. Deshalb die strikte Dreiteilung oben.
+2. **Andrang auf ein Dokument.** Tippen 60 Personen gleichzeitig auf dasselbe Angebot, reiht
+   Firestore die Transaktionen auf und das SDK gibt nach 5 Versuchen auf. `mitWiederholung()`
+   legt eine eigene Wiederholung mit Streuung darüber, und die Karte ist ohnehin gesperrt, sobald
+   die Live-Anzeige keine freien Plätze mehr zeigt. Details und Messwerte:
+   [05 §5](05-last-und-performance.md).
+
+**Fehlerbehandlung im UI:** `AusgebuchtFehler` → Karte wird sofort gesperrt, kurze Meldung
 «Leider gerade eben ausgebucht — bitte wähle ein anderes Fach». Kein Absturz, kein Neuladen.
 
 ## 5. Security Rules (der eigentliche Schutz)
@@ -168,7 +189,7 @@ Die drei Regeln, auf die es ankommt:
 |---|---|
 | Bei `slots` darf **nur** `belegt` geändert werden, nie `kapazitaet` | niemand kann sich Plätze «dazuerfinden» |
 | `belegt` muss `>= 0` und `<= kapazitaet` bleiben | **Überbuchung ist serverseitig unmöglich**, selbst bei manipuliertem Client |
-| Änderung von `belegt` max. ± `maxPlaetzeProGeraet` pro Schreibvorgang | ein Skript kann nicht in einem Rutsch alles blockieren |
+| Änderung von `belegt` max. ± 4 pro Schreibvorgang (Decke aus D3) | ein Skript kann nicht in einem Rutsch alles blockieren |
 | `bookings/{uid}` nur schreibbar, wenn `uid == request.auth.uid` | fremde Tickets sind nicht manipulierbar |
 | `codes/*` nur für Admins lesbar | Rettungscodes lassen sich nicht durchprobieren |
 | `config/app` für alle lesbar, nur für Admins schreibbar | Notbremse bleibt in Lehrer-Hand |
@@ -184,41 +205,30 @@ das ist so vorgesehen und kein Sicherheitsproblem. Der Schutz kommt zu 100 % aus
 Trotzdem via Netlify-Umgebungsvariablen `VITE_FIREBASE_*` einbinden, damit Test- und
 Produktivprojekt getrennt bleiben.
 
-## 6. Kapazitäts- und Kostenrechnung (Gratis-Plan)
+## 6. Kapazität und Kosten
 
-Firestore Spark: **50 000 Reads / 20 000 Writes pro Tag**, gratis. Rechnung für den 28.10.:
+Ausführlich mit allen Zahlen in [05 · Last und Performance](05-last-und-performance.md).
+Das Ergebnis in Kürze:
 
-| Posten | Rechnung | Reads | Writes |
+| | 120 Geräte | 200 Geräte, realistisch | 200 Geräte, ungünstigster Fall |
 |---|---|---|---|
-| Gäste: Zähler-Listener pro Schritt (7 / 7 / 12 / 12 Docs) | 120 × 38 | 4 560 | — |
-| Gäste: Live-Änderungen sichtbar während der Auswahl | 120 × ~200 | 24 000 | — |
-| Gäste: eigenes Buchungsdokument + `config/app` | 120 × 4 | 480 | — |
-| Buchungen (2 Zähler + 1 Buchung pro Wahl) | 120 × 4 × 3 | — | 1 440 |
-| Änderungen (Annahme: 30 % ändern einmal) | 36 × 3 | — | 108 |
-| Admin-Dashboards (4 Personen, ganzer Morgen) | 4 × ~520 | 2 080 | — |
-| Puffer (Neuladen, Doppelscans, Tests) | ×1.4 | ~12 600 | ~620 |
-| **Total** | | **≈ 43 700** | **≈ 2 170** |
-| **Gratis-Limit / Tag** | | 50 000 | 20 000 |
+| Lesevorgänge | ≈ 25 000 | ≈ 50 000 | ≈ 177 000 |
+| Schreibvorgänge | ≈ 2 200 | ≈ 3 000 | ≈ 4 500 |
+| Gratis-Kontingent (auch im Blaze-Tarif enthalten) | 50 000 / 20 000 pro Tag | | |
+| **Kosten über dem Kontingent** | 0.00 | 0.00 | **≈ 0.08 USD** |
 
-Reads liegen bei ~87 % des Limits — knapper als angenehm. Drei Gegenmassnahmen, alle in Phase 6:
+**Deshalb Blaze-Tarif aktivieren.** Nicht wegen zusätzlicher Funktionen — die brauchen wir nicht —
+sondern weil das Gratis-Kontingent bei 200 Geräten **genau auf der Kante** liegt und ein
+erschöpftes Kontingent im Gratis-Tarif bedeutet: die App hört mitten im Anlass auf zu
+funktionieren. Im Blaze-Tarif kostet dieselbe Situation ein paar Rappen. Dazu ein
+**Budget-Alarm auf CHF 5 und CHF 20**, weil Blaze keine harte Ausgabengrenze kennt.
 
-1. **Listener nur für den aktuellen Block** (7 bzw. 12 Dokumente statt 38) — bereits eingeplant.
-2. **Listener beim Verlassen eines Schritts sofort abmelden** (`unsubscribe`), damit ein Gerät auf
-   der Ticket-Seite keine Zähleränderungen mehr empfängt. Das ist der grösste Hebel.
-3. **Reserve-Schalter:** `config/app.liveZaehler = false` schaltet alle Geräte auf einmaliges Laden
-   statt Live-Updates um (Platzzahl dann «Stand 09:02»). Halbiert die Reads sofort und ist die
-   Notbremse, falls der Verbrauch in der Firebase-Konsole am Morgen davonläuft.
-
-Mit Massnahme 2 landet die realistische Schätzung bei **≈ 25 000 Reads = 50 % des Limits**.
-
-| Dienst | Verbrauch | Limit gratis | Kosten |
-|---|---|---|---|
-| Netlify Bandbreite | ~40 MB | 100 GB/Monat | CHF 0 |
-| Netlify Build-Minuten | ~15 | 300/Monat | CHF 0 |
-| Firestore Speicher | < 1 MB | 1 GB | CHF 0 |
-| Firebase Auth (anonym) | ~130 Nutzer | 50 000 MAU | CHF 0 |
-| Domain `fms.alae.app` | vorhanden | — | CHF 0 |
-| **Total laufend** | | | **CHF 0.—** |
+| Dienst | Verbrauch | Kosten |
+|---|---|---|
+| Firestore (Blaze) | s. oben | < CHF 1 für den ganzen Anlass |
+| Netlify Bandbreite / Builds | ~60 MB / ~15 Min. | CHF 0 (100 GB bzw. 300 Min. pro Monat gratis) |
+| Firebase Auth (anonym + 5 Konten) | ~210 Nutzer | CHF 0 (50 000 gratis) |
+| Domain `fms.alae.app` | vorhanden | CHF 0 |
 
 ## 7. Hosting, Domain, Deployment
 
@@ -240,7 +250,8 @@ Mit Massnahme 2 landet die realistische Schätzung bei **≈ 25 000 Reads = 50 %
 | Kein Netz beim Öffnen | Programm wird trotzdem angezeigt (liegt im Bundle), Hinweis «Keine Verbindung — Auswahl noch nicht möglich» |
 | Netz bricht mitten in der Auswahl ab | Firestore-SDK puffert und sendet automatisch nach; UI zeigt «wird gespeichert …» |
 | Angebot währenddessen ausgebucht | Toast + Karte sofort gesperrt, keine Fehlerseite |
-| Firestore-Quota erschöpft | Banner «Anmeldung vorübergehend nicht möglich — bitte beim Info-Stand melden» |
+| Firestore-Kontingent erschöpft | Im Blaze-Tarif gibt es diesen Fall nicht mehr — es wird abgerechnet statt abgeschaltet. Trotzdem hinterlegt: Banner «Anmeldung vorübergehend nicht möglich — bitte beim Info-Stand melden» |
+| Andrang auf ein einzelnes Angebot | Wiederholung mit Streuung; danach «gerade eben ausgebucht», Liste zeigt bereits den neuen Stand ([05 §5](05-last-und-performance.md)) |
 | Gerät hat altes Bundle (Programm geändert) | Vergleich `config/app.programmVersion` → Hinweis «Bitte Seite neu laden» |
 | Browserdaten gelöscht / anderes Handy | Rettungscode am Info-Stand nennen → Admin stellt Buchung wieder her |
 | **Totalausfall** | Papier-Fallback, siehe [04-eventtag-runbook.md](04-eventtag-runbook.md) §5 |
@@ -259,6 +270,7 @@ fms/
 │   ├── programm.ts             # importiert + typisiert programm.json
 │   ├── firebase.ts             # Init, anonyme Anmeldung
 │   ├── buchung.ts              # runTransaction-Logik aus §4
+│   ├── wiederholung.ts         # Retry mit Streuung gegen Andrang (05 §5)
 │   ├── hooks/useSlots.ts       # Live-Zähler für einen Block
 │   ├── screens/                # Start · Auswahl · Ticket · Admin
 │   └── ui/                     # AngebotsKarte, Fortschritt, Banner …

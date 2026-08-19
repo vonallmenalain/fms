@@ -42,8 +42,8 @@ for (const angebot of programm.offerings) {
 }
 
 batch.set(db.doc('config/app'), {
-  anmeldungOffen: false,                 // bewusst geschlossen — Freigabe am Eventtag (D4)
-  maxPlaetzeProGeraet: 3,
+  anmeldungOffen: false,                 // bewusst geschlossen — manuelle Freigabe am Eventtag (D4)
+  maxPlaetzeProGeraet: 4,                // 1–4, in der Admin-Ansicht änderbar (D3)
   liveZaehler: true,
   banner: '',
   programmVersion: programm.version,
