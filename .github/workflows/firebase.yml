@@ -1,0 +1,77 @@
+name: Firebase
+
+# Rollt die Security Rules aus und pflegt die Programmdaten in Firestore.
+# Anmeldung über das Dienstkonto im Secret FIREBASE_SERVICE_ACCOUNT.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'firestore.rules'
+      - 'firebase.json'
+      - 'data/programm.json'
+      - 'scripts/**'
+      - '.github/workflows/firebase.yml'
+  workflow_dispatch:
+    inputs:
+      aktion:
+        description: 'Was soll ausgeführt werden?'
+        required: true
+        default: 'rules-und-seed'
+        type: choice
+        options:
+          - rules-und-seed
+          - nur-rules
+          - nur-seed
+          - pruefen
+          - reset
+
+concurrency:
+  group: firebase
+  cancel-in-progress: false
+
+jobs:
+  firebase:
+    runs-on: ubuntu-latest
+    env:
+      AKTION: ${{ github.event.inputs.aktion || 'rules-und-seed' }}
+      PROJEKT: fmsbesuchstag
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Abhängigkeiten
+        run: npm ci
+
+      - name: Dienstkonto bereitstellen
+        run: |
+          if [ -z "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" ]; then
+            echo "::error::Secret FIREBASE_SERVICE_ACCOUNT fehlt."
+            exit 1
+          fi
+          printf '%s' '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+
+      - name: Security Rules deployen
+        if: env.AKTION == 'rules-und-seed' || env.AKTION == 'nur-rules'
+        run: npx --yes firebase-tools@latest deploy --only firestore:rules --project "$PROJEKT" --non-interactive
+
+      - name: Programm einspielen
+        if: env.AKTION == 'rules-und-seed' || env.AKTION == 'nur-seed'
+        run: node scripts/seed.mjs --project "$PROJEKT"
+
+      - name: Invarianten prüfen
+        if: env.AKTION == 'pruefen'
+        run: node scripts/pruefe.mjs --project "$PROJEKT"
+
+      - name: Alles zurücksetzen
+        if: env.AKTION == 'reset'
+        run: node scripts/reset.mjs --ja --project "$PROJEKT"
+
+      - name: Schlüssel entfernen
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sa.json"

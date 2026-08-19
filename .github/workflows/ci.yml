@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+
+jobs:
+  bauen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Bündelgrösse melden
+        run: |
+          echo "### Bündelgrössen (gzip)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          for f in dist/assets/*.js dist/assets/*.css; do
+            printf '%-34s %6s KB\n' "$(basename "$f")" "$(gzip -c "$f" | wc -c | awk '{printf "%.1f", $1/1024}')" >> $GITHUB_STEP_SUMMARY
+          done
+          echo '```' >> $GITHUB_STEP_SUMMARY

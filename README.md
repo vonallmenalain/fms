@@ -3,9 +3,10 @@
 Web-App zur Selbst-Anmeldung der Besuchenden am **Besuchsmorgen vom Mittwoch, 28. Oktober 2026**
 an der FMS Neufeld, Bremgartenstrasse 133, 3012 Bern.
 
-> **Status:** Konzept vollständig, alle Entscheide getroffen (19.08.2026). Kein Code.
-> Nächster Schritt: **Phase 0** — Firebase-Projekte anlegen, Blaze-Tarif und Budget-Alarm
-> einrichten, CI-Grün und Logo besorgen. Danach Phase 1.
+> **Status:** Die App ist gebaut und läuft — Gast-Ablauf, Admin-Bereich, Security Rules,
+> automatischer Deploy. Live auf **[fms.alae.app](https://fms.alae.app)**.
+> Was fertig ist, wie man es startet und was noch aussteht:
+> **[docs/06-stand-der-umsetzung.md](docs/06-stand-der-umsetzung.md)**.
 
 ## Das Vorhaben in fünf Zeilen
 
@@ -36,7 +37,23 @@ ohne Handy selbst eintragen.
 | **[docs/04-eventtag-runbook.md](docs/04-eventtag-runbook.md)** | Ablauf des Morgens, Text der QR-Folie, die 5 häufigsten Supportfälle, Eskalationsstufen, **Papier-Fallback** |
 | **[docs/05-last-und-performance.md](docs/05-last-und-performance.md)** | Warum kein Cloud-Functions-Backend, warum Blaze, wie «wirklich live» entsteht, der Engpass bei 200 Geräten, **Lasttest mit Abnahmekriterien**, Leistungsbudget |
 | **[data/programm.json](data/programm.json)** | Das vollständige Programm: 14 Atelier- und 24 Lektionsangebote mit Fach, Klasse, Zimmer, Lehrperson, Kapazität — aus der Programm-PPT übernommen |
-| **[docs/snippets/](docs/snippets/)** | Startfertige `firestore.rules`, `netlify.toml`, `seed.mjs`, `lasttest.mjs`, `wiederholung.ts`, `.env`-Vorlage |
+| **[docs/06-stand-der-umsetzung.md](docs/06-stand-der-umsetzung.md)** | **Was gebaut ist**, lokal starten, Skripte, GitHub-Actions, bewusste Abweichungen vom Konzept, Messwerte |
+| **[docs/snippets/](docs/snippets/)** | Entwurfsfassungen aus der Konzeptphase — verbindlich ist der Kode im Repo |
+
+## Schnellstart
+
+```bash
+npm install
+npm run dev                                    # gegen die echte Datenbank
+```
+
+| Pfad | Was |
+|---|---|
+| `/` | Anmeldung für die Besuchenden |
+| `/admin` | Bereich für die betreuenden Lehrpersonen |
+
+Erster Admin-Zugang: **«Mit Google anmelden»** — die Adresse in `firestore.rules`
+(`bootstrapMail`) trägt sich beim ersten Login selbst als Betreuung ein.
 
 ## Getroffene Entscheide (19.08.2026)
 

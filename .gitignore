@@ -1,0 +1,13 @@
+node_modules
+dist
+.env
+.env.local
+.DS_Store
+*.log
+
+# Dienstkonto-Schlüssel gehören NIE ins Repo — nur als GitHub-Secret.
+*serviceaccount*.json
+*firebase-adminsdk*.json
+tsconfig.tsbuildinfo
+*-debug.log
+.firebase

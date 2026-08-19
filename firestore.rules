@@ -1,0 +1,150 @@
+rules_version = '2';
+
+// Security Rules — Besuchsmorgen FMS Neufeld
+//
+// Diese Datei ist der einzige wirksame Schutz gegen Überbuchung und Manipulation.
+// Das Bildschirmverhalten ist es ausdrücklich NICHT: Die App läuft im Browser des
+// Gasts und kann dort verändert werden. Was hier steht, kann niemand umgehen.
+//
+// Wird bei jedem Push nach main automatisch deployt (.github/workflows/firebase.yml).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------- Helfer
+
+    function angemeldet() {
+      return request.auth != null;                    // anonym genügt
+    }
+
+    // Erstzugang: diese Adressen dürfen sich selbst als Betreuung eintragen.
+    // Danach zählt das admins/{uid}-Dokument.
+    function bootstrapMail() {
+      return angemeldet()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['alain.sc2@gmail.com'];
+    }
+
+    function istAdmin() {
+      return angemeldet()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Harte Decke aus Entscheid D3. config/app.maxPlaetzeProGeraet ist zur Laufzeit
+    // auf 1–4 einstellbar; diese Konstante kann niemand überschreiten.
+    function maxPlaetze() { return 4; }
+
+    // Entscheid D4: manueller Freigabeschalter. Wird nur beim Schreiben der Buchung
+    // geprüft — jede Buchung fasst dieses Dokument an, also blockiert das die ganze
+    // Transaktion. Spart zwei get() je Buchung gegenüber einer Prüfung auf slots.
+    function anmeldungOffen() {
+      return get(/databases/$(database)/documents/config/app).data.anmeldungOffen == true;
+    }
+
+    function nurGeaendert(felder) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(felder);
+    }
+
+    function gueltigePlaetze(n) {
+      return n is int && n >= 1 && n <= maxPlaetze();
+    }
+
+    function keineWahl(d) {
+      return d.wahl.a1 == null && d.wahl.a2 == null && d.wahl.l1 == null && d.wahl.l2 == null;
+    }
+
+    // ------------------------------------------------------ config: Steuerung
+
+    match /config/{dok} {
+      allow read: if true;                             // jedes Gerät liest den Zustand
+      allow write: if istAdmin();
+    }
+
+    // ------------------------------------------------------ admins: Betreuung
+
+    match /admins/{uid} {
+      allow get:  if angemeldet() && (request.auth.uid == uid || istAdmin());
+      allow list: if istAdmin();
+      allow create: if request.auth.uid == uid && bootstrapMail();
+      allow update, delete: if istAdmin();
+    }
+
+    // ---------------------------------------------------------- slots: Zähler
+
+    match /slots/{slotId} {
+      allow read: if true;
+
+      // Der Normalfall: Gäste verschieben ausschliesslich `belegt`, nie über die
+      // Kapazität hinaus und nie um mehr als eine Gruppengrösse auf einmal.
+      // Damit ist Überbuchung serverseitig unmöglich — auch bei manipuliertem Client.
+      allow update: if angemeldet()
+        && nurGeaendert(['belegt'])
+        && request.resource.data.belegt is int
+        && request.resource.data.belegt >= 0
+        && request.resource.data.belegt <= resource.data.kapazitaet
+        && math.abs(request.resource.data.belegt - resource.data.belegt) <= maxPlaetze();
+
+      // Selbstheilung, falls ein Zählerdokument fehlt (noch nicht eingespielt).
+      // Streng begrenzt: nur die im Programm vorgesehenen Kapazitäten, nur ein
+      // Blockschlüssel, und höchstens eine Gruppengrösse als Startwert.
+      allow create: if angemeldet()
+        && request.resource.data.keys().hasOnly(['belegt', 'kapazitaet', 'block'])
+        && request.resource.data.kapazitaet in [20, 35]
+        && request.resource.data.block in ['a1', 'a2', 'l1', 'l2']
+        && request.resource.data.belegt is int
+        && request.resource.data.belegt >= 0
+        && request.resource.data.belegt <= maxPlaetze();
+
+      // Betreuung darf zusätzlich Kapazitäten anpassen, einspielen und zurücksetzen.
+      allow write: if istAdmin();
+    }
+
+    // ---------------------------------------------------- bookings: Anmeldung
+
+    match /bookings/{buchungId} {
+
+      allow get:  if request.auth.uid == buchungId || istAdmin();
+      allow list: if istAdmin();          // nur die Betreuung sieht alle Anmeldungen
+
+      allow create: if angemeldet()
+        && request.auth.uid == buchungId
+        && anmeldungOffen()
+        && request.resource.data.keys().hasOnly(
+             ['plaetze', 'code', 'wahl', 'quelle', 'notiz', 'erstelltAm', 'geaendertAm'])
+        && gueltigePlaetze(request.resource.data.plaetze)
+        && request.resource.data.quelle == 'gast'
+        && request.resource.data.code is string
+        && request.resource.data.code.size() == 6;
+
+      allow update: if angemeldet()
+        && request.auth.uid == buchungId
+        && anmeldungOffen()
+        && request.resource.data.quelle == resource.data.quelle
+        && request.resource.data.code == resource.data.code
+        // Gruppengrösse nur ändern, solange noch nichts gebucht ist
+        && (request.resource.data.plaetze == resource.data.plaetze
+            || (keineWahl(resource.data) && gueltigePlaetze(request.resource.data.plaetze)));
+
+      allow delete: if request.auth.uid == buchungId || istAdmin();
+
+      // Betreuung erfasst Anmeldungen für Gäste ohne Handy (eigene Dokument-ID).
+      allow write: if istAdmin();
+    }
+
+    // ------------------------------------------------------ codes: Rettungscode
+
+    match /codes/{code} {
+      allow get, list: if istAdmin();                  // nicht durchprobierbar
+      allow create: if angemeldet()
+        && request.resource.data.keys().hasOnly(['uid'])
+        && (request.resource.data.uid == request.auth.uid || istAdmin());
+      allow update, delete: if istAdmin();
+    }
+
+    // ------------------------------------------------------------ alles Übrige
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
