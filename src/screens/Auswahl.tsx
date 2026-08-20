@@ -48,16 +48,14 @@ export function Auswahl({
           ← Zurück
         </button>
         <span className="navzeile-luecke" />
-        {/* Grün ist der Schritt, der jetzt dran ist: im letzten Block führen «Weiter»
-            und «Abschliessen» beide in die Übersicht — hervorgehoben ist dort das
-            treffendere «Abschliessen». */}
-        <button
-          type="button"
-          className={`knopf knopf--klein ${letzterBlock ? 'knopf--rand' : 'knopf--haupt'}`}
-          onClick={onWeiter}
-        >
-          Weiter
-        </button>
+        {/* Im letzten Schritt führen «Weiter» und «Abschliessen» beide in die Übersicht.
+            Zwei Knöpfe für denselben Weg sind nur eine Frage — darum steht dort allein
+            «Abschliessen». Vorher ist «Weiter» der Schritt, der jetzt dran ist. */}
+        {!letzterBlock && (
+          <button type="button" className="knopf knopf--klein knopf--haupt" onClick={onWeiter}>
+            Weiter
+          </button>
+        )}
         <button
           type="button"
           className={`knopf knopf--klein ${letzterBlock ? 'knopf--haupt' : 'knopf--rand'}`}
@@ -79,9 +77,7 @@ export function Auswahl({
 
       <div className="stapel">
         <h1>{b.label}</h1>
-        <p className="lauftext zahl">
-          {zeitraum(b)} · {b.art === 'atelier' ? 'wähle ein Atelier' : 'wähle eine Lektion'}
-        </p>
+        <p className="lauftext zahl">{zeitraum(b)}</p>
       </div>
 
       {!geladen && <p className="mini">Freie Plätze werden geladen …</p>}
@@ -101,11 +97,12 @@ export function Auswahl({
         ))}
       </div>
 
-      <p className="mini">
-        {gewaehlt
-          ? 'Nochmals auf die gewählte Karte tippen hebt die Wahl wieder auf.'
-          : 'Du musst nicht jeden Block belegen — ohne Wahl einfach «Weiter» tippen.'}
-      </p>
+      {!gewaehlt && (
+        <p className="mini">
+          Du musst nicht jeden Block belegen — ohne Wahl einfach
+          {' '}«{letzterBlock ? 'Abschliessen' : 'Weiter'}» tippen.
+        </p>
+      )}
 
       {plaetze > 1 && (
         <p className="mini">

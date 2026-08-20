@@ -77,16 +77,22 @@ QR-Code (Folie in der Aula, 08:15–08:40)
 1. **Ein Schritt pro Bildschirm.** Kein Scrollen durch 38 Angebote, keine Mehrfachauswahl-Logik.
    Ein Tipp auf eine Karte = gebucht; ein zweiter Tipp auf dieselbe Karte gibt den Platz
    wieder frei. Weitergeblättert wird über die Navigationszeile zuoberst
-   («Zurück · Weiter · Abschliessen»), die beim Scrollen stehen bleibt.
+   («Zurück · Weiter · Abschliessen»), die beim Scrollen stehen bleibt. Im letzten
+   Schritt steht dort nur «Zurück · Abschliessen» — «Weiter» führte an derselben Stelle
+   ins selbe Ziel und war damit bloss eine überflüssige Frage.
 2. **Sofort buchen, nicht am Schluss.** Jede Wahl wird einzeln in die Datenbank geschrieben.
    Wer bei Schritt 3 abbricht, hat trotzdem seine 2 Ateliers. Kein «Warenkorb», der verfällt.
 3. **Überspringen ist erlaubt.** Wer nichts wählt und «Weiter» tippt, überspringt den Block —
    die Schule schreibt niemandem vor, alle 4 Blöcke zu besuchen.
-4. **Ausgebuchtes bleibt sichtbar**, aber ausgegraut mit «ausgebucht» statt Platzzahl.
+4. **Die Übersicht ist farblich abgesetzt.** «Deine Auswahl» trägt einen grünen Kopf und
+   grüne Kacheln für alles Gebuchte; noch offene Blöcke bleiben grau. Vorher sah der
+   Abschluss fast gleich aus wie die vier Auswahlschritte — man musste den Titel lesen,
+   um zu wissen, wo man steht.
+5. **Ausgebuchtes bleibt sichtbar**, aber ausgegraut mit «ausgebucht» statt Platzzahl.
    (So sieht man, dass es das Fach gibt, und fragt nicht am Info-Stand nach.)
-5. **Freie Plätze live**, aber entschärft dargestellt: `12 freie Plätze` · `noch 3 Plätze` (orange)
+6. **Freie Plätze live**, aber entschärft dargestellt: `12 freie Plätze` · `noch 3 Plätze` (orange)
    · `ausgebucht` (grau). Keine Prozentbalken, kein Countdown — das erzeugt nur Hektik.
-6. **Kein Registrierungs-Formular.** Die Anmeldung beginnt mit dem ersten Tipp auf ein Atelier.
+7. **Kein Registrierungs-Formular.** Die Anmeldung beginnt mit dem ersten Tipp auf ein Atelier.
 
 ## 5. Gruppen-Anmeldung (2–3 Personen auf einem Gerät)
 
@@ -151,7 +157,10 @@ Für die Nachbesprechung und als Papier-Backup um 08:45.
 **7.5 Zugänge** (Steuerung → Zugänge, nur `admin`)
 Adresse eintragen, Rolle wählen, fertig — Firebase verschickt auf Wunsch gleich einen
 Anmeldelink. Die Person schaltet sich beim ersten Anmelden selbst frei, und zwar mit genau
-der Rolle aus der Einladung. Wer die Rolle wechselt oder den Zugang verliert, merkt das
+der Rolle aus der Einladung. Sie kann sich dazu im Login auch selbst ein Konto erstellen
+(«Konto erstellen» → Passwort festlegen, Anmeldelink oder Google). Zugang gibt das erst,
+wenn die Adresse hier eingetragen **und** bestätigt ist — ohne Eintrag landet sie auf
+«Kein Zugang». Wer die Rolle wechselt oder den Zugang verliert, merkt das
 beim nächsten Laden der Seite.
 
 Die Trennung ist der Grund für die zwei Rollen: Betreuende sollen am Morgen Anmeldungen

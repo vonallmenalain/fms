@@ -85,6 +85,13 @@ Firebase gleich einen Anmeldelink; die Person kann sich auch mit Google oder E-M
 Passwort anmelden. Freigeschaltet wird sie beim ersten Anmelden automatisch, mit genau
 der Rolle aus der Einladung.
 
+Wer noch kein Konto hat, erstellt sich im Login über **«Konto erstellen»** selbst eines —
+mit Passwort, per Anmeldelink oder mit Google. Zugang gibt das für sich allein nicht: Es
+funktionieren nur Adressen, die hier schon eine Rolle erhalten haben; alle anderen landen
+auf «Kein Zugang». Ein Konto mit Passwort muss zusätzlich seine Adresse bestätigen (die
+Mail kommt sofort) — die Datenbank verlangt das, damit niemand ein Konto auf eine fremde,
+eingeladene Adresse anlegen kann.
+
 > Damit der Anmeldelink verschickt werden kann, muss in der Firebase-Konsole unter
 > Authentication → Sign-in method bei «E-Mail-Adresse/Passwort» auch **E-Mail-Link
 > (passwortloses Anmelden)** aktiviert sein, und die Domain unter Settings → Authorized

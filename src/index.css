@@ -10,6 +10,7 @@
 
   --gruen: #B4BD00;          /* CI-Grün, Platzhalter bis das Original vorliegt */
   --gruen-dunkel: #6E7500;   /* Text auf Weiss, Kontrast 5.0:1 */
+  --gruen-tief: #5A6000;     /* Text auf der grünen Fläche, Kontrast 5.7:1 */
   --gruen-hell: #ECEFCE;
   --schwarz: #1D1D1B;        /* aus dem Original-Logo gemessen */
   --papier: #F6F7F1;
@@ -309,6 +310,26 @@ p { margin: 0; }
   border-color: var(--gruen);
 }
 
+/* ---------- «Deine Auswahl» — die abgeschlossene Sicht ---------- */
+
+/* Dieser Bildschirm sah fast gleich aus wie die vier Auswahlschritte — man musste den
+   Titel lesen, um zu wissen, wo man ist. Jetzt trägt er Farbe: grüner Kopf, grüne
+   Kacheln für alles Gebuchte. Was noch offen ist, bleibt grau — der Unterschied ist
+   damit auch innerhalb der Seite auf einen Blick sichtbar. */
+.abschluss-kopf {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--gruen-hell);
+  border-left: 3px solid var(--gruen);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.abschluss-marke {
+  font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--gruen-tief);
+}
+
 /* ---------- Ticket ---------- */
 
 .ticket { display: flex; flex-direction: column; gap: 8px; }
@@ -323,6 +344,19 @@ p { margin: 0; }
   border-left: 3px solid var(--gruen);
   border-radius: var(--radius);
 }
+/* Die Kacheln sind Knöpfe («ändern»), sollen aber wie Kacheln aussehen. */
+button.ticket-karte {
+  width: 100%; font: inherit; color: inherit; text-align: left; cursor: pointer;
+  transition: filter .12s;
+}
+button.ticket-karte:active { filter: brightness(.97); }
+button.ticket-karte:disabled { cursor: default; }
+
+/* Gebucht: grüne Fläche mit grünem Rand. */
+.ticket-karte[data-leer="0"] {
+  background: var(--gruen-hell);
+  border-color: var(--gruen);
+}
 .ticket-karte[data-leer="1"] { border-left-color: var(--linie-stark); background: var(--flaeche-2); }
 .ticket-zeit { font-variant-numeric: tabular-nums; font-size: 14px; color: var(--grau); font-weight: 600; grid-column: 1; grid-row: 1 / -1; align-self: center; }
 .ticket-block {
@@ -330,8 +364,13 @@ p { margin: 0; }
   font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--grau-hell);
 }
+/* Auf der grünen Fläche ist das helle Grau zu schwach — eine Stufe dunkler. */
+.ticket-karte[data-leer="0"] .ticket-block { color: var(--grau); }
 .ticket-fach { grid-column: 2; font-size: 18px; font-weight: 600; }
+.ticket-haken { color: var(--gruen-tief); font-weight: 700; margin-right: 7px; }
+.ticket-leer { color: var(--grau-hell); font-weight: 500; }
 .ticket-ort { grid-column: 2; font-size: 14.5px; color: var(--grau); }
+.ticket-aktion { color: var(--gruen-tief); font-weight: 600; }
 
 /* ---------- Hinweise ---------- */
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword,
   signInWithPopup, signOut, type User,
@@ -17,8 +17,9 @@ import { erfasseAdminBuchung, type Buchung } from '../buchung';
 import { AusgebuchtFehler } from '../wiederholung';
 import { Kopf, Meldung } from '../ui/Bausteine';
 import {
-  ROLLEN_TEXT, anmeldelinkSenden, gemerkteMail, kontoEntfernen, kontoRolleSetzen,
-  linkAnmeldung, mailSchluessel, mitLinkAnmelden, zugangEntfernen, zugangKlaeren, zugangSetzen,
+  ROLLEN_TEXT, anmeldelinkSenden, bestaetigungPruefen, bestaetigungSenden, gemerkteMail,
+  kontoEntfernen, kontoErstellen, kontoRolleSetzen, linkAnmeldung, mailSchluessel,
+  mitLinkAnmelden, zugangEntfernen, zugangKlaeren, zugangSetzen,
   type Konto, type Rolle, type Zugang,
 } from '../zugang';
 
@@ -30,6 +31,10 @@ export default function Admin({ onRaus }: { onRaus: () => void }) {
   const [rolle, setRolle] = useState<Rolle | null | undefined>(undefined);
   const [reiter, setReiter] = useState<Reiter>('uebersicht');
   const [meldung, setMeldung] = useState<string | null>(null);
+  // Zählt hoch, sobald die E-Mail-Bestätigung geprüft wurde. `benutzer` bleibt dabei
+  // dasselbe Objekt — ohne diesen Merker zeichnete React den Bildschirm nicht neu.
+  const [mailStand, setMailStand] = useState(0);
+  const mailGeprueft = useCallback(() => setMailStand((n) => n + 1), []);
 
   useEffect(() => onAuthStateChanged(auth, (u) => setBenutzer(u && !u.isAnonymous ? u : null)), []);
 
@@ -40,11 +45,18 @@ export default function Admin({ onRaus }: { onRaus: () => void }) {
     setRolle(undefined);
     zugangKlaeren(benutzer).then((r) => { if (!weg) setRolle(r); });
     return () => { weg = true; };
-  }, [benutzer]);
+  }, [benutzer, mailStand]);
 
   if (benutzer === undefined) return <div className="seite"><p className="lauftext">Einen Moment …</p></div>;
   if (!benutzer) return <Anmelden onRaus={onRaus} />;
   if (rolle === undefined) return <div className="seite"><p className="lauftext">Zugang wird geprüft …</p></div>;
+  // Ein frisch erstelltes Passwort-Konto scheitert nicht am fehlenden Zugang, sondern an
+  // der unbestätigten Adresse: firestore.rules verlangt `email_verified`. Die Prüfung
+  // steht bewusst NACH zugangKlaeren — wer bereits freigeschaltet ist, kommt weiterhin
+  // hinein, auch wenn die Adresse (etwa aus der Firebase-Konsole) nie bestätigt wurde.
+  if (rolle === null && !benutzer.emailVerified) {
+    return <MailBestaetigen benutzer={benutzer} onGeprueft={mailGeprueft} onRaus={onRaus} />;
+  }
   if (rolle === null) {
     return (
       <div className="seite">
@@ -54,7 +66,10 @@ export default function Admin({ onRaus }: { onRaus: () => void }) {
           Bitte bei der Administration des Besuchsmorgens melden — sie kann diese Adresse
           unter «Steuerung → Zugänge» eintragen.
         </div>
-        <button className="knopf knopf--rand" onClick={() => signOut(auth)}>Abmelden</button>
+        <div className="knopfzeile">
+          <button className="knopf knopf--rand" onClick={() => signOut(auth)}>Abmelden</button>
+          <button className="knopf knopf--still" onClick={onRaus}>Zurück zur Startseite</button>
+        </div>
       </div>
     );
   }
@@ -120,8 +135,31 @@ function anmeldeFehlerText(code: string): { text: string; hinweis?: string } {
     case 'auth/invalid-credential':
     case 'auth/wrong-password':
     case 'auth/user-not-found':
-    case 'auth/invalid-email':
       return { text: 'E-Mail oder Passwort stimmen nicht.' };
+    case 'auth/invalid-email':
+      return { text: 'Diese E-Mail-Adresse sieht nicht richtig aus.' };
+    case 'auth/email-already-in-use':
+      return {
+        text: 'Für diese Adresse gibt es bereits ein Konto.',
+        hinweis: 'Bitte oben mit dem bestehenden Passwort anmelden — oder einen '
+          + 'Anmeldelink per E-Mail schicken lassen.',
+      };
+    case 'auth/weak-password':
+    case 'auth/password-does-not-meet-requirements':
+      return { text: 'Das Passwort ist zu schwach — bitte mindestens 6 Zeichen wählen.' };
+    case 'auth/missing-password':
+      return { text: 'Bitte ein Passwort eingeben.' };
+    case 'auth/admin-restricted-operation':
+      return {
+        text: 'Neue Konten sind im Firebase-Projekt zurzeit gesperrt.',
+        hinweis: 'Firebase Console → Authentication → Settings → User actions → '
+          + '«Create (sign-up)» erlauben.',
+      };
+    case 'auth/unauthorized-continue-uri':
+      return {
+        text: 'Firebase darf die Bestätigungsmail nicht auf diese Adresse zurückführen.',
+        hinweis: `Firebase Console → Authentication → Settings → Authorized domains → «${location.hostname}» hinzufügen.`,
+      };
     case 'auth/too-many-requests':
       return { text: 'Zu viele Versuche. Bitte einen Moment warten und nochmals versuchen.' };
     case 'auth/network-request-failed':
@@ -131,7 +169,21 @@ function anmeldeFehlerText(code: string): { text: string; hinweis?: string } {
   }
 }
 
+type AnmeldeModus = 'anmelden' | 'konto';
+
+/**
+ * Anmeldebildschirm der Betreuung — zwei Ansichten.
+ *
+ * `anmelden` ist der Normalfall und bleibt schlank: E-Mail, Passwort, Google. Wer noch
+ * kein Konto hat, wechselt über einen Knopf nach `konto` — dort stehen die drei Wege, ein
+ * Konto anzulegen. Vorher standen alle Wege gleichzeitig da; die Anmeldung sah dadurch
+ * aus wie ein Formular mit vier Möglichkeiten, von denen keine die naheliegende war.
+ *
+ * Ein Konto zu erstellen öffnet keinen Zugang: Freigeschaltet wird nur, wer unter
+ * «Steuerung → Zugänge» eingetragen ist — siehe zugangKlaeren und firestore.rules.
+ */
 function Anmelden({ onRaus }: { onRaus: () => void }) {
+  const [modus, setModus] = useState<AnmeldeModus>('anmelden');
   const [mail, setMail] = useState(() => (linkAnmeldung() ? gemerkteMail() : ''));
   const [pw, setPw] = useState('');
   const [fehler, setFehler] = useState<{ text: string; hinweis?: string } | null>(null);
@@ -151,11 +203,26 @@ function Anmelden({ onRaus }: { onRaus: () => void }) {
     finally { setLaeuft(false); }
   };
 
+  // Beim Wechsel bleibt nur die Adresse stehen — eine Fehlermeldung oder ein «Link
+  // verschickt» aus der anderen Ansicht gehörte sonst plötzlich zu etwas anderem.
+  const wechsle = (m: AnmeldeModus) => { setModus(m); setFehler(null); setLinkGesendet(false); };
+
   const fehlerKasten = fehler && (
     <div className="hinweis hinweis--fehler">
       <b>{fehler.text}</b>
       {fehler.hinweis && <><br /><span className="klein">{fehler.hinweis}</span></>}
     </div>
+  );
+
+  const google = (
+    <button className="knopf knopf--rand knopf--breit" disabled={laeuft}
+      onClick={() => melden(() => signInWithPopup(auth, new GoogleAuthProvider()))}>
+      Mit Google anmelden
+    </button>
+  );
+
+  const zurStartseite = (
+    <button className="knopf knopf--still" onClick={onRaus}>Zurück zur Startseite</button>
   );
 
   // Die Adresse steht nur auf dem Gerät bereit, das den Link angefordert hat. Kommt der
@@ -176,7 +243,61 @@ function Anmelden({ onRaus }: { onRaus: () => void }) {
           {fehlerKasten}
           <button className="knopf knopf--haupt knopf--breit" disabled={laeuft}>Anmelden</button>
         </form>
-        <button className="knopf knopf--still" onClick={onRaus}>← Zurück zur Anmeldung</button>
+        {zurStartseite}
+      </div>
+    );
+  }
+
+  if (modus === 'konto') {
+    return (
+      <div className="seite">
+        <Kopf />
+        <h1>Konto erstellen</h1>
+        <div className="hinweis">
+          <b>Nur freigeschaltete Adressen erhalten Zugang.</b> Ein Konto allein genügt nicht —
+          die E-Mail-Adresse muss in der Administration bereits eine Rolle erhalten haben.
+          Bitte genau die Adresse verwenden, unter der du eingetragen wurdest.
+        </div>
+
+        <form className="stapel" onSubmit={(e) => { e.preventDefault(); melden(() => kontoErstellen(mail, pw)); }}>
+          <div className="feld">
+            <label htmlFor="neu-mail">E-Mail</label>
+            <input id="neu-mail" type="email" autoComplete="username" value={mail}
+              onChange={(e) => setMail(e.target.value)} required autoFocus />
+          </div>
+          <div className="feld">
+            <label htmlFor="neu-pw">Passwort festlegen</label>
+            <input id="neu-pw" type="password" autoComplete="new-password" minLength={6}
+              value={pw} onChange={(e) => setPw(e.target.value)} required />
+            <span className="mini">Mindestens 6 Zeichen.</span>
+          </div>
+          {fehlerKasten}
+          <button className="knopf knopf--haupt knopf--breit" disabled={laeuft}>Konto erstellen</button>
+        </form>
+
+        <hr className="trenner" />
+
+        <p className="mini">Oder ohne Passwort:</p>
+
+        {/* Ohne Passwort: Firebase schickt einen Einmal-Link an die Adresse. */}
+        {linkGesendet ? (
+          <div className="hinweis">
+            <b>Anmeldelink verschickt.</b> Bitte das Postfach von {mail} prüfen (auch den Spam-Ordner)
+            und den Link auf diesem Gerät öffnen.
+          </div>
+        ) : (
+          <button className="knopf knopf--rand knopf--breit" disabled={laeuft || !mail}
+            onClick={() => melden(() => anmeldelinkSenden(mail, true).then(() => setLinkGesendet(true)))}>
+            Anmeldelink per E-Mail schicken
+          </button>
+        )}
+
+        {google}
+
+        <button className="knopf knopf--still" onClick={() => wechsle('anmelden')}>
+          ← Zurück zum Anmelden
+        </button>
+        {zurStartseite}
       </div>
     );
   }
@@ -200,25 +321,86 @@ function Anmelden({ onRaus }: { onRaus: () => void }) {
         <button className="knopf knopf--haupt knopf--breit" disabled={laeuft}>Anmelden</button>
       </form>
 
+      {google}
+
+      <hr className="trenner" />
+
       <button className="knopf knopf--rand knopf--breit" disabled={laeuft}
-        onClick={() => melden(() => signInWithPopup(auth, new GoogleAuthProvider()))}>
-        Mit Google anmelden
+        onClick={() => wechsle('konto')}>
+        Konto erstellen
       </button>
 
-      {/* Ohne Passwort: Firebase schickt einen Einmal-Link an die Adresse. */}
-      {linkGesendet ? (
-        <div className="hinweis">
-          <b>Anmeldelink verschickt.</b> Bitte das Postfach von {mail} prüfen (auch den Spam-Ordner)
-          und den Link auf diesem Gerät öffnen.
-        </div>
-      ) : (
-        <button className="knopf knopf--rand knopf--breit" disabled={laeuft || !mail}
-          onClick={() => melden(() => anmeldelinkSenden(mail, true).then(() => setLinkGesendet(true)))}>
-          Anmeldelink per E-Mail schicken
-        </button>
-      )}
+      {zurStartseite}
+    </div>
+  );
+}
 
-      <button className="knopf knopf--still" onClick={onRaus}>← Zurück zur Anmeldung</button>
+/* -------------------------------------------------------- E-Mail bestätigen */
+
+/**
+ * Zwischenschritt für frisch erstellte Passwort-Konten: Bis die Adresse bestätigt ist,
+ * lehnt die Datenbank die Freischaltung ab (`email_verified` in firestore.rules). Ohne
+ * diesen Bildschirm stünde dort «Kein Zugang» — richtig wäre «noch nicht bestätigt».
+ *
+ * Google- und Link-Anmeldungen kommen hier nie vorbei: Bei ihnen gilt die Adresse
+ * bereits als bestätigt.
+ */
+function MailBestaetigen(
+  { benutzer, onGeprueft, onRaus }:
+  { benutzer: User; onGeprueft: () => void; onRaus: () => void },
+) {
+  const [laeuft, setLaeuft] = useState(false);
+  const [nochmals, setNochmals] = useState(false);
+  const [hinweis, setHinweis] = useState<string | null>(null);
+
+  const pruefen = async (still: boolean) => {
+    if (!still) { setLaeuft(true); setHinweis(null); }
+    try {
+      if (await bestaetigungPruefen()) onGeprueft();
+      else if (!still) setHinweis('Die Adresse ist noch nicht bestätigt. Bitte zuerst den Link im E-Mail öffnen.');
+    } catch {
+      if (!still) setHinweis('Das hat nicht geklappt. Bitte nochmals versuchen.');
+    } finally {
+      if (!still) setLaeuft(false);
+    }
+  };
+
+  // Wer den Bestätigungslink öffnet, landet über «Weiter» wieder hier. Dann soll es von
+  // selbst weitergehen, statt noch einen Knopf zu verlangen — der Stand steht aber nur
+  // nach einem Neuladen beim Server fest, darum die stille Prüfung beim Aufbau.
+  useEffect(() => { pruefen(true); }, [onGeprueft]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const nochmalsSchicken = () =>
+    bestaetigungSenden(benutzer)
+      .then(() => { setNochmals(true); setHinweis(null); })
+      .catch((f) => setHinweis(anmeldeFehlerText((f as { code?: string })?.code ?? '').text));
+
+  return (
+    <div className="seite">
+      <Kopf klein />
+      <h1>E-Mail bestätigen</h1>
+      <div className="hinweis">
+        <b>Wir haben dir eine E-Mail an {benutzer.email} geschickt.</b> Bitte den Link darin
+        öffnen — auch im Spam-Ordner nachsehen — und danach hier weitermachen.
+      </div>
+
+      {hinweis && <div className="hinweis hinweis--warnung">{hinweis}</div>}
+
+      <button className="knopf knopf--haupt knopf--breit" disabled={laeuft} aria-busy={laeuft}
+        onClick={() => pruefen(false)}>
+        {laeuft && <span className="laderad laderad--knopf" aria-hidden="true" />}
+        {laeuft ? 'Wird geprüft …' : 'Ich habe bestätigt'}
+      </button>
+
+      <button className="knopf knopf--rand knopf--breit" disabled={laeuft || nochmals}
+        onClick={nochmalsSchicken}>
+        {nochmals ? 'E-Mail nochmals verschickt' : 'E-Mail nochmals schicken'}
+      </button>
+
+      <div className="knopfzeile">
+        <button className="knopf knopf--still" onClick={() => signOut(auth)}>Abmelden</button>
+        <button className="knopf knopf--still" onClick={onRaus}>Zurück zur Startseite</button>
+      </div>
     </div>
   );
 }

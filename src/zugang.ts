@@ -1,5 +1,6 @@
 import {
-  isSignInWithEmailLink, sendSignInLinkToEmail, signInWithEmailLink, type User,
+  createUserWithEmailAndPassword, isSignInWithEmailLink, sendEmailVerification,
+  sendSignInLinkToEmail, signInWithEmailLink, type User,
 } from 'firebase/auth';
 import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -107,6 +108,44 @@ export async function zugangEntfernen(mail: string): Promise<void> {
 
 export async function kontoEntfernen(uid: string): Promise<void> {
   await deleteDoc(doc(db, 'admins', uid));
+}
+
+/* --------------------------------------------------- Konto selbst erstellen */
+
+/**
+ * Konto mit E-Mail und selbst gesetztem Passwort anlegen.
+ *
+ * Zugang bringt das für sich allein noch keinen: Freigeschaltet wird nur, wessen Adresse
+ * unter «Steuerung → Zugänge» eingetragen ist (siehe `zugangKlaeren`) — wer ein Konto
+ * anlegt, ohne eingeladen zu sein, landet auf «Kein Zugang».
+ *
+ * Und erst, wenn die Adresse bestätigt ist: `firestore.rules` verlangt `email_verified`.
+ * Ohne diese Prüfung könnte sonst jemand ein Konto auf eine fremde, eingeladene Adresse
+ * anlegen und damit deren Rolle übernehmen. Darum geht die Bestätigungsmail sofort raus.
+ */
+export async function kontoErstellen(mail: string, passwort: string): Promise<void> {
+  const { user } = await createUserWithEmailAndPassword(auth, mailSchluessel(mail), passwort);
+  await bestaetigungSenden(user);
+}
+
+/** Bestätigungsmail (nochmals) verschicken. Firebase verschickt sie selbst. */
+export function bestaetigungSenden(u: User): Promise<void> {
+  return sendEmailVerification(u, { url: `${window.location.origin}/admin` });
+}
+
+/**
+ * Nach dem Klick auf den Bestätigungslink: Zustand vom Server holen und ein frisches
+ * Token ziehen. Ohne das Zweite steht `email_verified` im mitgeführten Token weiterhin
+ * auf `false` — und die Datenbank weist die Freischaltung ab, obwohl die Adresse längst
+ * bestätigt ist. Liefert `true`, sobald die Adresse bestätigt ist.
+ */
+export async function bestaetigungPruefen(): Promise<boolean> {
+  const u = auth.currentUser;
+  if (!u) return false;
+  await u.reload();
+  if (!u.emailVerified) return false;
+  await u.getIdToken(true);
+  return true;
 }
 
 /* ------------------------------------------------- Anmeldung per E-Mail-Link */
