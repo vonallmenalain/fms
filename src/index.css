@@ -109,6 +109,10 @@ p { margin: 0; }
   flex-direction: column;
   gap: 2px;
 }
+/* Der Block, der gerade offen ist, steht mit in der Liste — sonst fehlt genau die
+   Wahl, die man eben getippt hat. Er ist hervorgehoben, damit klar bleibt, wo man ist. */
+.bisher li[data-aktuell="1"] { color: var(--schwarz); font-weight: 600; }
+.bisher .offen { color: var(--grau-hell); font-weight: 400; }
 
 /* ---------- Angebots-Karte ---------- */
 
@@ -245,6 +249,7 @@ p { margin: 0; }
 .ticket-karte {
   display: grid;
   grid-template-columns: 84px 1fr;
+  grid-template-rows: auto auto auto;
   gap: 2px 14px;
   padding: 14px 16px;
   background: var(--flaeche);
@@ -253,9 +258,39 @@ p { margin: 0; }
   border-radius: var(--radius);
 }
 .ticket-karte[data-leer="1"] { border-left-color: var(--linie-stark); background: var(--flaeche-2); }
-.ticket-zeit { font-variant-numeric: tabular-nums; font-size: 14px; color: var(--grau); font-weight: 600; grid-row: 1 / span 2; align-self: center; }
-.ticket-fach { font-size: 18px; font-weight: 600; }
-.ticket-ort { font-size: 14.5px; color: var(--grau); }
+.ticket-zeit { font-variant-numeric: tabular-nums; font-size: 14px; color: var(--grau); font-weight: 600; grid-column: 1; grid-row: 1 / -1; align-self: center; }
+.ticket-block {
+  grid-column: 2;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--grau-hell);
+}
+.ticket-fach { grid-column: 2; font-size: 18px; font-weight: 600; }
+.ticket-ort { grid-column: 2; font-size: 14.5px; color: var(--grau); }
+
+/* ---------- Auslastung auf «Deine Auswahl» ---------- */
+
+.auslastung {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--linie);
+  border: 1px solid var(--linie);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.auslastung li {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  background: var(--flaeche);
+  padding: 9px 12px;
+  font-size: 14.5px;
+}
+.auslastung li > span:first-child { font-weight: 600; }
+.auslastung .zahl { font-size: 13.5px; color: var(--grau); text-align: right; }
+.auslastung li[data-alles-voll="1"] { background: var(--orange-flaeche); }
+.auslastung li[data-alles-voll="1"] .zahl { color: var(--orange); font-weight: 600; }
 
 /* ---------- Hinweise ---------- */
 
@@ -350,6 +385,28 @@ table.tabelle { width: 100%; border-collapse: collapse; font-size: 14.5px; backg
 table.tabelle th, table.tabelle td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--linie); }
 table.tabelle th { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--grau-hell); background: var(--flaeche-2); }
 .roller { overflow-x: auto; border: 1px solid var(--linie); border-radius: var(--radius); }
+
+/* Knopf, der wie ein Link aussieht — für Nebensächliches wie «aktualisieren». */
+.textknopf {
+  background: none; border: 0; padding: 0;
+  font: inherit; color: var(--gruen-dunkel); font-weight: 600;
+  text-decoration: underline; cursor: pointer;
+}
+.textknopf:disabled { color: var(--grau-hell); font-weight: 400; text-decoration: none; cursor: default; }
+
+/* ---------- Fusszeile ---------- */
+
+/* Zwei Zeilen: Links oben, Anlass darunter. Die Wortgruppen sind mit .zusammen gegen
+   einen Umbruch mittendrin gesichert — «WebApp von» und «Alä» gehören zusammen. */
+.fusszeile {
+  padding: 8px 16px calc(24px + env(safe-area-inset-bottom));
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fusszeile a { color: inherit; }
+.zusammen { white-space: nowrap; }
 
 /* ---------- Sonstiges ---------- */
 

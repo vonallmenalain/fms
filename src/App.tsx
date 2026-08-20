@@ -13,6 +13,7 @@ import { Start } from './screens/Start';
 import { Auswahl } from './screens/Auswahl';
 import { Ticket } from './screens/Ticket';
 import { useRoute } from './hooks/useRoute';
+import { useVerlauf } from './hooks/useVerlauf';
 
 const Admin = lazy(() => import('./screens/Admin'));
 
@@ -36,9 +37,12 @@ function GastApp() {
   const { config, veraltet } = useAppConfig();
   const { buchung, geladen: buchungGeladen } = useBuchung(benutzer?.uid ?? null);
 
-  const [schritt, setSchritt] = useState<Schritt>('start');
+  // Jeder Bildschirmwechsel ist ein History-Eintrag — damit geht der Zurück-Knopf des
+  // Handys genau einen Bildschirm zurück statt aus der App hinaus.
+  const { schritt, vorher, gehe, ersetze, zurueck: einenZurueck } = useVerlauf<Schritt>('start');
   const [plaetze, setPlaetzeLokal] = useState(1);
-  const [ausTicket, setAusTicket] = useState(false);
+  // Sind wir aus «Deine Auswahl» heraus in einen Block gesprungen? Das steht im Verlauf.
+  const ausTicket = vorher === 'ticket';
   const [laeuftFuer, setLaeuftFuer] = useState<string | null>(null);
   const [meldung, setMeldung] = useState<string | null>(null);
   const startGesetzt = useRef(false);
@@ -65,9 +69,10 @@ function GastApp() {
     startGesetzt.current = true;
     if (buchung) {
       setPlaetzeLokal(buchung.plaetze);
-      if (Object.values(buchung.wahl).some(Boolean)) setSchritt('ticket');
+      // Ersetzen statt anhängen: Das ist der Einstiegsbildschirm dieses Besuchs, kein Schritt.
+      if (Object.values(buchung.wahl).some(Boolean)) ersetze('ticket');
     }
-  }, [buchungGeladen, buchung]);
+  }, [buchungGeladen, buchung, ersetze]);
 
   // Die Gruppengrösse gehört dem Bildschirm: Sie wirkt sofort, gespeichert wird nebenbei.
   // Ohne diesen Merker holten die Rückmeldungen des Servers überholte Zwischenstände
@@ -89,18 +94,12 @@ function GastApp() {
   const { staende, geladen: slotsGeladen } = useSlots(blockSchritt, config.liveZaehler);
 
   const weiter = useCallback((von: BlockId) => {
-    if (ausTicket) { setAusTicket(false); setSchritt('ticket'); return; }
+    // Aus dem Ticket heraus geändert? Dann führt «Fertig» dorthin zurück, wo wir herkamen —
+    // über den Verlauf, damit sich keine Kette aus Ticket-Einträgen aufbaut.
+    if (ausTicket) { einenZurueck(); return; }
     const i = BLOCK_IDS.indexOf(von);
-    setSchritt(i + 1 < BLOCK_IDS.length ? BLOCK_IDS[i + 1] : 'ticket');
-    window.scrollTo(0, 0);
-  }, [ausTicket]);
-
-  const zurueck = useCallback((von: BlockId) => {
-    if (ausTicket) { setAusTicket(false); setSchritt('ticket'); return; }
-    const i = BLOCK_IDS.indexOf(von);
-    setSchritt(i > 0 ? BLOCK_IDS[i - 1] : 'start');
-    window.scrollTo(0, 0);
-  }, [ausTicket]);
+    gehe(i + 1 < BLOCK_IDS.length ? BLOCK_IDS[i + 1] : 'ticket');
+  }, [ausTicket, einenZurueck, gehe]);
 
   const waehlen = useCallback(async (blockId: BlockId, angebotId: string | null) => {
     if (tippLaeuft.current) return;           // ein Tipp ist schon unterwegs
@@ -126,7 +125,7 @@ function GastApp() {
           setMeldung('Das hat der Server abgelehnt. Bitte versuche es noch einmal.');
         } else {
           setMeldung('Die Anmeldung ist im Moment geschlossen.');
-          setSchritt('start');
+          ersetze('start');
         }
       } else {
         setMeldung('Das hat nicht geklappt. Bitte versuche es noch einmal.');
@@ -135,7 +134,7 @@ function GastApp() {
       tippLaeuft.current = false;
       setLaeuftFuer(null);
     }
-  }, [benutzer, buchung, plaetze, weiter, config.anmeldungOffen]);
+  }, [benutzer, buchung, plaetze, weiter, config.anmeldungOffen, ersetze]);
 
   const plaetzeAendern = useCallback((n: number) => {
     setPlaetzeLokal(n);                       // sofort, ohne Netz
@@ -153,9 +152,9 @@ function GastApp() {
     for (const b of BLOCK_IDS) {
       if (buchung.wahl[b]) await waehlenStill(benutzer.uid, b);
     }
-    setSchritt('start');
+    ersetze('start');
     setMeldung('Alle Plätze wurden freigegeben.');
-  }, [benutzer, buchung]);
+  }, [benutzer, buchung, ersetze]);
 
   // Auf die Buchung warten wir nur, wenn dieses Gerät überhaupt schon angemeldet ist.
   if (!authGeprueft || (benutzer && !buchungGeladen)) return <Laden />;
@@ -174,8 +173,8 @@ function GastApp() {
           setPlaetze={plaetzeAendern}
           plaetzeSperren={etwasGewaehlt}
           hatTicket={etwasGewaehlt}
-          onStart={() => setSchritt(BLOCK_IDS[0])}
-          onTicket={() => setSchritt('ticket')}
+          onStart={() => gehe(BLOCK_IDS[0])}
+          onTicket={() => gehe('ticket')}
         />
       )}
 
@@ -190,21 +189,21 @@ function GastApp() {
           ausTicket={ausTicket}
           onWahl={(id) => waehlen(blockSchritt, id)}
           onUeberspringen={() => weiter(blockSchritt)}
-          onZurueck={() => zurueck(blockSchritt)}
+          onZurueck={einenZurueck}
         />
       )}
 
       {schritt === 'ticket' && buchung && (
         <Ticket
           buchung={buchung}
-          onAendern={(b) => { setAusTicket(true); setSchritt(b); window.scrollTo(0, 0); }}
+          onAendern={gehe}
           onNeuBeginnen={neuBeginnen}
         />
       )}
       {schritt === 'ticket' && !buchung && (
         <div className="seite">
           <div className="hinweis hinweis--warnung">Es ist noch keine Anmeldung vorhanden.</div>
-          <button type="button" className="knopf knopf--haupt" onClick={() => setSchritt('start')}>
+          <button type="button" className="knopf knopf--haupt" onClick={() => ersetze('start')}>
             Zur Anmeldung
           </button>
         </div>
@@ -212,11 +211,21 @@ function GastApp() {
 
       {meldung && <Meldung text={meldung} onWeg={() => setMeldung(null)} />}
 
-      <p className="mini mitte nicht-drucken" style={{ padding: '8px 16px 24px' }}>
-        {programm.event.titel} · <a href="/admin" style={{ color: 'inherit' }}>Für Lehrpersonen</a>
-        {' · '}WebApp von{' '}
-        <a href="https://alae.app" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>Alä</a>
-      </p>
+      {/* Zwei Zeilen, und jede Wortgruppe bleibt zusammen: «WebApp von» darf nicht auf der
+          einen und «Alä» auf der nächsten Zeile stehen. */}
+      <footer className="fusszeile mini nicht-drucken">
+        <p>
+          <a className="zusammen" href="/admin">Für Lehrpersonen</a>
+          {/* Geschütztes Leerzeichen vor dem Punkt: So kann höchstens NACH dem Trenner
+              umbrochen werden — nie so, dass «·» allein auf einer Zeile steht. */}
+          <span aria-hidden="true">{'\u00A0· '}</span>
+          <span className="zusammen">
+            WebApp von{' '}
+            <a href="https://alae.app" target="_blank" rel="noopener noreferrer">Alä</a>
+          </span>
+        </p>
+        <p>{programm.event.titel}</p>
+      </footer>
     </>
   );
 }
