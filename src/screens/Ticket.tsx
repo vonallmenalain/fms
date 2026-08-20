@@ -27,7 +27,11 @@ export function Ticket({
     <div className="seite">
       <Kopf klein onHome={onHome} />
 
-      <div className="stapel">
+      {/* Diese Seite ist die abgeschlossene Sicht — und muss auch so aussehen. In den
+          Schritten 1–4 stehen weisse Karten zum Antippen; hier steht auf Grün, was
+          gebucht ist. So sieht man auf den ersten Blick, in welchem Bereich man ist. */}
+      <div className="abschluss-kopf">
+        {anzahl > 0 && <p className="abschluss-marke">✓ Gebucht</p>}
         <h1>Deine Auswahl</h1>
         <p className="lauftext">
           {datumLang()}
@@ -62,7 +66,6 @@ export function Ticket({
               data-leer={a ? '0' : '1'}
               onClick={() => onAendern(b.id)}
               disabled={nurAnsicht}
-              style={{ textAlign: 'left', font: 'inherit', color: 'inherit', cursor: nurAnsicht ? 'default' : 'pointer', width: '100%' }}
               aria-label={a ? `${b.label}, ${a.fach}, ${metaZeile(a)}, ${zeitraum(b)} — ändern` : `${b.label} — noch nichts gewählt, jetzt wählen`}
             >
               <span className="ticket-zeit">{b.von}<br />{b.bis}</span>
@@ -70,11 +73,13 @@ export function Ticket({
                   nicht an, welche Zeile ein Atelier und welche ein Unterrichtsbesuch ist. */}
               <span className="ticket-block">{b.label}</span>
               <span className="ticket-fach">
-                {a ? a.fach : <span style={{ color: 'var(--grau-hell)', fontWeight: 500 }}>nichts gewählt</span>}
+                {a
+                  ? <><span className="ticket-haken" aria-hidden="true">✓</span>{a.fach}</>
+                  : <span className="ticket-leer">nichts gewählt</span>}
               </span>
               <span className="ticket-ort">
                 {a ? metaZeile(a) : 'noch offen'}
-                {!nurAnsicht && <span style={{ color: 'var(--gruen-dunkel)', fontWeight: 600 }}>{a ? '  ·  ändern' : '  ·  wählen'}</span>}
+                {!nurAnsicht && <span className="ticket-aktion">{a ? '  ·  ändern' : '  ·  wählen'}</span>}
               </span>
             </button>
           );

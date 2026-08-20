@@ -28,6 +28,8 @@ wie man es startet und wo bewusst vom Konzept abgewichen wurde.
 | Security Rules prüfen auch die **Form** der Anmeldung (Wahl, Notiz) | ✅ seit 20.08. — [07 §5.2](07-pruefbericht.md) |
 | Reserveschalter «Live-Zähler aus» im Browser durchgespielt | ✅ seit 20.08. |
 | Ganzer Gast-Ablauf als automatisierter Browsertest | ✅ [07 §4](07-pruefbericht.md) |
+| «Deine Auswahl» farblich abgesetzt, letzter Schritt nur noch mit «Abschliessen» | ✅ seit 20.08. |
+| Betreuung kann sich selbst ein Konto erstellen (Passwort, Link oder Google) | ✅ seit 20.08. — nur für eingetragene Adressen |
 
 **Noch offen:** Latenzmessung gegen die echte Datenbank mit 200/400 Clients (muss von einem
 gewöhnlichen Anschluss aus laufen, siehe unten), Generalprobe, CI-Grün aus dem

@@ -134,11 +134,22 @@ Zurücksetzen und Zugänge vergeben. Erzwungen wird das in `firestore.rules` —
 `admin` eintragen dürfen. Das ist die einzige Stelle, die einen Deploy braucht — alles
 Weitere läuft danach über die App.
 
-**Anmelden** geht auf drei Wegen: Anmeldelink per E-Mail (Firebase verschickt ihn selbst,
-kein Mailserver nötig), E-Mail + Passwort oder Google. Voraussetzung für den Link:
+**Anmelden** geht auf drei Wegen: E-Mail + Passwort, Google oder Anmeldelink per E-Mail
+(Firebase verschickt ihn selbst, kein Mailserver nötig). Der Anmeldebildschirm zeigt nur
+die ersten beiden; wer noch kein Konto hat, wechselt über «Konto erstellen» in die zweite
+Ansicht — dort stehen alle drei Wege, ein Konto anzulegen. Voraussetzung für den Link:
 Firebase-Konsole → Authentication → Sign-in method → «E-Mail-Adresse/Passwort» mit
 **E-Mail-Link (passwortloses Anmelden)** aktiviert, und die Domain unter Settings →
 Authorized domains eingetragen.
+
+**Konto selbst erstellen.** Ein Konto anzulegen öffnet keinen Zugang: Freigeschaltet wird
+nur, wessen Adresse unter «Steuerung → Zugänge» eingetragen ist. Bei einem Passwort-Konto
+kommt eine Bedingung dazu — `firestore.rules` verlangt `email_verified`, sonst könnte
+jemand ein Konto auf eine fremde, eingeladene Adresse anlegen und deren Rolle übernehmen.
+Darum geht die Bestätigungsmail sofort raus, und bis zur Bestätigung steht statt «Kein
+Zugang» der Bildschirm «E-Mail bestätigen» (mit erneutem Versand und frischem Token per
+`getIdToken(true)` — ohne das trägt der Client seine alte, unbestätigte Aussage weiter).
+Google- und Link-Anmeldungen gelten bei Firebase von sich aus als bestätigt.
 
 ## 4. Der Buchungsvorgang (Kernlogik)
 
