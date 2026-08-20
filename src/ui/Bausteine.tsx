@@ -1,17 +1,31 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { BLOCK_IDS, type BlockId } from '../programm';
 
-export function Kopf({ klein, claim }: { klein?: boolean; claim?: boolean }) {
+export function Kopf({ klein, claim, onHome }: { klein?: boolean; claim?: boolean; onHome?: () => void }) {
+  const bild = (
+    <img
+      className={klein ? 'logo logo--klein' : 'logo'}
+      src="/fms-neufeld.png"
+      width={640}
+      height={132}
+      alt="fms Neufeld"
+    />
+  );
   return (
     <div className="kopf">
-      <img
-        className="logo"
-        src="/fms-neufeld.png"
-        width={640}
-        height={132}
-        alt="fms Neufeld"
-        style={klein ? { width: 130 } : undefined}
-      />
+      {/* Das Logo führt zurück auf die Startseite — dorthin, wo man loslegt bzw. seine
+          Auswahl ansieht. Auf der Startseite selbst gibt es nichts zu tun: Dann bleibt es
+          ein Bild und kein toter Knopf. */}
+      {onHome ? (
+        <button
+          type="button"
+          className={klein ? 'logo-knopf logo-knopf--klein' : 'logo-knopf'}
+          onClick={onHome}
+          aria-label="Zur Startseite"
+        >
+          {bild}
+        </button>
+      ) : bild}
       {claim && <p className="claim">der ort für alltagsheld:innen</p>}
     </div>
   );
@@ -34,10 +48,16 @@ export function Fortschritt({ aktuell, entschieden }: { aktuell: BlockId; entsch
 }
 
 export function Meldung({ text, onWeg }: { text: string; onWeg: () => void }) {
+  // `onWeg` kommt als frisch erzeugte Funktion herein und wäre als Abhängigkeit ein
+  // Dauerlauf: Auf der Auswahlseite zeichnet jede fremde Buchung den Bildschirm neu, der
+  // Zeitgeber begänne jedes Mal von vorn — und die Meldung bliebe im Andrang ewig stehen.
+  // Darum hängt der Zeitgeber nur am Text; die Funktion liegt daneben in einem Merker.
+  const weg = useRef(onWeg);
+  weg.current = onWeg;
   useEffect(() => {
-    const t = setTimeout(onWeg, 4200);
+    const t = setTimeout(() => weg.current(), 4200);
     return () => clearTimeout(t);
-  }, [text, onWeg]);
+  }, [text]);
   return <div className="meldung" role="status">{text}</div>;
 }
 

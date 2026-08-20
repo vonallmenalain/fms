@@ -91,6 +91,29 @@ await pruefe('Admin darf Rollen setzen', () => assertSucceeds(updateDoc(doc(admi
 await pruefe('Admin darf Konto entfernen', () => assertSucceeds(deleteDoc(doc(admin, 'admins/uid-neu'))));
 await pruefe('Erstzugang repariert sein Dokument ohne Rolle', () => assertSucceeds(updateDoc(doc(erstzugang, 'admins/uid-altlast'), { rolle: 'admin' })));
 
+console.log('\nForm der Anmeldung (Struktur statt blindes Vertrauen)');
+// Der erste Abschnitt hat den Freigabeschalter zugemacht, ein späterer die Anmeldung
+// `gast1` gelöscht. Beides hier zurückstellen — sonst prüft dieser Abschnitt bloss noch
+// die Notbremse und nicht die Form.
+await setDoc(doc(admin, 'config/app'), { anmeldungOffen: true }, { merge: true });
+const wahlLeer = { a1: null, a2: null, l1: null, l2: null };
+const buchung = (extra) => ({ plaetze: 1, wahl: wahlLeer, quelle: 'gast', notiz: null, ...extra });
+await pruefe('saubere Anmeldung geht durch', () => assertSucceeds(setDoc(doc(gast, 'bookings/gast1'),
+  buchung({ wahl: { ...wahlLeer, a1: 'a1-psychologie' } }))));
+await pruefe('erfundene Angebots-ID wird abgewiesen', () => assertFails(setDoc(doc(gast, 'bookings/gast1'),
+  buchung({ wahl: { ...wahlLeer, a1: 'gibt-es-nicht' } }))));
+await pruefe('Angebot aus dem falschen Block wird abgewiesen', () => assertFails(setDoc(doc(gast, 'bookings/gast1'),
+  buchung({ wahl: { ...wahlLeer, a1: 'l1-27fd' } }))));
+await pruefe('fremder Blockschlüssel wird abgewiesen', () => assertFails(setDoc(doc(gast, 'bookings/gast1'),
+  buchung({ wahl: { ...wahlLeer, a3: 'a3-irgendwas' } }))));
+await pruefe('übergrosse Notiz wird abgewiesen', () => assertFails(setDoc(doc(gast, 'bookings/gast1'),
+  buchung({ notiz: 'x'.repeat(5000) }))));
+await pruefe('normale Notiz der Betreuung geht durch', () => assertSucceeds(setDoc(doc(betreuung, 'bookings/vomstand2'),
+  { plaetze: 2, wahl: { ...wahlLeer, l1: 'l1-27fd' }, quelle: 'admin', notiz: '3 SuS ohne Handy',
+    erstelltAm: new Date(), geaendertAm: new Date() })));
+await pruefe('Gruppengrösse 5 wird abgewiesen', () => assertFails(setDoc(doc(gast, 'bookings/gast1'),
+  buchung({ plaetze: 5 }))));
+
 console.log('\nGast bleibt Gast');
 await pruefe('Gast darf keine Zugänge lesen', () => assertFails(getDoc(doc(gast, 'zugang/lea@example.ch'))));
 await pruefe('Gast darf kein Konto anlegen', () => assertFails(setDoc(doc(gast, 'admins/gast1'), { rolle: 'admin', name: 'g', email: null, seit: 'x' })));

@@ -7,10 +7,26 @@
     <meta name="description" content="Anmeldung für den Besuchsmorgen der FMS Neufeld vom 28. Oktober 2026." />
     <meta name="robots" content="noindex" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
+    <!-- Verbindungen vorwärmen. Jedes Gerät spricht am Morgen unmittelbar nach dem Laden
+         mit Firestore und spätestens beim ersten Buchen mit Firebase Auth. DNS, TLS und
+         die Verbindung dafür schon während des Ladens aufzubauen spart auf einem kalten
+         Mobilfunkanschluss eine Rundreise — bei 150 Geräten gleichzeitig zählt das. -->
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin />
+    <!-- Das Logo ist auf der Startseite das grösste Element und steht ganz oben. -->
+    <link rel="preload" as="image" href="/fms-neufeld.png" />
+
     <title>Besuchsmorgen FMS Neufeld</title>
   </head>
   <body>
     <div id="app"></div>
+    <noscript>
+      <p style="font: 17px system-ui, sans-serif; margin: 24px 16px; line-height: 1.5">
+        Für die Anmeldung braucht es JavaScript. Bitte im Browser erlauben oder einen
+        anderen Browser verwenden — am Info-Stand hilft man auch gerne weiter.
+      </p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

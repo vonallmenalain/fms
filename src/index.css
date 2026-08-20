@@ -62,6 +62,26 @@ body {
   gap: 14px;
 }
 .logo { width: 190px; max-width: 55%; height: auto; display: block; }
+.logo--klein { width: 130px; }
+
+/* Das Logo als Weg zurück auf die Startseite. Es soll aussehen wie ein Logo und nicht wie
+   ein Knopf — kein Rahmen, keine Fläche, nur ein grösseres Tippfeld drumherum (mit dem
+   negativen Aussenabstand bleibt es optisch an derselben Stelle wie ohne Knopf).
+   Die Breitenbegrenzung sitzt am KNOPF, nicht am Bild: Prozentangaben beziehen sich aufs
+   Elternelement, und das ist im Knopf das Bild selbst — es würde sich sonst
+   selbst schmälern. `content-box`, damit das Tippfeld die Logobreite nicht auffrisst. */
+.logo-knopf {
+  box-sizing: content-box;
+  display: block; align-self: start;
+  width: 190px; max-width: 55%;
+  margin: -10px 0 -10px -10px; padding: 10px;
+  border: 0; background: none; cursor: pointer;
+  border-radius: var(--radius);
+  -webkit-tap-highlight-color: transparent;
+}
+.logo-knopf--klein { width: 130px; }
+.logo-knopf .logo { width: 100%; max-width: 100%; }
+.logo-knopf:active { opacity: .6; }
 .claim {
   color: var(--gruen-dunkel);
   font-weight: 700;

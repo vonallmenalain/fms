@@ -7,6 +7,8 @@ an der FMS Neufeld, Bremgartenstrasse 133, 3012 Bern.
 > automatischer Deploy. Live auf **[fms.alae.app](https://fms.alae.app)**.
 > Was fertig ist, wie man es startet und was noch aussteht:
 > **[docs/06-stand-der-umsetzung.md](docs/06-stand-der-umsetzung.md)**.
+> Vor der ersten Vorführung geprüft, gemessen und abgehakt:
+> **[docs/07-pruefbericht.md](docs/07-pruefbericht.md)**.
 
 ## Das Vorhaben in fünf Zeilen
 
@@ -25,7 +27,7 @@ ohne Handy selbst eintragen.
 | **Kosten** | **< CHF 1 für den ganzen Anlass** ([Rechnung](docs/05-last-und-performance.md)) |
 | **Aufwand** | **27–29 h**, verteilt auf 8 Phasen |
 | **Klickbarer Prototyp** | nach ca. 8 h (Phase 2), noch ganz ohne Datenbank |
-| **Belastbarkeit** | im Lasttest mit **200 und 400** gleichzeitigen Clients belegt (Phase 6) |
+| **Belastbarkeit** | im Lasttest mit **150, 200 und 400** gleichzeitigen Clients belegt — Summe der Zähler stimmt jedes Mal exakt, nie überbucht ([Prüfbericht](docs/07-pruefbericht.md)) |
 
 ## Die Dokumente
 
@@ -38,6 +40,7 @@ ohne Handy selbst eintragen.
 | **[docs/05-last-und-performance.md](docs/05-last-und-performance.md)** | Warum kein Cloud-Functions-Backend, warum Blaze, wie «wirklich live» entsteht, der Engpass bei 200 Geräten, **Lasttest mit Abnahmekriterien**, Leistungsbudget |
 | **[data/programm.json](data/programm.json)** | Das vollständige Programm: 14 Atelier- und 24 Lektionsangebote mit Fach, Klasse, Zimmer, Lehrperson, Kapazität — aus der Programm-PPT übernommen |
 | **[docs/06-stand-der-umsetzung.md](docs/06-stand-der-umsetzung.md)** | **Was gebaut ist**, lokal starten, Skripte, GitHub-Actions, bewusste Abweichungen vom Konzept, Messwerte |
+| **[docs/07-pruefbericht.md](docs/07-pruefbericht.md)** | **Prüfbericht vor der ersten Vorführung:** Stresstest mit 150 Geräten, Browsertest, gefundene Schwachstellen, **ToDo-Listen** und ein Drehbuch für die Vorführung |
 | **[docs/snippets/](docs/snippets/)** | Entwurfsfassungen aus der Konzeptphase — verbindlich ist der Kode im Repo |
 
 ## Schnellstart

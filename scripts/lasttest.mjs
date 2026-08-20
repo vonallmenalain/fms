@@ -3,9 +3,12 @@
  * Lasttest — belegt, dass die App gleichzeitige Geräte trägt.
  * Spezifikation und Abnahmekriterien L1–L7: docs/05-last-und-performance.md §6
  *
- *   node scripts/lasttest.mjs --clients 200
- *   node scripts/lasttest.mjs --clients 400 --heiss 0.3
+ *   EMULATOR=1 node scripts/lasttest.mjs --clients 150         # der Normalfall
+ *   node scripts/lasttest.mjs --clients 200 --produktion       # echte Datenbank, echte Latenz
  *   node scripts/lasttest.mjs --aufraeumen        # gibt alle Plätze der Testclients wieder frei
+ *
+ * Ohne EMULATOR=1 verlangt das Skript ausdrücklich --produktion: Ein versehentlicher Lauf
+ * gegen die echte Datenbank hinterlässt dort hunderte Anmeldungen.
  *
  * Bewusst mit dem WEB-SDK und anonymer Anmeldung: nur so laufen dieselben Security
  * Rules und dieselbe Transaktionslogik wie am Eventtag. Das Admin-SDK würde die
@@ -51,6 +54,21 @@ const CONFIG = {
 
 // Gegen die Emulator Suite: EMULATOR=1 node scripts/lasttest.mjs --clients 60
 const IM_EMULATOR = process.env.EMULATOR === '1';
+
+// Ohne EMULATOR=1 läuft dieser Test gegen die ECHTE Datenbank und schreibt dort ein paar
+// hundert Anmeldungen hinein. Das ist manchmal genau richtig (die Latenzmessung geht nur
+// so), am Vorabend des Anlasses aber ein Unglück. Deshalb muss man es ausdrücklich sagen.
+if (!IM_EMULATOR && !process.argv.includes('--produktion') && !NUR_AUFRAEUMEN) {
+  console.error(
+    `\nDieser Lauf würde ${ANZAHL} echte Clients gegen die Produktionsdatenbank `
+    + `«${CONFIG.projectId}» schicken und dort Anmeldungen hinterlassen.\n\n`
+    + '  Gegen die Emulator Suite (der Normalfall):\n'
+    + '    EMULATOR=1 node scripts/lasttest.mjs --clients 150\n\n'
+    + '  Wirklich gegen die Produktion (danach zwingend zurücksetzen):\n'
+    + '    node scripts/lasttest.mjs --clients 200 --produktion\n');
+  process.exit(2);
+}
+
 const verbinde = (app) => {
   const db = getFirestore(app);
   const a = getAuth(app);

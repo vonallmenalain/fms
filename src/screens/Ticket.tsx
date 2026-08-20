@@ -4,11 +4,12 @@ import { BLOECKE, angebot, programm, zeitraum, metaZeile, datumLang, type BlockI
 import type { Buchung } from '../buchung';
 
 export function Ticket({
-  buchung, onAendern, onNeuBeginnen, gibtFrei, nurAnsicht,
+  buchung, onAendern, onNeuBeginnen, onHome, gibtFrei, nurAnsicht,
 }: {
   buchung: Buchung;
   onAendern: (b: BlockId) => void;
   onNeuBeginnen?: () => void;
+  onHome?: () => void;
   gibtFrei?: boolean;
   nurAnsicht?: boolean;
 }) {
@@ -24,7 +25,7 @@ export function Ticket({
 
   return (
     <div className="seite">
-      <Kopf klein />
+      <Kopf klein onHome={onHome} />
 
       <div className="stapel">
         <h1>Deine Auswahl</h1>
