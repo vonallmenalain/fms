@@ -16,8 +16,11 @@ const tiefeVon = (zustand: unknown): number => {
  * Ohne das hier hat der Zurück-Knopf des Handys nichts, worauf er zeigen könnte: Die App
  * bleibt die ganze Zeit auf «/», also verlässt der erste Druck die App und zeigt die Seite,
  * die vorher im Tab war. Darum bekommt jeder Bildschirmwechsel einen History-Eintrag mit
- * seiner Tiefe. Zurück heisst dann immer: genau ein Bildschirm zurück — der Knopf in der
- * App und der des Handys tun dasselbe.
+ * seiner Tiefe, und der Zurück-Knopf des Handys geht genau einen Bildschirm zurück.
+ *
+ * Das ist ausdrücklich etwas anderes als der Knopf «Zurück» in der Auswahl: Der läuft
+ * das Programm der Reihe nach ab (siehe App.tsx), der Handy-Knopf nimmt den zuletzt
+ * gemachten Schritt zurück — welcher das war, weiss nur dieser Verlauf.
  *
  * Der Stapel bleibt beim Zurückgehen vollständig, damit auch «vorwärts» wieder stimmt.
  */
@@ -76,17 +79,9 @@ export function useVerlauf<T extends string>(start: T) {
     window.scrollTo(0, 0);
   }, []);
 
-  /** Genau ein Bildschirm zurück. */
-  const zurueck = useCallback(() => {
-    if (jetzt.current.i > 0) window.history.back();
-  }, []);
-
   return {
     schritt: nav.stapel[nav.i],
-    /** Der Bildschirm, von dem wir hierher kamen — oder null am Anfang des Verlaufs. */
-    vorher: nav.i > 0 ? nav.stapel[nav.i - 1] : null,
     gehe,
     ersetze,
-    zurueck,
   };
 }
