@@ -97,13 +97,6 @@ export function Auswahl({
         ))}
       </div>
 
-      {!gewaehlt && (
-        <p className="mini">
-          Du musst nicht jeden Block belegen — ohne Wahl einfach
-          {' '}«{letzterBlock ? 'Abschliessen' : 'Weiter'}» tippen.
-        </p>
-      )}
-
       {plaetze > 1 && (
         <p className="mini">
           Du meldest <b>{plaetze} Personen</b> an — Angebote mit weniger als {plaetze} freien
