@@ -94,18 +94,26 @@ function GastApp() {
   const blockSchritt = schritt !== 'start' && schritt !== 'ticket' ? (schritt as BlockId) : null;
   const { staende, geladen: slotsGeladen } = useSlots(blockSchritt, config.liveZaehler);
 
-  const weiter = useCallback((von: BlockId) => {
-    // Aus dem Ticket heraus geändert? Dann führt «Fertig» dorthin zurück, wo wir herkamen —
-    // über den Verlauf, damit sich keine Kette aus Ticket-Einträgen aufbaut.
+  // «Abschliessen» führt zur Schlussansicht. Kamen wir von dort, geht es über den Verlauf
+  // zurück, damit sich keine Kette aus Ticket-Einträgen aufbaut.
+  const abschliessen = useCallback(() => {
     if (ausTicket) { einenZurueck(); return; }
-    const i = BLOCK_IDS.indexOf(von);
-    gehe(i + 1 < BLOCK_IDS.length ? BLOCK_IDS[i + 1] : 'ticket');
+    gehe('ticket');
   }, [ausTicket, einenZurueck, gehe]);
 
+  const weiter = useCallback((von: BlockId) => {
+    const i = BLOCK_IDS.indexOf(von);
+    if (i + 1 < BLOCK_IDS.length) gehe(BLOCK_IDS[i + 1]);
+    else abschliessen();
+  }, [abschliessen, gehe]);
+
+  // Ein Tipp auf eine Karte wählt nur noch aus — weitergeblättert wird über die
+  // Navigationsknöpfe. Ein zweiter Tipp auf dieselbe Karte hebt die Wahl wieder auf,
+  // ein Tipp auf eine andere Karte tauscht sie (das erledigt `waehle` in einem Zug).
   const waehlen = useCallback(async (blockId: BlockId, angebotId: string | null) => {
     if (tippLaeuft.current) return;           // ein Tipp ist schon unterwegs
     const schonGewaehlt = buchung?.wahl?.[blockId] ?? null;
-    if (angebotId && schonGewaehlt === angebotId) { weiter(blockId); return; }
+    const ziel = angebotId !== null && schonGewaehlt === angebotId ? null : angebotId;
 
     tippLaeuft.current = true;
     setLaeuftFuer(angebotId);
@@ -113,8 +121,7 @@ function GastApp() {
       // Anmeldung erst hier — das verteilt die Anmeldungen über die Auswahlzeit.
       const u = benutzer ?? (await benutzerBereit());
       if (!benutzer) setBenutzer(u);
-      await waehle(u.uid, blockId, angebotId, plaetze);
-      if (angebotId) weiter(blockId);
+      await waehle(u.uid, blockId, ziel, plaetze);
     } catch (fehler) {
       if (fehler instanceof AnmeldeAndrangFehler) {
         setMeldung('Gerade melden sich sehr viele gleichzeitig an. Bitte in ein paar Sekunden nochmals tippen.');
@@ -135,7 +142,7 @@ function GastApp() {
       tippLaeuft.current = false;
       setLaeuftFuer(null);
     }
-  }, [benutzer, buchung, plaetze, weiter, config.anmeldungOffen, ersetze]);
+  }, [benutzer, buchung, plaetze, config.anmeldungOffen, ersetze]);
 
   const plaetzeAendern = useCallback((n: number) => {
     setPlaetzeLokal(n);                       // sofort, ohne Netz
@@ -194,10 +201,10 @@ function GastApp() {
           buchung={buchung}
           plaetze={plaetze}
           laeuftFuer={laeuftFuer}
-          ausTicket={ausTicket}
           onWahl={(id) => waehlen(blockSchritt, id)}
-          onUeberspringen={() => weiter(blockSchritt)}
+          onWeiter={() => weiter(blockSchritt)}
           onZurueck={einenZurueck}
+          onAbschliessen={abschliessen}
         />
       )}
 

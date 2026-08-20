@@ -26,16 +26,12 @@ export function Start({
       </div>
 
       <div className="stapel">
-        <p>Du wählst:</p>
-        <ul className="punkte">
-          <li>zwei <b>Ateliers</b></li>
-          <li>zwei <b>Unterrichtsbesuche</b></li>
-        </ul>
+        <p>Du kannst zwei <b>Ateliers</b> und zwei <b>Unterrichtsbesuche</b> auswählen.</p>
       </div>
 
       {!hatTicket && (
         <div className="stapel">
-          <h3 id="gruppe-frage">Für wie viele Personen meldest du an?</h3>
+          <h3 id="gruppe-frage">Anzahl Personen</h3>
           <div className="wahlgruppe" role="group" aria-labelledby="gruppe-frage">
             {anzahlen.map((n) => (
               <button
@@ -50,8 +46,7 @@ export function Start({
             ))}
           </div>
           <p className="mini">
-            Seid ihr als Gruppe unterwegs, könnt ihr euch auf <b>einem</b> Handy gemeinsam anmelden.
-            Ihr besucht dann dieselben Ateliers und Lektionen.
+            Ihr könnt euch als Gruppe <b>mit einem Handy</b> anmelden.
           </p>
         </div>
       )}

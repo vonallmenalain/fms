@@ -8,7 +8,8 @@ import type { Staende } from '../hooks/useSlots';
 import type { Buchung } from '../buchung';
 
 export function Auswahl({
-  blockId, staende, geladen, buchung, plaetze, laeuftFuer, onWahl, onUeberspringen, onZurueck, ausTicket,
+  blockId, staende, geladen, buchung, plaetze, laeuftFuer,
+  onWahl, onWeiter, onZurueck, onAbschliessen,
 }: {
   blockId: BlockId;
   staende: Staende;
@@ -17,14 +18,15 @@ export function Auswahl({
   plaetze: number;
   laeuftFuer: string | null;
   onWahl: (angebotId: string) => void;
-  onUeberspringen: () => void;
+  onWeiter: () => void;
   onZurueck: () => void;
-  ausTicket: boolean;
+  onAbschliessen: () => void;
 }) {
   const b = block(blockId);
   const angebote = angeboteFuer(blockId);
   const wahl: Wahl = buchung?.wahl ?? {};
   const gewaehlt = wahl[blockId] ?? null;
+  const letzterBlock = BLOCK_IDS.indexOf(blockId) === BLOCK_IDS.length - 1;
   const entschieden = new Set(
     (Object.keys(wahl) as BlockId[]).filter((k) => wahl[k] !== null && wahl[k] !== undefined),
   );
@@ -38,6 +40,33 @@ export function Auswahl({
 
   return (
     <div className="seite">
+      {/* Die Navigation steht oben und bleibt beim Scrollen stehen: Ein Tipp auf eine Karte
+          wählt nur noch aus — weiter geht es erst über diese Knöpfe. Bei langen Listen
+          müsste man sonst zum Weiterkommen erst wieder ganz nach oben scrollen. */}
+      <nav className="navzeile nicht-drucken" aria-label="Navigation">
+        <button type="button" className="knopf knopf--rand knopf--klein" onClick={onZurueck}>
+          ← Zurück
+        </button>
+        <span className="navzeile-luecke" />
+        {/* Grün ist der Schritt, der jetzt dran ist: im letzten Block gibt es kein
+            «Weiter» mehr, dort führt «Abschliessen» weiter. */}
+        <button
+          type="button"
+          className={`knopf knopf--klein ${letzterBlock ? 'knopf--rand' : 'knopf--haupt'}`}
+          onClick={onWeiter}
+          disabled={letzterBlock}
+        >
+          Weiter
+        </button>
+        <button
+          type="button"
+          className={`knopf knopf--klein ${letzterBlock ? 'knopf--haupt' : 'knopf--rand'}`}
+          onClick={onAbschliessen}
+        >
+          Abschliessen
+        </button>
+      </nav>
+
       <Fortschritt aktuell={blockId} entschieden={entschieden} />
 
       <ul className="bisher lauftext">
@@ -72,19 +101,18 @@ export function Auswahl({
         ))}
       </div>
 
+      <p className="mini">
+        {gewaehlt
+          ? 'Nochmals auf die gewählte Karte tippen hebt die Wahl wieder auf.'
+          : 'Du musst nicht jeden Block belegen — ohne Wahl einfach «Weiter» tippen.'}
+      </p>
+
       {plaetze > 1 && (
         <p className="mini">
           Du meldest <b>{plaetze} Personen</b> an — Angebote mit weniger als {plaetze} freien
           Plätzen sind deshalb gesperrt.
         </p>
       )}
-
-      <div className="knopfzeile" style={{ justifyContent: 'space-between' }}>
-        <button type="button" className="knopf knopf--still" onClick={onZurueck}>← Zurück</button>
-        <button type="button" className="knopf knopf--still" onClick={onUeberspringen}>
-          {gewaehlt ? (ausTicket ? 'Fertig' : 'Weiter') : 'Diesen Block überspringen'}
-        </button>
-      </div>
     </div>
   );
 }
