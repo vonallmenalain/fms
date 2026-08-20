@@ -39,10 +39,8 @@ function GastApp() {
 
   // Jeder Bildschirmwechsel ist ein History-Eintrag — damit geht der Zurück-Knopf des
   // Handys genau einen Bildschirm zurück statt aus der App hinaus.
-  const { schritt, vorher, gehe, ersetze, zurueck: einenZurueck } = useVerlauf<Schritt>('start');
+  const { schritt, gehe, ersetze } = useVerlauf<Schritt>('start');
   const [plaetze, setPlaetzeLokal] = useState(1);
-  // Sind wir aus «Deine Auswahl» heraus in einen Block gesprungen? Das steht im Verlauf.
-  const ausTicket = vorher === 'ticket';
   const [laeuftFuer, setLaeuftFuer] = useState<string | null>(null);
   const [gibtFrei, setGibtFrei] = useState(false);
   const [meldung, setMeldung] = useState<string | null>(null);
@@ -94,18 +92,22 @@ function GastApp() {
   const blockSchritt = schritt !== 'start' && schritt !== 'ticket' ? (schritt as BlockId) : null;
   const { staende, geladen: slotsGeladen } = useSlots(blockSchritt, config.liveZaehler);
 
-  // «Abschliessen» führt zur Schlussansicht. Kamen wir von dort, geht es über den Verlauf
-  // zurück, damit sich keine Kette aus Ticket-Einträgen aufbaut.
-  const abschliessen = useCallback(() => {
-    if (ausTicket) { einenZurueck(); return; }
-    gehe('ticket');
-  }, [ausTicket, einenZurueck, gehe]);
+  // Die drei Knöpfe der Auswahl laufen immer der Reihe nach durch das Programm —
+  // Start · Atelier 1 · Atelier 2 · Unterrichtsbesuch 1 · Unterrichtsbesuch 2 · Übersicht.
+  // Bewusst NICHT über den Browser-Verlauf: Wer aus der Übersicht heraus auf «ändern»
+  // getippt hat, soll mit «Zurück» trotzdem im vorherigen Block landen und nicht dort,
+  // wo er hergekommen ist.
+  const abschliessen = useCallback(() => { gehe('ticket'); }, [gehe]);
 
   const weiter = useCallback((von: BlockId) => {
     const i = BLOCK_IDS.indexOf(von);
-    if (i + 1 < BLOCK_IDS.length) gehe(BLOCK_IDS[i + 1]);
-    else abschliessen();
-  }, [abschliessen, gehe]);
+    gehe(i + 1 < BLOCK_IDS.length ? BLOCK_IDS[i + 1] : 'ticket');
+  }, [gehe]);
+
+  const zurueck = useCallback((von: BlockId) => {
+    const i = BLOCK_IDS.indexOf(von);
+    gehe(i > 0 ? BLOCK_IDS[i - 1] : 'start');
+  }, [gehe]);
 
   // Ein Tipp auf eine Karte wählt nur noch aus — weitergeblättert wird über die
   // Navigationsknöpfe. Ein zweiter Tipp auf dieselbe Karte hebt die Wahl wieder auf,
@@ -203,7 +205,7 @@ function GastApp() {
           laeuftFuer={laeuftFuer}
           onWahl={(id) => waehlen(blockSchritt, id)}
           onWeiter={() => weiter(blockSchritt)}
-          onZurueck={einenZurueck}
+          onZurueck={() => zurueck(blockSchritt)}
           onAbschliessen={abschliessen}
         />
       )}

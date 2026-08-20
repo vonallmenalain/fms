@@ -48,13 +48,13 @@ export function Auswahl({
           ← Zurück
         </button>
         <span className="navzeile-luecke" />
-        {/* Grün ist der Schritt, der jetzt dran ist: im letzten Block gibt es kein
-            «Weiter» mehr, dort führt «Abschliessen» weiter. */}
+        {/* Grün ist der Schritt, der jetzt dran ist: im letzten Block führen «Weiter»
+            und «Abschliessen» beide in die Übersicht — hervorgehoben ist dort das
+            treffendere «Abschliessen». */}
         <button
           type="button"
           className={`knopf knopf--klein ${letzterBlock ? 'knopf--rand' : 'knopf--haupt'}`}
           onClick={onWeiter}
-          disabled={letzterBlock}
         >
           Weiter
         </button>
