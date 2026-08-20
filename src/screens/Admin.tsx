@@ -360,7 +360,10 @@ function Erfassen({ melde }: { melde: (t: string) => void }) {
 
       <div className="feld">
         <label htmlFor="notiz">Notiz (freiwillig)</label>
-        <input id="notiz" value={notiz} onChange={(e) => setNotiz(e.target.value)} placeholder="z. B. 3 SuS ohne Handy" />
+        {/* Dieselbe Grenze wie in firestore.rules — hier abgefangen, statt den
+            Server ablehnen zu lassen, wenn jemand einen Roman hineinschreibt. */}
+        <input id="notiz" maxLength={300} value={notiz} onChange={(e) => setNotiz(e.target.value)}
+          placeholder="z. B. 3 SuS ohne Handy" />
       </div>
 
       <button className="knopf knopf--haupt knopf--breit" disabled={laeuft} onClick={speichern}>
@@ -387,11 +390,24 @@ function Steuerung({ melde, ich }: { melde: (t: string) => void; ich: User }) {
     setLaeuft(true);
     try {
       const bu = await getDocs(collection(db, 'bookings'));
-      const b = writeBatch(db);
-      bu.docs.forEach((d) => b.delete(d.ref));
-      ANGEBOTE.forEach((a) => b.set(doc(db, 'slots', a.id), { belegt: 0, kapazitaet: a.kapazitaet, block: a.blockId }));
-      await b.commit();
-      melde('Alles zurückgesetzt.');
+      // Ein Firestore-Stapel fasst höchstens 500 Vorgänge. Bei 120 Gästen wäre das kein
+      // Thema — nach ein paar Proberunden ohne Zurücksetzen schon, und dann scheiterte
+      // ausgerechnet der Knopf, der wieder aufräumen soll. Also in Portionen.
+      let stapel = writeBatch(db);
+      const abschicken: Promise<void>[] = [];
+      let offen = 0;
+      const dazu = (fn: (b: ReturnType<typeof writeBatch>) => void) => {
+        fn(stapel);
+        if (++offen === 400) { abschicken.push(stapel.commit()); stapel = writeBatch(db); offen = 0; }
+      };
+      bu.docs.forEach((d) => dazu((b) => b.delete(d.ref)));
+      ANGEBOTE.forEach((a) => dazu((b) =>
+        b.set(doc(db, 'slots', a.id), { belegt: 0, kapazitaet: a.kapazitaet, block: a.blockId })));
+      if (offen) abschicken.push(stapel.commit());
+      await Promise.all(abschicken);
+      melde(`Alles zurückgesetzt — ${bu.size} Anmeldungen gelöscht.`);
+    } catch {
+      melde('Das Zurücksetzen hat nicht geklappt. Bitte nochmals versuchen.');
     } finally { setLaeuft(false); }
   };
 

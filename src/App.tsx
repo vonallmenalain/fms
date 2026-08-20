@@ -46,6 +46,7 @@ function GastApp() {
   const [meldung, setMeldung] = useState<string | null>(null);
   const startGesetzt = useRef(false);
   const tippLaeuft = useRef(false);
+  const aufgebaut = useRef(false);
 
   // Beim Laden NUR nachsehen, ob dieses Gerät schon eine Sitzung hat — kein Netzaufruf,
   // keine Neuanmeldung. Angemeldet wird erst beim ersten Buchen (siehe firebase.ts).
@@ -163,18 +164,35 @@ function GastApp() {
     // wirkt die App in dieser Zeit, als hätte sie den Tipp verschluckt.
     setGibtFrei(true);
     try {
+      let alleFrei = true;
       for (const b of BLOCK_IDS) {
-        if (buchung.wahl[b]) await waehlenStill(benutzer.uid, b);
+        if (buchung.wahl[b]) alleFrei = (await waehlenStill(benutzer.uid, b)) && alleFrei;
       }
-      ersetze('start');
-      setMeldung('Alle Plätze wurden freigegeben.');
+      // Ehrlich bleiben: Ist die Anmeldung inzwischen geschlossen, weist der Server die
+      // Freigabe ab. Vorher meldete die App trotzdem Erfolg und warf die Person auf den
+      // Start — wo ihre Auswahl weiterhin stand. Das ist schlimmer als eine Absage.
+      if (alleFrei) {
+        ersetze('start');
+        setMeldung('Alle Plätze wurden freigegeben.');
+      } else {
+        setMeldung('Die Plätze liessen sich nicht freigeben. Bitte nochmals versuchen '
+          + 'oder am Info-Stand melden.');
+      }
     } finally {
       setGibtFrei(false);
     }
   }, [benutzer, buchung, ersetze, gibtFrei]);
 
-  // Auf die Buchung warten wir nur, wenn dieses Gerät überhaupt schon angemeldet ist.
-  if (!authGeprueft || (benutzer && !buchungGeladen)) return <Laden />;
+  // Der Ladebildschirm gehört ausschliesslich zum ERSTEN Aufbau: Dort muss feststehen, ob
+  // dieses Gerät schon ein Ticket hat, sonst blitzt die Startseite auf und springt sofort
+  // weiter. Sobald einmal etwas Richtiges auf dem Schirm stand, darf er nie wieder kommen.
+  //
+  // Sonst passiert genau das: Beim ersten Tipp auf eine Karte meldet sich das Gerät an
+  // (siehe `waehlen`), dadurch beginnt useBuchung zu laden — und die ganze Angebotsliste
+  // verschwände mitten im Tippen hinter «Einen Moment …». Im Browsertest mit 150 ms
+  // Mobilfunk-Latenz waren das 524 ms Leere ausgerechnet beim allerersten Tipp.
+  if (!aufgebaut.current && (!authGeprueft || (benutzer && !buchungGeladen))) return <Laden />;
+  aufgebaut.current = true;
 
   const etwasGewaehlt = buchung ? Object.values(buchung.wahl).some(Boolean) : false;
 
@@ -215,6 +233,7 @@ function GastApp() {
           buchung={buchung}
           onAendern={gehe}
           onNeuBeginnen={neuBeginnen}
+          onHome={() => gehe('start')}
           gibtFrei={gibtFrei}
         />
       )}
@@ -233,7 +252,7 @@ function GastApp() {
           einen und «Alä» auf der nächsten Zeile stehen. */}
       <footer className="fusszeile mini nicht-drucken">
         <p>
-          <a className="zusammen" href="/admin">Betreuungspersonen</a>
+          <a className="zusammen" href="/admin">Login Betreuungspersonen</a>
           {/* Geschütztes Leerzeichen vor dem Punkt: So kann höchstens NACH dem Trenner
               umbrochen werden — nie so, dass «·» allein auf einer Zeile steht. */}
           <span aria-hidden="true">{'\u00A0· '}</span>
@@ -248,7 +267,7 @@ function GastApp() {
   );
 }
 
-/** Freigeben ohne Weiterspringen — für «alles zurücksetzen». */
-async function waehlenStill(uid: string, blockId: BlockId) {
-  try { await waehle(uid, blockId, null, 1); } catch { /* egal, best effort */ }
+/** Freigeben ohne Weiterspringen — für «alles zurücksetzen». `false` heisst: hat nicht geklappt. */
+async function waehlenStill(uid: string, blockId: BlockId): Promise<boolean> {
+  try { await waehle(uid, blockId, null, 1); return true; } catch { return false; }
 }

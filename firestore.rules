@@ -85,7 +85,37 @@ service cloud.firestore {
     }
 
     function keineWahl(d) {
-      return d.wahl.a1 == null && d.wahl.a2 == null && d.wahl.l1 == null && d.wahl.l2 == null;
+      return d.wahl.get('a1', null) == null && d.wahl.get('a2', null) == null
+        && d.wahl.get('l1', null) == null && d.wahl.get('l2', null) == null;
+    }
+
+    // Die Wahl ist der einzige Ort, an dem ein Gast frei formulierten Inhalt schreibt.
+    // Ohne Prüfung nahm der Server jeden Unsinn an: eine Angebots-ID, die es nicht gibt
+    // (die Betreuungsliste zeigt dann eine leere Zeile), fremde Blockschlüssel, oder eine
+    // riesige Zeichenkette. Struktur lässt sich hier billig erzwingen — die Angebots-ID
+    // muss zum Block passen, so wie bei den Zählern auch.
+    function gueltigerSlot(wert, blk) {
+      return wert == null || (wert is string && wert.size() <= 60 && wert.matches(blk + '-.+'));
+    }
+
+    function gueltigeWahl(d) {
+      return d.wahl is map
+        && d.wahl.keys().hasOnly(['a1', 'a2', 'l1', 'l2'])
+        && gueltigerSlot(d.wahl.get('a1', null), 'a1')
+        && gueltigerSlot(d.wahl.get('a2', null), 'a2')
+        && gueltigerSlot(d.wahl.get('l1', null), 'l1')
+        && gueltigerSlot(d.wahl.get('l2', null), 'l2');
+    }
+
+    // Die Notiz schreibt nur die Betreuung («3 SuS ohne Handy»). Ohne Obergrenze passt
+    // dort ein Dokument von fast einem Megabyte hinein — und jede Betreuungsperson lädt
+    // die ganze Buchungsliste live mit.
+    function gueltigeNotiz(d) {
+      return d.notiz == null || (d.notiz is string && d.notiz.size() <= 300);
+    }
+
+    function gueltigeBuchung(d) {
+      return gueltigeWahl(d) && gueltigeNotiz(d);
     }
 
     // ------------------------------------------------------ config: Steuerung
@@ -172,6 +202,7 @@ service cloud.firestore {
           && request.resource.data.keys().hasOnly(
                ['plaetze', 'wahl', 'quelle', 'notiz', 'erstelltAm', 'geaendertAm'])
           && gueltigePlaetze(request.resource.data.plaetze)
+          && gueltigeBuchung(request.resource.data)
           && request.resource.data.quelle == 'gast')
         // Betreuung erfasst Anmeldungen für Gäste ohne Handy (eigene Dokument-ID).
         // Bewusst ohne anmeldungOffen(): Am Info-Stand muss das auch nach Schluss gehen.
@@ -179,12 +210,14 @@ service cloud.firestore {
           && request.resource.data.keys().hasOnly(
                ['plaetze', 'wahl', 'quelle', 'notiz', 'erstelltAm', 'geaendertAm'])
           && gueltigePlaetze(request.resource.data.plaetze)
+          && gueltigeBuchung(request.resource.data)
           && request.resource.data.quelle == 'admin');
 
       allow update: if (angemeldet()
           && request.auth.uid == buchungId
           && anmeldungOffen()
           && request.resource.data.quelle == resource.data.quelle
+          && gueltigeBuchung(request.resource.data)
           // Gruppengrösse nur ändern, solange noch nichts gebucht ist
           && (request.resource.data.plaetze == resource.data.plaetze
               || (keineWahl(resource.data) && gueltigePlaetze(request.resource.data.plaetze))))

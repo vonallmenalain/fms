@@ -3,6 +3,10 @@
 **Stand 20.08.2026** — die App ist gebaut und läuft. Dieses Dokument sagt, was existiert,
 wie man es startet und wo bewusst vom Konzept abgewichen wurde.
 
+> Der vollständige Durchgang vor der ersten Vorführung — Stresstest mit 150 Geräten,
+> Browsertest, gefundene Schwachstellen und die ToDo-Listen — steht in
+> **[07-pruefbericht.md](07-pruefbericht.md)**.
+
 ---
 
 ## 1. Was fertig ist
@@ -21,6 +25,9 @@ wie man es startet und wo bewusst vom Konzept abgewichen wurde.
 | Automatischer Rules-Deploy per GitHub-Action | ✅ |
 | Lasttest mit Invariantenprüfung | ✅ |
 | Netlify-Deploy aus `main` | ✅ |
+| Security Rules prüfen auch die **Form** der Anmeldung (Wahl, Notiz) | ✅ seit 20.08. — [07 §5.2](07-pruefbericht.md) |
+| Reserveschalter «Live-Zähler aus» im Browser durchgespielt | ✅ seit 20.08. |
+| Ganzer Gast-Ablauf als automatisierter Browsertest | ✅ [07 §4](07-pruefbericht.md) |
 
 **Noch offen:** Latenzmessung gegen die echte Datenbank mit 200/400 Clients (muss von einem
 gewöhnlichen Anschluss aus laufen, siehe unten), Generalprobe, CI-Grün aus dem
@@ -61,8 +68,10 @@ VITE_EMULATOR=1 npm run dev                                    # Terminal 2
 | `node scripts/seed.mjs --oeffnen` | dasselbe, öffnet zusätzlich die Anmeldung |
 | `node scripts/pruefe.mjs` | Invarianten L1–L3 gegen die Datenbank prüfen |
 | `node scripts/reset.mjs --ja` | alle Anmeldungen löschen, Zähler auf 0, Anmeldung schliessen |
-| `node scripts/lasttest.mjs --clients 200` | Lasttest mit echten Clients und echten Rules |
-| `EMULATOR=1 node scripts/lasttest.mjs --clients 120` | Lasttest gegen die Emulator Suite |
+| `EMULATOR=1 node scripts/lasttest.mjs --clients 150` | Lasttest gegen die Emulator Suite — der Normalfall |
+| `node scripts/lasttest.mjs --clients 200 --produktion` | Lasttest gegen die **echte** Datenbank. `--produktion` ist Pflicht, sonst bricht das Skript ab; danach zwingend `reset` |
+| `npm run andrangtest` | 21 Prüfungen: Überbuchung und Angriffe eines manipulierten Clients |
+| `npm run regeltest` | 36 Prüfungen der Security Rules, startet den Emulator selbst |
 
 Für die Skripte gegen die Produktion braucht es `GOOGLE_APPLICATION_CREDENTIALS`.
 Ohne Schlüssel lokal: dieselben Aktionen laufen über die **GitHub-Action «Firebase»**
@@ -100,6 +109,10 @@ Die Anmeldung läuft in einer eigenen Phase, danach buchen alle gleichzeitig los
 | Realistisch, ohne Vorprüfung | 150 | ≈ 0.9 × | 491 | **0** | **756 / 756** | **0** |
 | Überlast (Gruppen gleichverteilt 1–4) | 200 | ≈ 2.5 × | 426 | **0** | **955 / 955** | **0** |
 | Erster Lauf | 120 | ≈ 0.8 × | 359 | **0** | **866 / 866** | **0** |
+| *20.08.* Realistisch | 150 | ≈ 1.0 × | 573 | **0** | **889 / 889** | **0** |
+| *20.08.* Andrang (60 % auf vier Angebote) | 150 | ≈ 1.0 × | 506 | **0** | **749 / 749** | **0** |
+| *20.08.* Überlast (Gruppen gleichverteilt 1–4) | 150 | ≈ 2.5 × | 412 | **0** | **970 / 970** | **0** |
+| *20.08.* mit verschärften Rules | 150 | ≈ 1.0 × | 573 | **0** | **899 / 899** | **0** |
 
 **Das ist das belastbare Ergebnis:** In jedem Lauf stimmt die Summe aller Zähler **exakt**
 mit den gebuchten Plätzen überein, kein Angebot wurde je überbucht, kein einziger harter
@@ -173,3 +186,6 @@ Zusätzlich verifiziert:
 | 5 | Blaze-Tarif + Budget-Alarm CHF 5/20 | Schule |
 | 6 | Generalprobe mit ~20 echten Handys im Gast-WLAN | beide |
 | 7 | Vor dem Event: `reset`, danach Anmeldung geschlossen lassen bis 08:35 | Technik |
+| 8 | Zählerbewegung an die eigene Anmeldung binden — [07 §5.1](07-pruefbericht.md) | Technik |
+
+Vollständige, nach Dringlichkeit sortierte Listen: **[07 §7 und §8](07-pruefbericht.md)**.
