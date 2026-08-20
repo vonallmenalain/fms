@@ -100,10 +100,45 @@ Vier Collections plus ein Konfigdokument. Alles bewusst flach.
 }
 ```
 
-### `admins/{uid}` — Berechtigung (3–5 Dokumente, von Hand angelegt)
+### `zugang/{mail}` — Einladungen (Dokument-ID = Mailadresse, klein geschrieben)
 ```jsonc
-{ "name": "Info-Stand 1", "darfReset": false }
+{
+  "email": "lea.muster@example.ch",
+  "name": "Lea Muster",
+  "rolle": "betreuung",             // "betreuung" | "admin"
+  "erstelltAm": "2026-10-01T09:12:00.000Z",
+  "erstelltVon": "leitung@example.ch"
+}
 ```
+Die Einladung hängt an der Mailadresse, weil es die Person zu diesem Zeitpunkt noch nicht
+gibt: Eine uid entsteht erst beim ersten Anmelden. Angelegt wird sie in der App unter
+**Steuerung → Zugänge**.
+
+### `admins/{uid}` — freigeschaltete Konten (beim ersten Anmelden selbst angelegt)
+```jsonc
+{
+  "rolle": "betreuung",             // aus der Einladung übernommen, nicht frei wählbar
+  "name": "Lea Muster",
+  "email": "lea.muster@example.ch",
+  "seit": "2026-10-02T07:41:00.000Z"
+}
+```
+
+**Zwei Rollen.** `betreuung` sieht die Übersicht und erfasst Anmeldungen für Gäste ohne
+Handy. `admin` darf zusätzlich steuern: Freigabeschalter, Meldung an alle, Kapazitäten,
+Zurücksetzen und Zugänge vergeben. Erzwungen wird das in `firestore.rules` — der Reiter
+«Steuerung» blendet sich zwar aus, aber das allein wäre kein Schutz.
+
+**Erstzugang.** Damit überhaupt jemand die ersten Zugänge vergeben kann, steht in
+`firestore.rules` eine kurze Liste von Adressen (`bootstrapMail()`), die sich selbst als
+`admin` eintragen dürfen. Das ist die einzige Stelle, die einen Deploy braucht — alles
+Weitere läuft danach über die App.
+
+**Anmelden** geht auf drei Wegen: Anmeldelink per E-Mail (Firebase verschickt ihn selbst,
+kein Mailserver nötig), E-Mail + Passwort oder Google. Voraussetzung für den Link:
+Firebase-Konsole → Authentication → Sign-in method → «E-Mail-Adresse/Passwort» mit
+**E-Mail-Link (passwortloses Anmelden)** aktiviert, und die Domain unter Settings →
+Authorized domains eingetragen.
 
 ## 4. Der Buchungsvorgang (Kernlogik)
 

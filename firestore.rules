@@ -17,17 +17,46 @@ service cloud.firestore {
       return request.auth != null;                    // anonym genügt
     }
 
-    // Erstzugang: diese Adressen dürfen sich selbst als Betreuung eintragen.
-    // Danach zählt das admins/{uid}-Dokument.
-    function bootstrapMail() {
+    function echteMail() {
       return angemeldet()
-        && request.auth.token.email_verified == true
-        && request.auth.token.email in ['alain.sc2@gmail.com'];
+        && request.auth.token.email != null
+        && request.auth.token.email_verified == true;
+    }
+
+    // Erstzugang: diese Adressen dürfen sich selbst als Administration eintragen. Ohne
+    // das käme niemand hinein, um die ersten Zugänge zu vergeben — Henne und Ei.
+    function bootstrapMail() {
+      return echteMail() && request.auth.token.email in ['alain.sc2@gmail.com'];
+    }
+
+    // Einladungen liegen unter der Mailadresse, weil es die Person beim Einladen noch
+    // gar nicht gibt: Eine uid entsteht erst beim ersten Anmelden.
+    function mailSchluessel() { return request.auth.token.email.lower(); }
+
+    function eingeladen() {
+      return echteMail()
+        && exists(/databases/$(database)/documents/zugang/$(mailSchluessel()));
+    }
+
+    function einladungsRolle() {
+      return get(/databases/$(database)/documents/zugang/$(mailSchluessel())).data.rolle;
+    }
+
+    /**
+     * Zwei Rollen (Entscheid: Steuerung nicht für alle).
+     * `betreuung` sieht die Übersicht und erfasst Anmeldungen für Gäste ohne Handy.
+     * `admin` darf zusätzlich steuern: Freigabeschalter, Kapazitäten, Zurücksetzen,
+     * und Zugänge vergeben. Fehlt einem alten Dokument das Feld, gilt die kleinere Rolle.
+     */
+    function istBetreuung() {
+      return angemeldet()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
     function istAdmin() {
-      return angemeldet()
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      return istBetreuung()
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid))
+             .data.get('rolle', 'betreuung') == 'admin';
     }
 
     // Harte Decke aus Entscheid D3. config/app.maxPlaetzeProGeraet ist zur Laufzeit
@@ -66,13 +95,36 @@ service cloud.firestore {
       allow write: if istAdmin();
     }
 
-    // ------------------------------------------------------ admins: Betreuung
+    // ------------------------------------------------- zugang: Einladungen
+
+    // Dokument-ID ist die Mailadresse in Kleinbuchstaben.
+    match /zugang/{mail} {
+      // Die eigene Einladung darf man lesen — daraus erfährt die App die eigene Rolle.
+      allow get:  if istAdmin() || (echteMail() && mailSchluessel() == mail);
+      allow list: if istAdmin();
+      allow write: if istAdmin();
+    }
+
+    // ------------------------------- admins: freigeschaltete Betreuungspersonen
 
     match /admins/{uid} {
-      allow get:  if angemeldet() && (request.auth.uid == uid || istAdmin());
+      allow get:  if angemeldet() && (request.auth.uid == uid || istBetreuung());
       allow list: if istAdmin();
-      allow create: if request.auth.uid == uid && bootstrapMail();
-      allow update, delete: if istAdmin();
+
+      // Selbstfreischaltung beim ersten Anmelden — aber nur mit genau der Rolle, die in
+      // der Einladung steht. Eine Betreuungsperson kann sich so nicht selbst befördern.
+      allow create: if request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['rolle', 'name', 'email', 'seit'])
+        && request.resource.data.rolle in ['admin', 'betreuung']
+        && ((eingeladen() && request.resource.data.rolle == einladungsRolle())
+            || (bootstrapMail() && request.resource.data.rolle == 'admin'));
+
+      // Der Erstzugang darf sein eigenes Dokument reparieren (etwa eine fehlende Rolle
+      // nachtragen) — sonst sperrt eine unvollständige Altlast die Administration aus.
+      allow update: if istAdmin()
+        || (request.auth.uid == uid && bootstrapMail() && request.resource.data.rolle == 'admin');
+
+      allow delete: if istAdmin();
     }
 
     // ---------------------------------------------------------- slots: Zähler
@@ -103,7 +155,7 @@ service cloud.firestore {
         && request.resource.data.belegt >= 0
         && request.resource.data.belegt <= maxPlaetze();
 
-      // Betreuung darf zusätzlich Kapazitäten anpassen, einspielen und zurücksetzen.
+      // Kapazitäten anpassen, einspielen und zurücksetzen ist Sache der Administration.
       allow write: if istAdmin();
     }
 
@@ -111,29 +163,35 @@ service cloud.firestore {
 
     match /bookings/{buchungId} {
 
-      allow get:  if request.auth.uid == buchungId || istAdmin();
-      allow list: if istAdmin();          // nur die Betreuung sieht alle Anmeldungen
+      allow get:  if request.auth.uid == buchungId || istBetreuung();
+      allow list: if istBetreuung();      // nur die Betreuung sieht alle Anmeldungen
 
-      allow create: if angemeldet()
-        && request.auth.uid == buchungId
-        && anmeldungOffen()
-        && request.resource.data.keys().hasOnly(
-             ['plaetze', 'wahl', 'quelle', 'notiz', 'erstelltAm', 'geaendertAm'])
-        && gueltigePlaetze(request.resource.data.plaetze)
-        && request.resource.data.quelle == 'gast';
+      allow create: if (angemeldet()
+          && request.auth.uid == buchungId
+          && anmeldungOffen()
+          && request.resource.data.keys().hasOnly(
+               ['plaetze', 'wahl', 'quelle', 'notiz', 'erstelltAm', 'geaendertAm'])
+          && gueltigePlaetze(request.resource.data.plaetze)
+          && request.resource.data.quelle == 'gast')
+        // Betreuung erfasst Anmeldungen für Gäste ohne Handy (eigene Dokument-ID).
+        // Bewusst ohne anmeldungOffen(): Am Info-Stand muss das auch nach Schluss gehen.
+        || (istBetreuung()
+          && request.resource.data.keys().hasOnly(
+               ['plaetze', 'wahl', 'quelle', 'notiz', 'erstelltAm', 'geaendertAm'])
+          && gueltigePlaetze(request.resource.data.plaetze)
+          && request.resource.data.quelle == 'admin');
 
-      allow update: if angemeldet()
-        && request.auth.uid == buchungId
-        && anmeldungOffen()
-        && request.resource.data.quelle == resource.data.quelle
-        // Gruppengrösse nur ändern, solange noch nichts gebucht ist
-        && (request.resource.data.plaetze == resource.data.plaetze
-            || (keineWahl(resource.data) && gueltigePlaetze(request.resource.data.plaetze)));
+      allow update: if (angemeldet()
+          && request.auth.uid == buchungId
+          && anmeldungOffen()
+          && request.resource.data.quelle == resource.data.quelle
+          // Gruppengrösse nur ändern, solange noch nichts gebucht ist
+          && (request.resource.data.plaetze == resource.data.plaetze
+              || (keineWahl(resource.data) && gueltigePlaetze(request.resource.data.plaetze))))
+        || istAdmin();
 
+      // Fremde Anmeldungen löschen gehört zum Aufräumen — also zur Administration.
       allow delete: if request.auth.uid == buchungId || istAdmin();
-
-      // Betreuung erfasst Anmeldungen für Gäste ohne Handy (eigene Dokument-ID).
-      allow write: if istAdmin();
     }
 
     // ------------------------------------------------------------ alles Übrige

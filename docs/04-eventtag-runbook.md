@@ -66,6 +66,13 @@ auf ein Nachbarangebot lenken.
 **Stufe 3 — Nichts geht mehr**
 Admin → `Anmeldung geschlossen` + Banner «Bitte beim Info-Stand melden», dann Papier (§5).
 
+### 4.5 Jemand braucht kurzfristig Zugang
+
+Administration → **Steuerung → Zugänge** → Adresse eintragen, Rolle **Betreuung**,
+«Anmeldelink sofort per E-Mail schicken» angehakt lassen. Die Person öffnet den Link auf
+ihrem Gerät und ist drin. Wer nur betreut, sieht die Steuerung gar nicht — es kann also
+niemand versehentlich die Anmeldung schliessen oder alles zurücksetzen.
+
 ## 5. Papier-Fallback (am Vorabend vorbereiten, kostet 20 Minuten)
 
 Ja — vorbereiten. Er kostet fast nichts und nimmt allen Beteiligten die Nervosität.

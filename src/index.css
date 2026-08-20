@@ -178,6 +178,12 @@ p { margin: 0; }
 }
 .karte[data-zustand="aktiv"] .karte-plaetze { color: var(--gruen-dunkel); font-weight: 600; }
 
+/* «✓ gewählt» bzw. «schon gewählt» oben, die freien Plätze klein darunter: Wer in einen
+   Block zurückgeht, sieht so beides auf einmal, ohne den Platz erst aufzugeben. */
+.karte-marke { display: block; }
+.karte-frei { display: block; font-weight: 400; font-size: 13px; color: var(--grau-hell); }
+.karte[data-zustand="aktiv"] .karte-frei { color: var(--gruen-dunkel); }
+
 .karte[data-laedt="1"] { border-color: var(--gruen); background: var(--flaeche); }
 
 /* Kleines Laderad auf der angetippten Karte: Die Buchung braucht einen kurzen Moment,
@@ -192,6 +198,9 @@ p { margin: 0; }
   border-radius: 50%;
   animation: dreh .6s linear infinite;
 }
+/* Dasselbe Laderad neben einer Knopfbeschriftung statt allein in einer Zelle. */
+.laderad--knopf { width: 17px; height: 17px; border-width: 2px; margin: 0; flex: none; }
+
 @keyframes dreh { to { transform: rotate(1turn); } }
 @keyframes pulsieren { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
 
@@ -219,6 +228,9 @@ p { margin: 0; }
 .knopf--still { background: transparent; color: var(--gruen-dunkel); min-height: 48px; padding: 10px 4px; font-weight: 500; }
 .knopf--gefahr { background: var(--flaeche); border-color: var(--rot); color: var(--rot); }
 .knopf:disabled { opacity: .45; cursor: not-allowed; }
+/* Arbeitet gerade ist nicht dasselbe wie inaktiv: Der Knopf bleibt kräftig, das Laderad
+   trägt die Aussage. Sonst sieht ein laufender Vorgang aus wie ein toter Knopf. */
+.knopf:disabled[aria-busy="true"] { opacity: 1; cursor: progress; }
 .knopf--breit { width: 100%; }
 
 .knopfzeile { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -266,31 +278,6 @@ p { margin: 0; }
 }
 .ticket-fach { grid-column: 2; font-size: 18px; font-weight: 600; }
 .ticket-ort { grid-column: 2; font-size: 14.5px; color: var(--grau); }
-
-/* ---------- Auslastung auf «Deine Auswahl» ---------- */
-
-.auslastung {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  background: var(--linie);
-  border: 1px solid var(--linie);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-.auslastung li {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
-  background: var(--flaeche);
-  padding: 9px 12px;
-  font-size: 14.5px;
-}
-.auslastung li > span:first-child { font-weight: 600; }
-.auslastung .zahl { font-size: 13.5px; color: var(--grau); text-align: right; }
-.auslastung li[data-alles-voll="1"] { background: var(--orange-flaeche); }
-.auslastung li[data-alles-voll="1"] .zahl { color: var(--orange); font-weight: 600; }
 
 /* ---------- Hinweise ---------- */
 
@@ -353,6 +340,12 @@ p { margin: 0; }
 }
 .reiter button[aria-selected="true"] { color: var(--schwarz); border-bottom-color: var(--gruen); }
 
+/* Zwischentitel in der Steuerung, z. B. je Block bei den Kapazitäten. */
+.blocktitel {
+  font-size: 16px; font-weight: 600; margin: 6px 0 0; letter-spacing: -0.01em;
+}
+.blocktitel .zahl { font-weight: 500; color: var(--grau); font-size: 14.5px; }
+
 .raster { display: grid; gap: 16px; grid-template-columns: 1fr; }
 @media (min-width: 780px) { .raster { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 1080px) { .raster--vier { grid-template-columns: repeat(4, 1fr); } }
@@ -385,14 +378,6 @@ table.tabelle { width: 100%; border-collapse: collapse; font-size: 14.5px; backg
 table.tabelle th, table.tabelle td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--linie); }
 table.tabelle th { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--grau-hell); background: var(--flaeche-2); }
 .roller { overflow-x: auto; border: 1px solid var(--linie); border-radius: var(--radius); }
-
-/* Knopf, der wie ein Link aussieht — für Nebensächliches wie «aktualisieren». */
-.textknopf {
-  background: none; border: 0; padding: 0;
-  font: inherit; color: var(--gruen-dunkel); font-weight: 600;
-  text-decoration: underline; cursor: pointer;
-}
-.textknopf:disabled { color: var(--grau-hell); font-weight: 400; text-decoration: none; cursor: default; }
 
 /* ---------- Fusszeile ---------- */
 

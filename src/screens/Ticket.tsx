@@ -1,21 +1,18 @@
 import { Kopf } from '../ui/Bausteine';
-import {
-  ANGEBOTE, BLOECKE, angebot, angeboteFuer, programm, zeitraum, metaZeile, datumLang, type BlockId,
-} from '../programm';
-import { useAlleSlotsEinmalig, type Staende } from '../hooks/useSlots';
+import { BLOECKE, angebot, programm, zeitraum, metaZeile, datumLang, type BlockId } from '../programm';
 import type { Buchung } from '../buchung';
 
 export function Ticket({
-  buchung, onAendern, onNeuBeginnen, nurAnsicht,
+  buchung, onAendern, onNeuBeginnen, gibtFrei, nurAnsicht,
 }: {
   buchung: Buchung;
   onAendern: (b: BlockId) => void;
   onNeuBeginnen?: () => void;
+  gibtFrei?: boolean;
   nurAnsicht?: boolean;
 }) {
   const rahmen = programm.rahmenprogramm[0];
   const anzahl = Object.values(buchung.wahl).filter(Boolean).length;
-  const { staende, zeitpunkt, laedt, aktualisieren } = useAlleSlotsEinmalig(!nurAnsicht);
 
   return (
     <div className="seite">
@@ -93,83 +90,16 @@ export function Ticket({
         <p className="klein">Fragen? Info-Stand: {programm.event.infostand}.</p>
       </div>
 
-      {!nurAnsicht && staende && (
-        <>
-          <hr className="trenner" />
-          <Auslastung staende={staende} zeitpunkt={zeitpunkt} laedt={laedt} onAktualisieren={aktualisieren} />
-        </>
-      )}
-
       {!nurAnsicht && onNeuBeginnen && (
         <>
           <hr className="trenner" />
-          <button type="button" className="knopf knopf--still" onClick={onNeuBeginnen}>
-            Alle Plätze freigeben und neu beginnen
+          <button type="button" className="knopf knopf--still" onClick={onNeuBeginnen}
+            disabled={gibtFrei} aria-busy={gibtFrei}>
+            {gibtFrei && <span className="laderad laderad--knopf" aria-hidden="true" />}
+            {gibtFrei ? 'Plätze werden freigegeben …' : 'Alle Plätze freigeben und neu beginnen'}
           </button>
         </>
       )}
     </div>
   );
 }
-
-/** Ist dieses Angebot voll? Fehlt der Zähler, ist noch nichts darauf gebucht. */
-function istAusgebucht(staende: Staende, angebotId: string, kapazitaet: number): boolean {
-  const stand = staende[angebotId];
-  const platz = stand?.kapazitaet || kapazitaet;
-  return platz > 0 && (stand?.belegt ?? 0) >= platz;
-}
-
-/**
- * «Wie voll ist es schon?» — die Zahl, nach der am Besuchsmorgen alle fragen.
- * Momentaufnahme statt Live-Zähler, siehe useAlleSlotsEinmalig.
- */
-function Auslastung({
-  staende, zeitpunkt, laedt, onAktualisieren,
-}: {
-  staende: Staende;
-  zeitpunkt: Date | null;
-  laedt: boolean;
-  onAktualisieren: () => void;
-}) {
-  const gesamt = ANGEBOTE.length;
-  const voll = ANGEBOTE.filter((a) => istAusgebucht(staende, a.id, a.kapazitaet)).length;
-
-  return (
-    <div className="stapel">
-      <h3>Wie voll ist es schon?</h3>
-      <p className="klein">
-        {voll === 0
-          ? <>Aktuell ist <b>noch kein Angebot</b> ausgebucht — alle {gesamt} haben noch freie Plätze.</>
-          : <><b>{voll} von {gesamt} Angeboten</b> sind ausgebucht.</>}
-      </p>
-
-      <ul className="auslastung">
-        {BLOECKE.map((b) => {
-          const angebote = angeboteFuer(b.id);
-          const vollImBlock = angebote.filter((a) => istAusgebucht(staende, a.id, a.kapazitaet)).length;
-          return (
-            <li key={b.id} data-alles-voll={vollImBlock === angebote.length ? '1' : '0'}>
-              <span>{b.label}</span>
-              <span className="zahl">
-                {vollImBlock === 0
-                  ? `alle ${angebote.length} frei`
-                  : `${vollImBlock} von ${angebote.length} ausgebucht`}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-
-      <p className="mini">
-        Momentaufnahme{zeitpunkt && <> von {uhrzeit(zeitpunkt)}</>}
-        {' · '}
-        <button type="button" className="textknopf" onClick={onAktualisieren} disabled={laedt}>
-          {laedt ? 'wird geladen …' : 'aktualisieren'}
-        </button>
-      </p>
-    </div>
-  );
-}
-
-const uhrzeit = (d: Date): string =>
-  `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} Uhr`;

@@ -12,7 +12,8 @@
     "reset": "node scripts/reset.mjs",
     "lasttest": "node scripts/lasttest.mjs",
     "pruefe": "node scripts/pruefe.mjs",
-    "andrangtest": "node scripts/andrangtest.mjs"
+    "andrangtest": "node scripts/andrangtest.mjs",
+    "regeltest": "npx --yes firebase-tools@^14 emulators:exec --only firestore --project fms-regeltest \"node scripts/regeltest.mjs\""
   },
   "dependencies": {
     "firebase": "^11.0.0",
@@ -20,6 +21,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",

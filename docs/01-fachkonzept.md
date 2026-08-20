@@ -37,8 +37,8 @@ Bewusst weggelassen — jede dieser Funktionen kostet Zeit und bringt am Event n
 | Rolle | Wer | Anzahl | Zugang |
 |---|---|---|---|
 | **Gast** | Besuchende Schüler:innen (oft in 2er-/3er-Gruppen) | ~120 | QR-Code → offene URL, anonym |
-| **Betreuung** | Lehrpersonen am Info-Stand (GN, 2. Etage) | 3–4 | E-Mail + Passwort |
-| **Organisation** | Projektleitung Schule | 1–2 | wie Betreuung + Notbremse/Reset |
+| **Betreuung** | Lehrpersonen und FMS-Schüler:innen am Info-Stand (GN, 2. Etage) | 3–8 | E-Mail-Link, Passwort oder Google; Rolle `betreuung` |
+| **Administration** | Projektleitung Schule | 1–2 | gleicher Zugang, Rolle `admin` — zusätzlich Steuerung und Zugänge |
 | **Technik** | Entwickler (du) | 1 | Firebase-Konsole, Netlify, GitHub |
 
 ## 4. Ablauf aus Sicht der Gäste
@@ -136,7 +136,7 @@ Gleicher 4-Schritt-Flow wie für Gäste, aber:
 - Freies Notizfeld statt Name (z. B. `Gruppe Frau Meier`, `3 SuS ohne Handy`) — kein Klarname nötig
 - Am Schluss: Auswahl als **grosse Druckansicht** → abfotografieren lassen oder vorlesen
 
-**7.3 Notbremse & Steuerung**
+**7.3 Notbremse & Steuerung** — nur für die Rolle `admin`
 - `Anmeldung offen / geschlossen` (Schalter) — z. B. erst ab 08:40 öffnen
 - Freitext-Banner für alle Gäste (z. B. «Sport findet in TH 2 statt»)
 - Kapazität eines einzelnen Angebots ad hoc erhöhen (z. B. 20 → 24)
@@ -145,6 +145,16 @@ Gleicher 4-Schritt-Flow wie für Gäste, aber:
 **7.4 Export**
 Ein Klick → CSV mit `Block, Fach, Klasse, Zimmer, Lehrperson, Belegt, Kapazität`.
 Für die Nachbesprechung und als Papier-Backup um 08:45.
+
+**7.5 Zugänge** (Steuerung → Zugänge, nur `admin`)
+Adresse eintragen, Rolle wählen, fertig — Firebase verschickt auf Wunsch gleich einen
+Anmeldelink. Die Person schaltet sich beim ersten Anmelden selbst frei, und zwar mit genau
+der Rolle aus der Einladung. Wer die Rolle wechselt oder den Zugang verliert, merkt das
+beim nächsten Laden der Seite.
+
+Die Trennung ist der Grund für die zwei Rollen: Betreuende sollen am Morgen Anmeldungen
+erfassen können, ohne dass ein Fehlgriff die Anmeldung für alle schliesst oder alle
+Buchungen löscht.
 
 ## 8. Gestaltung
 

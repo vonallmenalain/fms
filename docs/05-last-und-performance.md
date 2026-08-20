@@ -58,26 +58,20 @@ langsamer — aus. Und die Rechnung für 200 Geräte landet genau auf dieser Kan
 | Erste Momentaufnahme je Block (7/7/12/12 Dokumente) | 200 × 38 | 7 600 | 7 600 |
 | Live-Änderungen, während ein Gerät auf einer Liste steht | 200 × 45 × 4 Blöcke | 36 000 | 160 000 |
 | Eigene Anmeldung + `config/app` | 200 × 6 | 1 200 | 1 200 |
-| Auslastungszeile auf «Deine Auswahl» (38 Zähler, einmalig je Aufruf) | 200 × 38 × 1–2 | 7 600 | 15 200 |
 | Admin-Übersichten (5 Personen, ganzer Morgen) | 5 × 1 000 | 5 000 | 8 000 |
-| **Lesevorgänge total** | | **≈ 58 000** | **≈ 192 000** |
+| **Lesevorgänge total** | | **≈ 50 000** | **≈ 177 000** |
 | **Schreibvorgänge total** | 200 × 4 × 3 + Anmeldungen | ≈ 3 000 | ≈ 4 500 |
 
-Der realistische Fall liegt knapp über dem Gratis-Limit. Der ungünstigste — alle 200 stehen
-gleichzeitig auf derselben Liste, während gebucht wird — überschreitet es um das Vierfache.
-
-> Die Auslastungszeile («Wie voll ist es schon?») ist bewusst eine **Momentaufnahme mit
-> Aktualisieren-Knopf** und kein Live-Listener: Ein Dauerhorcher über alle 38 Zähler für alle
-> Geräte, die gegen Ende auf der Ticketseite stehen, würde die Zeile «Live-Änderungen» oben
-> verdoppeln. Einmalig gelesen kostet sie 38 Lesevorgänge je Aufruf.
+Der realistische Fall trifft das Gratis-Limit auf den Punkt. Der ungünstigste — alle 200 stehen
+gleichzeitig auf derselben Liste, während gebucht wird — überschreitet es um das Dreieinhalbfache.
 
 **Was Blaze daraus macht:** Die 50 000 Lesevorgänge pro Tag sind auch im Blaze-Tarif enthalten,
 darüber kostet es rund **0.06 USD je 100 000 Lesevorgänge**.
 
 | Szenario | Lesevorgänge | Kosten über dem Freikontingent |
 |---|---|---|
-| Realistisch | 58 000 | **≈ 0.005 USD** |
-| Ungünstigster Fall | 192 000 | **≈ 0.09 USD** |
+| Realistisch | 50 000 | **0.00** |
+| Ungünstigster Fall | 177 000 | **≈ 0.08 USD** |
 | Absurder Fall (500 000) | 500 000 | ≈ 0.27 USD |
 
 Der ganze Anlass kostet also **weniger als einen Franken** — und dafür fällt die einzige harte

@@ -10,10 +10,13 @@ export function zustandVon(
   istGewaehlt: boolean,
   fachSchonGewaehlt: boolean,
 ): { zustand: Zustand; frei: number | null } {
-  if (istGewaehlt) return { zustand: 'aktiv', frei: null };
-  if (fachSchonGewaehlt) return { zustand: 'gewaehlt-anders', frei: null };
-  if (!stand) return { zustand: 'unbekannt', frei: null };
-  const frei = Math.max(0, stand.kapazitaet - stand.belegt);
+  // Die freien Plätze werden IMMER mitgerechnet — auch für die eigene Wahl und für ein
+  // Fach, das in der anderen Runde schon belegt ist. Wer zurück in einen Block geht, will
+  // sehen, wie es dort inzwischen aussieht, ohne den Platz erst aufgeben zu müssen.
+  const frei = stand ? Math.max(0, stand.kapazitaet - stand.belegt) : null;
+  if (istGewaehlt) return { zustand: 'aktiv', frei };
+  if (fachSchonGewaehlt) return { zustand: 'gewaehlt-anders', frei };
+  if (frei === null) return { zustand: 'unbekannt', frei: null };
   if (frei < plaetze) return { zustand: 'voll', frei };
   if (frei <= 5) return { zustand: 'knapp', frei };
   return { zustand: 'frei', frei };
@@ -43,13 +46,16 @@ export function AngebotsKarte({
   const gesperrt = zustand === 'voll' || zustand === 'gewaehlt-anders';
   const meta = metaZeile(angebot);
 
+  // Bei «gewählt» und «schon gewählt» steht die Platzzahl zusätzlich in einer zweiten Zeile.
+  const zweiZeilig = (zustand === 'aktiv' || zustand === 'gewaehlt-anders') && frei !== null;
+
   const beschriftung = [
     angebot.fach, meta,
     laedt ? 'wird gebucht' :
     zustand === 'aktiv' ? 'ausgewählt' :
     zustand === 'voll' ? 'ausgebucht' :
-    zustand === 'gewaehlt-anders' ? 'dieses Fach hast du bereits gewählt' :
-    frei !== null ? `${frei} freie Plätze` : '',
+    zustand === 'gewaehlt-anders' ? 'dieses Fach hast du bereits gewählt' : '',
+    !laedt && frei !== null && zustand !== 'voll' ? `${frei} freie Plätze` : '',
   ].filter(Boolean).join(', ');
 
   return (
@@ -66,10 +72,15 @@ export function AngebotsKarte({
       <span className="karte-fach">{angebot.fach}</span>
       <span className="karte-meta">{meta}</span>
       <span className="karte-plaetze" aria-hidden="true">
-        {laedt ? <span className="laderad" /> : (
+        {laedt ? <span className="laderad" /> : zweiZeilig ? (
+          <>
+            <span className="karte-marke">{zustand === 'aktiv' ? '✓ gewählt' : TEXT[zustand]}</span>
+            <span className="karte-frei">{frei} frei</span>
+          </>
+        ) : (
           <>
             {frei !== null && zustand !== 'voll' && <b>{frei}</b>}
-            {zustand === 'aktiv' ? '✓ gewählt' : TEXT[zustand]}
+            {TEXT[zustand]}
           </>
         )}
       </span>
