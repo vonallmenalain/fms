@@ -48,7 +48,7 @@ QR-Code (Folie in der Aula, 08:15–08:40)
         │
         ▼
  ┌─────────────────┐   fms.alae.app
- │ 0 · Start       │   3 Sätze Erklärung + «Für wie viele Personen?» (1–3)
+ │ 0 · Start       │   3 Sätze Erklärung + «Anzahl Personen» (1–4)
  └────────┬────────┘
           ▼
  ┌─────────────────┐   7 Ateliers · freie Plätze live · ausgebucht = sichtbar, aber grau
@@ -75,11 +75,13 @@ QR-Code (Folie in der Aula, 08:15–08:40)
 **Wichtige UX-Entscheide**
 
 1. **Ein Schritt pro Bildschirm.** Kein Scrollen durch 38 Angebote, keine Mehrfachauswahl-Logik.
-   Ein Tipp auf eine Karte = gebucht = nächster Schritt. Kein «Weiter»-Button.
+   Ein Tipp auf eine Karte = gebucht; ein zweiter Tipp auf dieselbe Karte gibt den Platz
+   wieder frei. Weitergeblättert wird über die Navigationszeile zuoberst
+   («Zurück · Weiter · Abschliessen»), die beim Scrollen stehen bleibt.
 2. **Sofort buchen, nicht am Schluss.** Jede Wahl wird einzeln in die Datenbank geschrieben.
    Wer bei Schritt 3 abbricht, hat trotzdem seine 2 Ateliers. Kein «Warenkorb», der verfällt.
-3. **Überspringen ist erlaubt.** Jeder Schritt hat unten einen unauffälligen Link
-   «Diesen Block überspringen» — die Schule schreibt niemandem vor, alle 4 Blöcke zu besuchen.
+3. **Überspringen ist erlaubt.** Wer nichts wählt und «Weiter» tippt, überspringt den Block —
+   die Schule schreibt niemandem vor, alle 4 Blöcke zu besuchen.
 4. **Ausgebuchtes bleibt sichtbar**, aber ausgegraut mit «ausgebucht» statt Platzzahl.
    (So sieht man, dass es das Fach gibt, und fragt nicht am Info-Stand nach.)
 5. **Freie Plätze live**, aber entschärft dargestellt: `12 freie Plätze` · `noch 3 Plätze` (orange)
@@ -88,7 +90,7 @@ QR-Code (Folie in der Aula, 08:15–08:40)
 
 ## 5. Gruppen-Anmeldung (2–3 Personen auf einem Gerät)
 
-Auf der Startseite: **«Für wie viele Personen meldest du an?» [1] [2] [3] [4]** (Standard 1,
+Auf der Startseite: **«Anzahl Personen» [1] [2] [3] [4]** (Standard 1,
 änderbar bis zur ersten Buchung, danach nur noch über «Alles zurücksetzen»).
 
 - Die Gruppe bucht **gemeinsam dieselben Angebote** — sie will ja zusammen hingehen.

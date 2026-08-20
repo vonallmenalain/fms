@@ -52,7 +52,7 @@ export function AngebotsKarte({
   const beschriftung = [
     angebot.fach, meta,
     laedt ? 'wird gebucht' :
-    zustand === 'aktiv' ? 'ausgewählt' :
+    zustand === 'aktiv' ? 'ausgewählt, nochmals tippen zum Abwählen' :
     zustand === 'voll' ? 'ausgebucht' :
     zustand === 'gewaehlt-anders' ? 'dieses Fach hast du bereits gewählt' : '',
     !laedt && frei !== null && zustand !== 'voll' ? `${frei} freie Plätze` : '',

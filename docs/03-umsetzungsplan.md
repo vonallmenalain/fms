@@ -62,7 +62,7 @@ Der wichtigste Meilenstein. Alles läuft aus `data/programm.json` und React-Stat
   der echte Hook hat → der Austausch in Phase 3 ist ein Einzeiler
 - Zustände einer Angebots-Karte durchspielen: frei · knapp · ausgebucht · schon gewählt · gewählt
 - Ticket-Screen inkl. Rettungscode-Attrappe und «Screenshot machen»-Hinweis
-- Überspringen-Link, Zurück-Navigation, Fortschrittsanzeige
+- Navigationszeile oben (Zurück · Weiter · Abschliessen), Fortschrittsanzeige
 
 **Fertig, wenn:** du auf dem Handy von Start bis Ticket durchklickst, ohne einmal zu zoomen —
 und drei Kolleg:innen dasselbe schaffen, ohne zu fragen.

@@ -96,8 +96,11 @@ p { margin: 0; }
 .fortschritt-balken i {
   flex: 1; height: 4px; background: var(--linie); border-radius: 2px;
 }
+/* Dasselbe Grün wie der Hauptknopf. Der Schritt, in dem man gerade steckt, ist
+   dieselbe Farbe, nur blasser — so bleibt der Balken durchgehend grün und zeigt
+   trotzdem, was schon entschieden ist. */
 .fortschritt-balken i[data-an="1"] { background: var(--gruen); }
-.fortschritt-balken i[data-an="teil"] { background: var(--linie-stark); }
+.fortschritt-balken i[data-an="teil"] { background: var(--gruen); opacity: .45; }
 
 /* ---------- Bereits gewählt ---------- */
 
@@ -232,8 +235,39 @@ p { margin: 0; }
    trägt die Aussage. Sonst sieht ein laufender Vorgang aus wie ein toter Knopf. */
 .knopf:disabled[aria-busy="true"] { opacity: 1; cursor: progress; }
 .knopf--breit { width: 100%; }
+/* Für die Navigationszeile: kleiner, aber mit 44px immer noch bequem zu treffen. */
+.knopf--klein { min-height: 44px; padding: 9px 14px; font-size: 15px; }
 
 .knopfzeile { display: flex; gap: 10px; flex-wrap: wrap; }
+/* Untereinander und über die volle Breite — bei einer Rückfrage bleibt so jede
+   Beschriftung einzeilig und beide Knöpfe sind gleich gross zu treffen. */
+.knopfzeile--gestapelt { flex-direction: column; align-items: stretch; }
+
+/* ---------- Navigationszeile (oben, bleibt beim Scrollen stehen) ---------- */
+
+.navzeile {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Über die Seitenpolsterung hinaus, damit beim Scrollen nichts seitlich
+     darunter durchschimmert. */
+  margin: 0 -16px;
+  padding: 8px 16px;
+  background: var(--papier);
+  border-bottom: 1px solid var(--linie);
+}
+.navzeile-luecke { flex: 1; }
+/* Die Beschriftungen bleiben einzeilig — umgebrochen wird der Knopf doppelt so hoch
+   und die Zeile fängt an zu wackeln, sobald sich der Text ändert. */
+.navzeile .knopf { white-space: nowrap; }
+/* Auf sehr schmalen Geräten enger setzen, statt umbrechen zu lassen. */
+@media (max-width: 359px) {
+  .navzeile { gap: 6px; }
+  .navzeile .knopf--klein { padding: 9px 10px; font-size: 14px; }
+}
 
 /* ---------- Gruppengrösse ---------- */
 

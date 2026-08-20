@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Kopf } from '../ui/Bausteine';
 import { BLOECKE, angebot, programm, zeitraum, metaZeile, datumLang, type BlockId } from '../programm';
 import type { Buchung } from '../buchung';
@@ -13,6 +14,13 @@ export function Ticket({
 }) {
   const rahmen = programm.rahmenprogramm[0];
   const anzahl = Object.values(buchung.wahl).filter(Boolean).length;
+  // Freigeben ist nicht rückgängig zu machen — ein einzelner Fehltipp würde alle vier
+  // Plätze verlieren. Darum erst die Rückfrage, dann die Tat.
+  const [fragtFreigabe, setFragtFreigabe] = useState(false);
+
+  // Ist alles freigegeben, verschwindet der Bereich ohnehin — die Rückfrage darf dann
+  // nicht als Rest stehen bleiben, falls dieser Bildschirm sichtbar bleibt.
+  useEffect(() => { if (anzahl === 0) setFragtFreigabe(false); }, [anzahl]);
 
   return (
     <div className="seite">
@@ -93,11 +101,29 @@ export function Ticket({
       {!nurAnsicht && onNeuBeginnen && (
         <>
           <hr className="trenner" />
-          <button type="button" className="knopf knopf--still" onClick={onNeuBeginnen}
-            disabled={gibtFrei} aria-busy={gibtFrei}>
-            {gibtFrei && <span className="laderad laderad--knopf" aria-hidden="true" />}
-            {gibtFrei ? 'Plätze werden freigegeben …' : 'Alle Plätze freigeben und neu beginnen'}
-          </button>
+          {fragtFreigabe ? (
+            <div className="hinweis hinweis--warnung stapel">
+              <p><b>Möchtest du wirklich alle Plätze freigeben?</b> Deine Ateliers und
+                Unterrichtsbesuche werden dann für andere frei — das lässt sich nicht
+                rückgängig machen.</p>
+              <div className="knopfzeile knopfzeile--gestapelt">
+                <button type="button" className="knopf knopf--gefahr"
+                  onClick={onNeuBeginnen} disabled={gibtFrei} aria-busy={gibtFrei}>
+                  {gibtFrei && <span className="laderad laderad--knopf" aria-hidden="true" />}
+                  {gibtFrei ? 'Plätze werden freigegeben …' : 'Ja, alle freigeben'}
+                </button>
+                <button type="button" className="knopf knopf--rand"
+                  onClick={() => setFragtFreigabe(false)} disabled={gibtFrei}>
+                  Abbrechen
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" className="knopf knopf--still"
+              onClick={() => setFragtFreigabe(true)}>
+              Alle Plätze freigeben und neu beginnen
+            </button>
+          )}
         </>
       )}
     </div>
