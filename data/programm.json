@@ -34,8 +34,7 @@
     "hinweis": "Zahl vor dem Punkt = Etage, «-» bedeutet Untergeschoss (z. B. GN -1.55 = Gebäude Nord, 1. UG)."
   },
   "hinweise": [
-    "Bei den Unterrichtsbesuchen darf die Lektion nach 20 Minuten gewechselt werden – dafür braucht es keine Anmeldung.",
-    "Das Ticket muss nirgends vorgezeigt werden."
+    "Bei den Unterrichtsbesuchen darf die Lektion nach 20 Minuten gewechselt werden – dafür braucht es keine Anmeldung."
   ],
   "blocks": [
     { "id": "a1", "art": "atelier", "label": "Atelier 1", "von": "08:50", "bis": "09:10", "kapazitaet": 35, "pflicht": false },

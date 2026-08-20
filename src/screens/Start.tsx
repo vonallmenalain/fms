@@ -1,5 +1,5 @@
 import { Kopf } from '../ui/Bausteine';
-import { programm, datumLang } from '../programm';
+import { datumLang } from '../programm';
 import type { AppConfig } from '../hooks/useAppConfig';
 
 export function Start({
@@ -22,16 +22,16 @@ export function Start({
 
       <div className="stapel">
         <h1>Anmeldung Besuchsmorgen</h1>
-        <p className="lauftext">
-          {datumLang()} · {programm.event.adresse}
-        </p>
+        <p className="lauftext">{datumLang()}</p>
       </div>
 
-      <p>
-        Du wählst zuerst <b>zwei Ateliers</b>, danach <b>zwei Unterrichtsbesuche</b>.
-        Wer zuerst wählt, bekommt den Platz. Du brauchst weder Namen noch Konto —
-        am Schluss bekommst du ein Ticket mit Fach, Zimmer und Zeit.
-      </p>
+      <div className="stapel">
+        <p>Du wählst:</p>
+        <ul className="punkte">
+          <li>zwei <b>Ateliers</b></li>
+          <li>zwei <b>Unterrichtsbesuche</b></li>
+        </ul>
+      </div>
 
       {!hatTicket && (
         <div className="stapel">
@@ -50,7 +50,7 @@ export function Start({
             ))}
           </div>
           <p className="mini">
-            Seid ihr als Gruppe unterwegs, meldet euch auf <b>einem</b> Handy gemeinsam an.
+            Seid ihr als Gruppe unterwegs, könnt ihr euch auf <b>einem</b> Handy gemeinsam anmelden.
             Ihr besucht dann dieselben Ateliers und Lektionen.
           </p>
         </div>
@@ -58,7 +58,7 @@ export function Start({
 
       {config.anmeldungOffen ? (
         <button type="button" className="knopf knopf--haupt knopf--breit" onClick={hatTicket ? onTicket : onStart}>
-          {hatTicket ? 'Mein Ticket ansehen' : 'Los geht’s'}
+          {hatTicket ? 'Meine Auswahl ansehen' : 'Los geht’s'}
         </button>
       ) : (
         <div className="hinweis hinweis--warnung">
@@ -70,12 +70,6 @@ export function Start({
       {hatTicket && config.anmeldungOffen && (
         <p className="mini mitte">Du hast bereits eine Anmeldung auf diesem Gerät.</p>
       )}
-
-      <hr className="trenner" />
-      <p className="mini">
-        Es werden keine Namen und keine persönlichen Angaben gespeichert — nur, welche Ateliers
-        und Lektionen auf diesem Gerät gewählt wurden.
-      </p>
     </div>
   );
 }

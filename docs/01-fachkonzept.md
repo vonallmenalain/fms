@@ -67,8 +67,8 @@ QR-Code (Folie in der Aula, 08:15–08:40)
  │ 4 · Lektion 2   │   10:50–11:35
  └────────┬────────┘
           ▼
- ┌─────────────────┐   4 Karten: Zeit · Fach · Zimmer  +  Rettungscode
- │ 5 · Ticket      │   «Screenshot machen!» · jederzeit wieder aufrufbar
+ ┌─────────────────┐   4 Karten: Zeit · Fach · Zimmer
+ │ 5 · Auswahl     │   «Screenshot machen!» · jederzeit wieder aufrufbar
  └─────────────────┘   Buttons: [Einzelne Wahl ändern] [Zimmerlegende]
 ```
 
@@ -134,19 +134,15 @@ Aktualisiert sich in Echtzeit, ohne Neuladen. Genau das, was im Word-Doc als «L
 Gleicher 4-Schritt-Flow wie für Gäste, aber:
 - Startet über den Button **«+ Anmeldung erfassen»**
 - Freies Notizfeld statt Name (z. B. `Gruppe Frau Meier`, `3 SuS ohne Handy`) — kein Klarname nötig
-- Am Schluss: Ticket als **grosse Druckansicht** → abfotografieren lassen oder vorlesen
+- Am Schluss: Auswahl als **grosse Druckansicht** → abfotografieren lassen oder vorlesen
 
-**7.3 Ticket eines Gasts wiederfinden / reparieren**
-Eingabe des **6-stelligen Rettungscodes** vom Ticket (z. B. `K7F2QP`) → Buchung anzeigen,
-ändern oder löschen. Löst den Fall «Handy leer / Browserdaten gelöscht / anderes Gerät».
-
-**7.4 Notbremse & Steuerung**
+**7.3 Notbremse & Steuerung**
 - `Anmeldung offen / geschlossen` (Schalter) — z. B. erst ab 08:40 öffnen
 - Freitext-Banner für alle Gäste (z. B. «Sport findet in TH 2 statt»)
 - Kapazität eines einzelnen Angebots ad hoc erhöhen (z. B. 20 → 24)
 - **Druckansicht** aller Angebote mit Belegung → für den Info-Stand auf Papier
 
-**7.5 Export**
+**7.4 Export**
 Ein Klick → CSV mit `Block, Fach, Klasse, Zimmer, Lehrperson, Belegt, Kapazität`.
 Für die Nachbesprechung und als Papier-Backup um 08:45.
 

@@ -42,6 +42,7 @@ function GastApp() {
   const [laeuftFuer, setLaeuftFuer] = useState<string | null>(null);
   const [meldung, setMeldung] = useState<string | null>(null);
   const startGesetzt = useRef(false);
+  const tippLaeuft = useRef(false);
 
   // Beim Laden NUR nachsehen, ob dieses Gerät schon eine Sitzung hat — kein Netzaufruf,
   // keine Neuanmeldung. Angemeldet wird erst beim ersten Buchen (siehe firebase.ts).
@@ -68,8 +69,19 @@ function GastApp() {
     }
   }, [buchungGeladen, buchung]);
 
+  // Die Gruppengrösse gehört dem Bildschirm: Sie wirkt sofort, gespeichert wird nebenbei.
+  // Ohne diesen Merker holten die Rückmeldungen des Servers überholte Zwischenstände
+  // zurück auf den Schirm — bei schnellem Tippen sprangen die Knöpfe mehrmals nach.
+  const plaetzeWunsch = useRef<number | null>(null);
+
   useEffect(() => {
-    if (buchung && buchung.plaetze !== plaetze) setPlaetzeLokal(buchung.plaetze);
+    if (!buchung) return;
+    if (plaetzeWunsch.current !== null) {
+      // Erst wenn der Server den eigenen Wunsch bestätigt, folgen wir ihm wieder.
+      if (buchung.plaetze === plaetzeWunsch.current) plaetzeWunsch.current = null;
+      return;
+    }
+    setPlaetzeLokal(buchung.plaetze);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buchung?.plaetze]);
 
@@ -91,9 +103,11 @@ function GastApp() {
   }, [ausTicket]);
 
   const waehlen = useCallback(async (blockId: BlockId, angebotId: string | null) => {
+    if (tippLaeuft.current) return;           // ein Tipp ist schon unterwegs
     const schonGewaehlt = buchung?.wahl?.[blockId] ?? null;
     if (angebotId && schonGewaehlt === angebotId) { weiter(blockId); return; }
 
+    tippLaeuft.current = true;
     setLaeuftFuer(angebotId);
     try {
       // Anmeldung erst hier — das verteilt die Anmeldungen über die Auswahlzeit.
@@ -118,13 +132,20 @@ function GastApp() {
         setMeldung('Das hat nicht geklappt. Bitte versuche es noch einmal.');
       }
     } finally {
+      tippLaeuft.current = false;
       setLaeuftFuer(null);
     }
   }, [benutzer, buchung, plaetze, weiter, config.anmeldungOffen]);
 
   const plaetzeAendern = useCallback((n: number) => {
-    setPlaetzeLokal(n);   // vor der ersten Buchung nur lokal — es gibt noch kein Dokument
-    if (benutzer && buchung) setzePlaetze(benutzer.uid, n).catch(() => undefined);
+    setPlaetzeLokal(n);                       // sofort, ohne Netz
+    if (!benutzer || !buchung) return;        // vor der ersten Buchung gibt es kein Dokument
+    plaetzeWunsch.current = n;
+    setzePlaetze(benutzer.uid, n).catch(() => {
+      // Abgelehnt (z. B. weil inzwischen gebucht wurde): ehrlich bleiben und zurückfallen.
+      plaetzeWunsch.current = null;
+      setPlaetzeLokal(buchung.plaetze);
+    });
   }, [benutzer, buchung]);
 
   const neuBeginnen = useCallback(async () => {
@@ -193,6 +214,8 @@ function GastApp() {
 
       <p className="mini mitte nicht-drucken" style={{ padding: '8px 16px 24px' }}>
         {programm.event.titel} · <a href="/admin" style={{ color: 'inherit' }}>Für Lehrpersonen</a>
+        {' · '}WebApp von{' '}
+        <a href="https://alae.app" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>Alä</a>
       </p>
     </>
   );

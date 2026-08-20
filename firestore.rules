@@ -49,6 +49,12 @@ service cloud.firestore {
       return n is int && n >= 1 && n <= maxPlaetze();
     }
 
+    // Kapazität je Block, gespiegelt aus data/programm.json: Ateliers 35, Lektionen 20.
+    // Wird nur für die Selbstheilung unten gebraucht — siehe dort, warum das nötig ist.
+    function blockKapazitaet(block) {
+      return block in ['a1', 'a2'] ? 35 : 20;
+    }
+
     function keineWahl(d) {
       return d.wahl.a1 == null && d.wahl.a2 == null && d.wahl.l1 == null && d.wahl.l2 == null;
     }
@@ -85,12 +91,14 @@ service cloud.firestore {
         && math.abs(request.resource.data.belegt - resource.data.belegt) <= maxPlaetze();
 
       // Selbstheilung, falls ein Zählerdokument fehlt (noch nicht eingespielt).
-      // Streng begrenzt: nur die im Programm vorgesehenen Kapazitäten, nur ein
-      // Blockschlüssel, und höchstens eine Gruppengrösse als Startwert.
+      // Streng begrenzt: Der Blockschlüssel muss zur Angebots-ID passen UND die Kapazität
+      // zum Block. Sonst könnte ein manipulierter Client einem 20er-Zimmer 35 Plätze
+      // verpassen, indem er den fehlenden Zähler selbst anlegt.
       allow create: if angemeldet()
         && request.resource.data.keys().hasOnly(['belegt', 'kapazitaet', 'block'])
-        && request.resource.data.kapazitaet in [20, 35]
         && request.resource.data.block in ['a1', 'a2', 'l1', 'l2']
+        && slotId.matches(request.resource.data.block + '-.+')
+        && request.resource.data.kapazitaet == blockKapazitaet(request.resource.data.block)
         && request.resource.data.belegt is int
         && request.resource.data.belegt >= 0
         && request.resource.data.belegt <= maxPlaetze();
@@ -110,17 +118,14 @@ service cloud.firestore {
         && request.auth.uid == buchungId
         && anmeldungOffen()
         && request.resource.data.keys().hasOnly(
-             ['plaetze', 'code', 'wahl', 'quelle', 'notiz', 'erstelltAm', 'geaendertAm'])
+             ['plaetze', 'wahl', 'quelle', 'notiz', 'erstelltAm', 'geaendertAm'])
         && gueltigePlaetze(request.resource.data.plaetze)
-        && request.resource.data.quelle == 'gast'
-        && request.resource.data.code is string
-        && request.resource.data.code.size() == 6;
+        && request.resource.data.quelle == 'gast';
 
       allow update: if angemeldet()
         && request.auth.uid == buchungId
         && anmeldungOffen()
         && request.resource.data.quelle == resource.data.quelle
-        && request.resource.data.code == resource.data.code
         // Gruppengrösse nur ändern, solange noch nichts gebucht ist
         && (request.resource.data.plaetze == resource.data.plaetze
             || (keineWahl(resource.data) && gueltigePlaetze(request.resource.data.plaetze)));
@@ -129,16 +134,6 @@ service cloud.firestore {
 
       // Betreuung erfasst Anmeldungen für Gäste ohne Handy (eigene Dokument-ID).
       allow write: if istAdmin();
-    }
-
-    // ------------------------------------------------------ codes: Rettungscode
-
-    match /codes/{code} {
-      allow get, list: if istAdmin();                  // nicht durchprobierbar
-      allow create: if angemeldet()
-        && request.resource.data.keys().hasOnly(['uid'])
-        && (request.resource.data.uid == request.auth.uid || istAdmin());
-      allow update, delete: if istAdmin();
     }
 
     // ------------------------------------------------------------ alles Übrige

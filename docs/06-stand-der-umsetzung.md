@@ -13,10 +13,11 @@ wie man es startet und wo bewusst vom Konzept abgewichen wurde.
 | Gruppen-Anmeldung 1–4 Personen | ✅ (Entscheid D3) |
 | Sperre «gleiches Fach» innerhalb der Blockgruppe | ✅ (Entscheide D1/D2) |
 | Blöcke überspringen, Wahl ändern, Plätze freigeben | ✅ |
-| Ticket mit Rettungscode, auf dem Gerät wiederherstellbar | ✅ |
+| Auswahl auf dem Gerät wiederherstellbar | ✅ |
 | Freigabeschalter, wirkt serverseitig | ✅ (Entscheid D4) |
-| Admin: Live-Dashboard, Anmeldung erfassen, Code-Suche, Steuerung, Druck, CSV | ✅ |
+| Admin: Live-Dashboard, Anmeldung erfassen, Steuerung, Druck, CSV | ✅ |
 | Security Rules | ✅ gegen den Emulator geprüft |
+| Überbuchungssicherung, automatisiert nachprüfbar | ✅ `npm run andrangtest` (21 Prüfungen) |
 | Automatischer Rules-Deploy per GitHub-Action | ✅ |
 | Lasttest mit Invariantenprüfung | ✅ |
 | Netlify-Deploy aus `main` | ✅ |
@@ -84,7 +85,8 @@ Anmeldung über das Dienstkonto im Repository-Secret `FIREBASE_SERVICE_ACCOUNT`.
 | Tailwind CSS | **eine handgeschriebene CSS-Datei** mit Farb-Tokens | Für sechs Bildschirme ist ein Framework Ballast. Spart einen Build-Schritt und ~10 KB; das CI-Grün ist eine einzige Variable in `src/index.css`. |
 | react-router | **30-Zeilen-Router** (`src/hooks/useRoute.ts`) | Es gibt zwei Pfade (`/` und `/admin`). Eine Bibliothek dafür wären ~15 KB — bei 200 gleichzeitig ladenden Geräten unnötig. |
 | Webschrift | **Systemschrift** | Nichts blockiert das erste Zeichnen, kein zusätzlicher Netzaufruf. Die Marke trägt das Logo. |
-| Rettungscode auf Kollision prüfen | **keine Prüfung** | Gäste dürfen `codes/` per Rules nicht lesen, sonst wären Codes durchprobierbar. Bei 31⁶ ≈ 887 Mio. Möglichkeiten und ~200 Anmeldungen liegt das Kollisionsrisiko bei rund 1:45'000 — und spart einen Lesevorgang je Anmeldung. |
+| Rettungscode am Info-Stand | **entfernt** | Niemand merkt sich einen sechsstelligen Code für den Fall, dass das Handy streikt. Die Auswahl kommt auf demselben Gerät automatisch zurück, ein Screenshot deckt den Rest ab — das spart einen Bildschirmabschnitt, eine Firestore-Sammlung und einen Schreibvorgang je Anmeldung. |
+| Selbstheilung fehlender Zähler mit fester Kapazitätsliste | **Kapazität an den Block gebunden** | Die Rules liessen für ein fehlendes Zählerdokument jede Kapazität aus `[20, 35]` zu — ein manipulierter Client hätte einem 20er-Zimmer 35 Plätze verpassen können. Jetzt muss der Blockschlüssel zur Angebots-ID passen und die Kapazität zum Block. `npm run andrangtest` prüft beide Richtungen: der Angriff prallt ab, die ehrliche Selbstheilung funktioniert weiter. |
 | Zwei Firebase-Projekte (Test + Produktion) | **ein Projekt + Emulator Suite** | Die Emulator Suite ist das bessere Testprojekt: gratis, sofort zurückgesetzt, und sie prüft die Rules mit. Ein zweites Cloud-Projekt lohnt sich erst, wenn vor Ort mit echten Geräten geprobt wird. |
 
 ## 6. Messwerte
@@ -148,8 +150,8 @@ Automatisierter Browsertest gegen die Emulator Suite (Chromium, iPhone-Format):
 2. Atelier 1 zeigt sieben Angebote mit Live-Platzzahlen ✓
 3. Nach der Wahl: Atelier 2, dasselbe Fach ist gesperrt ✓ (Entscheid D1)
 4. Unterrichtsbesuch 1 und 2 ✓
-5. Ticket mit fünf Zeilen (Begrüssung + vier Blöcke) und Rettungscode ✓
-6. Seite neu laden → Ticket kommt automatisch zurück ✓
+5. Auswahl mit fünf Zeilen (Begrüssung + vier Blöcke) ✓
+6. Seite neu laden → Auswahl kommt automatisch zurück ✓
 7. `/admin` zeigt die Anmeldung für Lehrpersonen ✓
 8. Keine Fehler in der Browserkonsole ✓
 
@@ -157,7 +159,7 @@ Zusätzlich verifiziert:
 - Bei **geschlossener Anmeldung** weisen die Security Rules **jede** Buchung ab — die
   Notbremse wirkt serverseitig, nicht nur im Bildschirm. (Aufgefallen, weil ein Testlauf
   nach einem `reset` komplett abgewiesen wurde — genau richtig.)
-- Gegen die **Produktionsdatenbank** nach dem Rules-Deploy: `codes/` unangemeldet lesen →
+- Gegen die **Produktionsdatenbank** nach dem Rules-Deploy: `bookings/` unangemeldet lesen →
   **403**, `slots/` lesen → erlaubt, `config/app` → erlaubt. Genau wie vorgesehen.
 
 ## 8. Was als Nächstes ansteht

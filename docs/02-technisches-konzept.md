@@ -10,7 +10,6 @@
  │                  │            │  + programm.json   │        │  Firestore               │
  │  Programm-Daten  │            │    (im Bundle!)    │        │   slots/{id}   Zähler    │
  │  liegen lokal ───┼────────────┘  Deploy via GitHub │        │   bookings/{uid}         │
- │                  │                                 │        │   codes/{code}           │
  │  Zähler + Buchung├─────── Firestore SDK (WebSocket)─────────►│   config/app             │
  └──────────────────┘         Transaktion + Live-Updates        │   admins/{uid}           │
                                                                 └──────────────────────────┘
@@ -77,7 +76,6 @@ Vier Collections plus ein Konfigdokument. Alles bewusst flach.
 // bookings/AbC123...  (uid = anonyme Firebase-ID = Gerät)
 {
   "plaetze": 2,                       // Gruppengrösse 1–4 (Entscheid D3)
-  "code": "K7F2QP",                   // Rettungscode fürs Ticket
   "wahl": {
     "a1": "a1-psychologie",
     "a2": "a2-chemie",
@@ -89,12 +87,6 @@ Vier Collections plus ein Konfigdokument. Alles bewusst flach.
   "quelle": "gast",                   // "gast" | "admin"
   "notiz": null                       // nur bei quelle=admin, z. B. "3 SuS ohne Handy"
 }
-```
-
-### `codes/{code}` — Rettungscode-Index (nur für Admins lesbar)
-```jsonc
-// codes/K7F2QP
-{ "uid": "AbC123..." }
 ```
 
 ### `config/app` — Laufzeitsteuerung (1 Dokument)
@@ -191,7 +183,6 @@ Die drei Regeln, auf die es ankommt:
 | `belegt` muss `>= 0` und `<= kapazitaet` bleiben | **Überbuchung ist serverseitig unmöglich**, selbst bei manipuliertem Client |
 | Änderung von `belegt` max. ± 4 pro Schreibvorgang (Decke aus D3) | ein Skript kann nicht in einem Rutsch alles blockieren |
 | `bookings/{uid}` nur schreibbar, wenn `uid == request.auth.uid` | fremde Tickets sind nicht manipulierbar |
-| `codes/*` nur für Admins lesbar | Rettungscodes lassen sich nicht durchprobieren |
 | `config/app` für alle lesbar, nur für Admins schreibbar | Notbremse bleibt in Lehrer-Hand |
 
 > **Härtung Stufe 2 (optional, Phase 6):** Mit `getAfter()` lässt sich in den Rules zusätzlich
@@ -253,7 +244,7 @@ funktionieren. Im Blaze-Tarif kostet dieselbe Situation ein paar Rappen. Dazu ei
 | Firestore-Kontingent erschöpft | Im Blaze-Tarif gibt es diesen Fall nicht mehr — es wird abgerechnet statt abgeschaltet. Trotzdem hinterlegt: Banner «Anmeldung vorübergehend nicht möglich — bitte beim Info-Stand melden» |
 | Andrang auf ein einzelnes Angebot | Wiederholung mit Streuung; danach «gerade eben ausgebucht», Liste zeigt bereits den neuen Stand ([05 §5](05-last-und-performance.md)) |
 | Gerät hat altes Bundle (Programm geändert) | Vergleich `config/app.programmVersion` → Hinweis «Bitte Seite neu laden» |
-| Browserdaten gelöscht / anderes Handy | Rettungscode am Info-Stand nennen → Admin stellt Buchung wieder her |
+| Browserdaten gelöscht / anderes Handy | Am Info-Stand melden → Admin erfasst die Anmeldung neu (der Screenshot der Auswahl hilft) |
 | **Totalausfall** | Papier-Fallback, siehe [04-eventtag-runbook.md](04-eventtag-runbook.md) §5 |
 
 ## 9. Projektstruktur (Zielbild)

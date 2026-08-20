@@ -85,6 +85,9 @@ p { margin: 0; }
 .mini { font-size: 13px; color: var(--grau-hell); }
 .zahl { font-variant-numeric: tabular-nums; }
 
+.punkte { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
+.punkte li::marker { color: var(--gruen-dunkel); }
+
 /* ---------- Fortschritt ---------- */
 
 .fortschritt { display: flex; flex-direction: column; gap: 8px; }
@@ -95,6 +98,17 @@ p { margin: 0; }
 }
 .fortschritt-balken i[data-an="1"] { background: var(--gruen); }
 .fortschritt-balken i[data-an="teil"] { background: var(--linie-stark); }
+
+/* ---------- Bereits gewählt ---------- */
+
+.bisher {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 
 /* ---------- Angebots-Karte ---------- */
 
@@ -160,7 +174,22 @@ p { margin: 0; }
 }
 .karte[data-zustand="aktiv"] .karte-plaetze { color: var(--gruen-dunkel); font-weight: 600; }
 
-.karte[data-laedt="1"] { opacity: .55; }
+.karte[data-laedt="1"] { border-color: var(--gruen); background: var(--flaeche); }
+
+/* Kleines Laderad auf der angetippten Karte: Die Buchung braucht einen kurzen Moment,
+   in dem sonst nichts passiert — dann wirkt die App, als hänge sie. */
+.laderad {
+  display: block;
+  width: 20px;
+  height: 20px;
+  margin: 0 auto;
+  border: 2.5px solid var(--linie-stark);
+  border-top-color: var(--gruen-dunkel);
+  border-radius: 50%;
+  animation: dreh .6s linear infinite;
+}
+@keyframes dreh { to { transform: rotate(1turn); } }
+@keyframes pulsieren { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
 
 /* ---------- Knöpfe ---------- */
 
@@ -227,15 +256,6 @@ p { margin: 0; }
 .ticket-zeit { font-variant-numeric: tabular-nums; font-size: 14px; color: var(--grau); font-weight: 600; grid-row: 1 / span 2; align-self: center; }
 .ticket-fach { font-size: 18px; font-weight: 600; }
 .ticket-ort { font-size: 14.5px; color: var(--grau); }
-
-.code {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 14px 16px; background: var(--flaeche-2); border-radius: var(--radius);
-}
-.code-wert {
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 22px; font-weight: 600; letter-spacing: .12em;
-}
 
 /* ---------- Hinweise ---------- */
 
@@ -352,6 +372,13 @@ table.tabelle th { font-size: 11px; letter-spacing: .1em; text-transform: upperc
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+  /* Das Laderad ist die einzige Rückmeldung, dass gerade gebucht wird — es darf nicht
+     einfrieren. Statt zu drehen atmet es dann bloss. */
+  .laderad {
+    animation-name: pulsieren !important;
+    animation-duration: 1.2s !important;
+    border-color: var(--gruen-dunkel);
+  }
 }
 
 @media print {

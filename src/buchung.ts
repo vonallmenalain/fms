@@ -7,7 +7,6 @@ import { AusgebuchtFehler, RechteFehler, mitWiederholung, nacheinander } from '.
 
 export interface Buchung {
   plaetze: number;
-  code: string;
   wahl: Record<BlockId, string | null>;
   quelle: 'gast' | 'admin';
   notiz: string | null;
@@ -15,20 +14,11 @@ export interface Buchung {
   geaendertAm?: unknown;
 }
 
-/** Ohne 0/O/1/I/L — beim Vorlesen am Info-Stand darf es keine Verwechslung geben. */
-const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-
-export function zufallsCode(): string {
-  const werte = crypto.getRandomValues(new Uint32Array(6));
-  return Array.from(werte, (v) => ALPHABET[v % ALPHABET.length]).join('');
-}
-
 export const leereWahl = (): Record<BlockId, string | null> =>
   Object.fromEntries(BLOCK_IDS.map((b) => [b, null])) as Record<BlockId, string | null>;
 
 export const neueBuchung = (plaetze: number, quelle: 'gast' | 'admin' = 'gast'): Buchung => ({
   plaetze,
-  code: zufallsCode(),
   wahl: leereWahl(),
   quelle,
   notiz: null,
@@ -94,7 +84,12 @@ export function waehle(
           const buchung: Buchung = vorhanden
             ? (buchungSnap.data() as Buchung)
             : neueBuchung(vorgabePlaetze, quelle);
-          const plaetze = buchung.plaetze;
+          // Solange nichts gebucht ist, gibt der Bildschirm die Gruppengrösse vor: Der
+          // Schreibvorgang von der Startseite darf noch unterwegs sein, ohne dass hier
+          // eine überholte Zahl gebucht wird. Danach zählt der Wert aus der Datenbank —
+          // die Security Rules erzwingen dasselbe.
+          const nochNichtsGewaehlt = !Object.values(buchung.wahl ?? {}).some(Boolean);
+          const plaetze = nochNichtsGewaehlt && neuesAngebot ? vorgabePlaetze : buchung.plaetze;
           const altesAngebot = buchung.wahl?.[blockId] ?? null;
 
           if (altesAngebot === neuesAngebot) return;
@@ -104,13 +99,6 @@ export function waehle(
           const neu = neuRef ? await leseSlot(tx, neuRef, neuesAngebot!) : null;
           const alt = altRef ? await leseSlot(tx, altRef, altesAngebot!) : null;
 
-          // Rettungscode beim ersten Schreiben belegen. Bewusst OHNE Kollisionsprüfung:
-          // Gäste dürfen codes/ per Rules nicht lesen (sonst wären Codes durchprobierbar),
-          // und bei 31^6 ≈ 887 Mio. Möglichkeiten und ~200 Anmeldungen liegt die
-          // Kollisionswahrscheinlichkeit bei rund 1:45'000. Das spart zugleich einen
-          // Lesevorgang pro Anmeldung.
-          const codeRef = vorhanden ? null : doc(db, 'codes', buchung.code);
-
           // ---------- 2. Prüfen ----------
           if (neu && neuesAngebot && neu.belegt + plaetze > neu.kapazitaet) {
             throw new AusgebuchtFehler(neuesAngebot);
@@ -119,12 +107,12 @@ export function waehle(
           // ---------- 3. Schreiben ----------
           if (neuRef && neu && neuesAngebot) schreibeSlot(tx, neuRef, neuesAngebot, neu, neu.belegt + plaetze);
           if (altRef && alt && altesAngebot) schreibeSlot(tx, altRef, altesAngebot, alt, Math.max(0, alt.belegt - plaetze));
-          if (codeRef) tx.set(codeRef, { uid: buchungId });
 
           tx.set(
             buchungRef,
             {
               ...buchung,
+              plaetze,
               wahl: { ...leereWahl(), ...buchung.wahl, [blockId]: neuesAngebot },
               ...(vorhanden ? {} : { erstelltAm: serverTimestamp() }),
               geaendertAm: serverTimestamp(),
@@ -140,10 +128,21 @@ export function waehle(
   );
 }
 
+/**
+ * Zuletzt getippte Gruppengrösse. Wer schnell 1-2-3-4 durchtippt, löst sonst vier
+ * Schreibvorgänge nacheinander aus; nur der letzte ist gemeint, die übrigen verzögern
+ * bloss den nächsten Buchungsvorgang.
+ */
+let letzterPlaetzeWunsch: { id: string; wert: number } | null = null;
+
 /** Gruppengrösse ändern — nur solange nichts gebucht ist (die Rules erzwingen das ebenfalls). */
 export function setzePlaetze(buchungId: string, plaetze: number): Promise<void> {
+  letzterPlaetzeWunsch = { id: buchungId, wert: plaetze };
   return nacheinander(() =>
     mitWiederholung(async () => {
+      // Überholt: Es ist bereits ein neuerer Wert getippt worden.
+      const wunsch = letzterPlaetzeWunsch;
+      if (!wunsch || wunsch.id !== buchungId || wunsch.wert !== plaetze) return;
       await runTransaction(db, async (tx) => {
         const ref = doc(db, 'bookings', buchungId);
         const snap = await tx.get(ref);
@@ -173,7 +172,7 @@ export async function erfasseAdminBuchung(
   auswahl: Partial<Record<BlockId, string | null>>,
   plaetze: number,
   notiz: string,
-): Promise<{ id: string; code: string }> {
+): Promise<{ id: string }> {
   const buchungRef = doc(collection(db, 'bookings'));
   const basis = neueBuchung(plaetze, 'admin');
 
@@ -182,7 +181,6 @@ export async function erfasseAdminBuchung(
       const ids = BLOCK_IDS.map((b) => auswahl[b] ?? null);
 
       // ---------- Lesen ----------
-      const codeRef = doc(db, 'codes', basis.code);
       const staende = await Promise.all(
         ids.map(async (id) => (id ? { id, ...(await leseSlot(tx, doc(db, 'slots', id), id)) } : null)),
       );
@@ -197,7 +195,6 @@ export async function erfasseAdminBuchung(
         if (!s) continue;
         schreibeSlot(tx, doc(db, 'slots', s.id), s.id, s, s.belegt + plaetze);
       }
-      tx.set(codeRef, { uid: buchungRef.id });
       tx.set(buchungRef, {
         ...basis,
         notiz: notiz.trim() || null,
@@ -208,5 +205,5 @@ export async function erfasseAdminBuchung(
     });
   });
 
-  return { id: buchungRef.id, code: basis.code };
+  return { id: buchungRef.id };
 }

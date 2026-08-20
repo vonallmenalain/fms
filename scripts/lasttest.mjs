@@ -74,8 +74,6 @@ const BELIEBT = ['a1-psychologie', 'a2-psychologie', 'l1-27fd', 'l2-27fd'];
 
 const zufall = (l) => l[Math.floor(Math.random() * l.length)];
 const schlafen = (ms) => new Promise((r) => setTimeout(r, ms));
-const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-const code = () => Array.from({ length: 6 }, () => zufall([...ALPHABET])).join('');
 
 const mess = { dauer: [], ausgebucht: 0, fehler: 0, sichtbar: [], gebucht: 0, anmeldeFehler: 0, gesperrt: 0 };
 // Zeitpunkt des letzten bestätigten Schreibvorgangs je Angebot — daraus misst der
@@ -103,7 +101,7 @@ async function buchen(db, uid, blockId, neuesAngebot, plaetze) {
     const bRef = doc(db, 'bookings', uid);
     const bSnap = await tx.get(bRef);
     const vorhanden = bSnap.exists();
-    const b = vorhanden ? bSnap.data() : { plaetze, code: code(), wahl: {}, quelle: 'gast', notiz: null };
+    const b = vorhanden ? bSnap.data() : { plaetze, wahl: {}, quelle: 'gast', notiz: null };
     const alt = b.wahl?.[blockId] ?? null;
     if (alt === neuesAngebot) return;
 
@@ -111,9 +109,6 @@ async function buchen(db, uid, blockId, neuesAngebot, plaetze) {
     const altRef = alt ? doc(db, 'slots', alt) : null;
     const neuSnap = neuRef ? await tx.get(neuRef) : null;
     const altSnap = altRef ? await tx.get(altRef) : null;
-    // Kein Lesevorgang auf codes/ — Gäste dürfen die per Rules nicht lesen (nicht
-    // durchprobierbar). Identisch zu src/buchung.ts.
-    const codeRef = vorhanden ? null : doc(db, 'codes', b.code);
 
     const neuBelegt = neuSnap?.exists() ? (neuSnap.data().belegt ?? 0) : 0;
     const neuKap    = neuSnap?.exists() ? (neuSnap.data().kapazitaet ?? 0) : kapVon[neuesAngebot];
@@ -128,8 +123,6 @@ async function buchen(db, uid, blockId, neuesAngebot, plaetze) {
     if (altRef && altSnap?.exists()) {
       tx.update(altRef, { belegt: Math.max(0, (altSnap.data().belegt ?? 0) - plaetze) });
     }
-    if (codeRef) tx.set(codeRef, { uid });
-
     tx.set(bRef, {
       ...b,
       wahl: { a1: null, a2: null, l1: null, l2: null, ...b.wahl, [blockId]: neuesAngebot },
