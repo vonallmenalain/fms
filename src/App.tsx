@@ -44,6 +44,7 @@ function GastApp() {
   // Sind wir aus «Deine Auswahl» heraus in einen Block gesprungen? Das steht im Verlauf.
   const ausTicket = vorher === 'ticket';
   const [laeuftFuer, setLaeuftFuer] = useState<string | null>(null);
+  const [gibtFrei, setGibtFrei] = useState(false);
   const [meldung, setMeldung] = useState<string | null>(null);
   const startGesetzt = useRef(false);
   const tippLaeuft = useRef(false);
@@ -148,13 +149,20 @@ function GastApp() {
   }, [benutzer, buchung]);
 
   const neuBeginnen = useCallback(async () => {
-    if (!benutzer || !buchung) return;
-    for (const b of BLOCK_IDS) {
-      if (buchung.wahl[b]) await waehlenStill(benutzer.uid, b);
+    if (!benutzer || !buchung || gibtFrei) return;
+    // Vier Blöcke nacheinander freigeben dauert einen Moment. Ohne sichtbares Zeichen
+    // wirkt die App in dieser Zeit, als hätte sie den Tipp verschluckt.
+    setGibtFrei(true);
+    try {
+      for (const b of BLOCK_IDS) {
+        if (buchung.wahl[b]) await waehlenStill(benutzer.uid, b);
+      }
+      ersetze('start');
+      setMeldung('Alle Plätze wurden freigegeben.');
+    } finally {
+      setGibtFrei(false);
     }
-    ersetze('start');
-    setMeldung('Alle Plätze wurden freigegeben.');
-  }, [benutzer, buchung, ersetze]);
+  }, [benutzer, buchung, ersetze, gibtFrei]);
 
   // Auf die Buchung warten wir nur, wenn dieses Gerät überhaupt schon angemeldet ist.
   if (!authGeprueft || (benutzer && !buchungGeladen)) return <Laden />;
@@ -198,6 +206,7 @@ function GastApp() {
           buchung={buchung}
           onAendern={gehe}
           onNeuBeginnen={neuBeginnen}
+          gibtFrei={gibtFrei}
         />
       )}
       {schritt === 'ticket' && !buchung && (
@@ -215,7 +224,7 @@ function GastApp() {
           einen und «Alä» auf der nächsten Zeile stehen. */}
       <footer className="fusszeile mini nicht-drucken">
         <p>
-          <a className="zusammen" href="/admin">Für Lehrpersonen</a>
+          <a className="zusammen" href="/admin">Betreuungspersonen</a>
           {/* Geschütztes Leerzeichen vor dem Punkt: So kann höchstens NACH dem Trenner
               umbrochen werden — nie so, dass «·» allein auf einer Zeile steht. */}
           <span aria-hidden="true">{'\u00A0· '}</span>

@@ -55,13 +55,37 @@ npx firebase emulators:start --only firestore,auth --project fmsbesuchstag
 npm run andrangtest                            # in einem zweiten Terminal
 ```
 
+Dasselbe gilt für die Zugriffsrechte: `firestore.rules` ist der einzige wirksame Schutz,
+also wird geprüft, was der Server erlaubt — nicht, was die Oberfläche anzeigt.
+
+```bash
+npm run regeltest                              # startet den Emulator selbst
+```
+
 | Pfad | Was |
 |---|---|
 | `/` | Anmeldung für die Besuchenden |
-| `/admin` | Bereich für die betreuenden Lehrpersonen |
+| `/admin` | Bereich für die Betreuungspersonen |
 
-Erster Admin-Zugang: **«Mit Google anmelden»** — die Adresse in `firestore.rules`
-(`bootstrapMail`) trägt sich beim ersten Login selbst als Betreuung ein.
+### Zugänge
+
+Zwei Rollen: **Betreuung** sieht die Übersicht und erfasst Anmeldungen für Gäste ohne
+Handy; **Administration** darf zusätzlich steuern — Freigabeschalter, Meldung an alle,
+Kapazitäten, Zurücksetzen und Zugänge vergeben.
+
+Erster Zugang: **«Mit Google anmelden»** — die Adresse in `firestore.rules`
+(`bootstrapMail`) trägt sich beim ersten Anmelden selbst als Administration ein. Das ist
+die einzige Stelle, die dafür einen Deploy braucht.
+
+Alle weiteren: **Steuerung → Zugänge** → Adresse und Rolle eintragen. Auf Wunsch schickt
+Firebase gleich einen Anmeldelink; die Person kann sich auch mit Google oder E-Mail und
+Passwort anmelden. Freigeschaltet wird sie beim ersten Anmelden automatisch, mit genau
+der Rolle aus der Einladung.
+
+> Damit der Anmeldelink verschickt werden kann, muss in der Firebase-Konsole unter
+> Authentication → Sign-in method bei «E-Mail-Adresse/Passwort» auch **E-Mail-Link
+> (passwortloses Anmelden)** aktiviert sein, und die Domain unter Settings → Authorized
+> domains stehen. Ohne das melden Google und Passwort weiterhin normal an.
 
 ## Getroffene Entscheide (19.08.2026)
 
