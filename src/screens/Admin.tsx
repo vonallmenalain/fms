@@ -95,16 +95,53 @@ export default function Admin({ onRaus }: { onRaus: () => void }) {
 
 /* ------------------------------------------------------------------ Anmelden */
 
+/** Firebase-Fehlercodes in eine Meldung übersetzen, die sagt, was zu tun ist. */
+function anmeldeFehlerText(code: string): { text: string; hinweis?: string } {
+  switch (code) {
+    case 'auth/unauthorized-domain':
+      return {
+        text: 'Diese Adresse ist in Firebase noch nicht für die Google-Anmeldung freigegeben.',
+        hinweis: `Firebase Console → Authentication → Settings → Authorized domains → «${location.hostname}» hinzufügen. `
+          + 'Anonyme Anmeldung und E-Mail/Passwort sind davon nicht betroffen.',
+      };
+    case 'auth/operation-not-allowed':
+      return {
+        text: 'Diese Anmeldeart ist im Firebase-Projekt nicht aktiviert.',
+        hinweis: 'Firebase Console → Authentication → Sign-in method → Anbieter aktivieren.',
+      };
+    case 'auth/popup-blocked':
+      return { text: 'Der Browser hat das Anmeldefenster blockiert. Bitte Pop-ups für diese Seite erlauben.' };
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+      return { text: 'Das Anmeldefenster wurde geschlossen. Bitte nochmals versuchen.' };
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+    case 'auth/invalid-email':
+      return { text: 'E-Mail oder Passwort stimmen nicht.' };
+    case 'auth/too-many-requests':
+      return { text: 'Zu viele Versuche. Bitte einen Moment warten und nochmals versuchen.' };
+    case 'auth/network-request-failed':
+      return { text: 'Keine Verbindung. Bitte Netz prüfen und nochmals versuchen.' };
+    default:
+      return { text: 'Anmeldung fehlgeschlagen.', hinweis: code || undefined };
+  }
+}
+
 function Anmelden({ onRaus }: { onRaus: () => void }) {
   const [mail, setMail] = useState('');
   const [pw, setPw] = useState('');
-  const [fehler, setFehler] = useState<string | null>(null);
+  const [fehler, setFehler] = useState<{ text: string; hinweis?: string } | null>(null);
   const [laeuft, setLaeuft] = useState(false);
 
   const melden = async (vorgang: () => Promise<unknown>) => {
     setLaeuft(true); setFehler(null);
     try { await vorgang(); }
-    catch { setFehler('Anmeldung fehlgeschlagen. Stimmen E-Mail und Passwort?'); }
+    catch (f) {
+      const code = (f as { code?: string })?.code ?? '';
+      setFehler(anmeldeFehlerText(code));
+      console.error('Anmeldung fehlgeschlagen:', code, f);
+    }
     finally { setLaeuft(false); }
   };
 
@@ -123,7 +160,12 @@ function Anmelden({ onRaus }: { onRaus: () => void }) {
           <label htmlFor="pw">Passwort</label>
           <input id="pw" type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} required />
         </div>
-        {fehler && <div className="hinweis hinweis--fehler">{fehler}</div>}
+        {fehler && (
+          <div className="hinweis hinweis--fehler">
+            <b>{fehler.text}</b>
+            {fehler.hinweis && <><br /><span className="klein">{fehler.hinweis}</span></>}
+          </div>
+        )}
         <button className="knopf knopf--haupt knopf--breit" disabled={laeuft}>Anmelden</button>
       </form>
 
