@@ -39,7 +39,6 @@ const loesche = async (name) => {
 };
 
 const buchungen = await loesche('bookings');
-const codes = await loesche('codes');
 
 const b = db.batch();
 for (const a of programm.offerings) {
@@ -48,4 +47,4 @@ for (const a of programm.offerings) {
 b.set(db.doc('config/app'), { anmeldungOffen: false, banner: '' }, { merge: true });
 await b.commit();
 
-console.log(`${buchungen} Anmeldungen und ${codes} Codes gelöscht, ${programm.offerings.length} Zähler auf 0, Anmeldung geschlossen.`);
+console.log(`${buchungen} Anmeldungen gelöscht, ${programm.offerings.length} Zähler auf 0, Anmeldung geschlossen.`);

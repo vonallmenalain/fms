@@ -18,7 +18,7 @@ export function Ticket({
       <Kopf klein />
 
       <div className="stapel">
-        <h1>Dein Ticket</h1>
+        <h1>Deine Auswahl</h1>
         <p className="lauftext">
           {datumLang()}
           {buchung.plaetze > 1 && <> · <b>gültig für {buchung.plaetze} Personen</b></>}
@@ -66,18 +66,8 @@ export function Ticket({
       </div>
 
       <div className="hinweis">
-        <b>Mach jetzt einen Screenshot.</b> Dann hast du dein Ticket auch ohne Internet dabei.
+        <b>Mach jetzt einen Screenshot.</b> Dann hast du deine Auswahl auch ohne Internet dabei.
         Diese Seite lässt sich auf diesem Handy jederzeit wieder öffnen.
-      </div>
-
-      <div className="code">
-        <div>
-          <div className="mini">Rettungscode</div>
-          <div className="code-wert">{buchung.code}</div>
-        </div>
-        <div className="mini" style={{ maxWidth: 200, textAlign: 'right' }}>
-          Falls dein Handy streikt: Code am Info-Stand nennen
-        </div>
       </div>
 
       <hr className="trenner" />
@@ -85,10 +75,12 @@ export function Ticket({
       <div className="stapel">
         <h3>Zimmer finden</h3>
         <p className="klein">
-          {programm.raumlegende.hinweis} GN = {programm.raumlegende.GN}, GS = {programm.raumlegende.GS}.
-          Fragen? Info-Stand: {programm.event.infostand}.
+          <b>GN</b> = {programm.raumlegende.GN}<br />
+          <b>GS</b> = {programm.raumlegende.GS}
         </p>
+        <p className="klein">{programm.raumlegende.hinweis}</p>
         {programm.hinweise.map((h) => <p key={h} className="klein">{h}</p>)}
+        <p className="klein">Fragen? Info-Stand: {programm.event.infostand}.</p>
       </div>
 
       {!nurAnsicht && onNeuBeginnen && (

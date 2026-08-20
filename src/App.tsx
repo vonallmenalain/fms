@@ -193,6 +193,8 @@ function GastApp() {
 
       <p className="mini mitte nicht-drucken" style={{ padding: '8px 16px 24px' }}>
         {programm.event.titel} · <a href="/admin" style={{ color: 'inherit' }}>Für Lehrpersonen</a>
+        {' · '}WebApp von{' '}
+        <a href="https://alae.app" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>Alä</a>
       </p>
     </>
   );

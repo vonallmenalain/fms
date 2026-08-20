@@ -4,20 +4,20 @@ import {
   signInWithPopup, signOut, type User,
 } from 'firebase/auth';
 import {
-  collection, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch, deleteDoc, onSnapshot,
+  collection, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch, onSnapshot,
 } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import {
-  ANGEBOTE, BLOECKE, BLOCK_IDS, angebot, angeboteFuer, metaZeile, programm, zeitraum,
+  ANGEBOTE, BLOECKE, angebot, angeboteFuer, metaZeile, programm, zeitraum,
   type BlockId,
 } from '../programm';
 import { useAlleSlots } from '../hooks/useSlots';
 import { useAppConfig } from '../hooks/useAppConfig';
-import { erfasseAdminBuchung, waehle, type Buchung } from '../buchung';
+import { erfasseAdminBuchung, type Buchung } from '../buchung';
 import { AusgebuchtFehler } from '../wiederholung';
 import { Kopf, Meldung } from '../ui/Bausteine';
 
-type Reiter = 'uebersicht' | 'erfassen' | 'suchen' | 'steuerung';
+type Reiter = 'uebersicht' | 'erfassen' | 'steuerung';
 
 export default function Admin({ onRaus }: { onRaus: () => void }) {
   const [benutzer, setBenutzer] = useState<User | null | undefined>(undefined);
@@ -76,7 +76,6 @@ export default function Admin({ onRaus }: { onRaus: () => void }) {
         {([
           ['uebersicht', 'Übersicht'],
           ['erfassen', '+ Anmeldung erfassen'],
-          ['suchen', 'Ticket suchen'],
           ['steuerung', 'Steuerung'],
         ] as [Reiter, string][]).map(([id, text]) => (
           <button key={id} role="tab" aria-selected={reiter === id} onClick={() => setReiter(id)}>{text}</button>
@@ -85,7 +84,6 @@ export default function Admin({ onRaus }: { onRaus: () => void }) {
 
       {reiter === 'uebersicht' && <Uebersicht />}
       {reiter === 'erfassen' && <Erfassen melde={setMeldung} />}
-      {reiter === 'suchen' && <Suchen melde={setMeldung} />}
       {reiter === 'steuerung' && <Steuerung melde={setMeldung} />}
 
       {meldung && <Meldung text={meldung} onWeg={() => setMeldung(null)} />}
@@ -256,13 +254,13 @@ function Erfassen({ melde }: { melde: (t: string) => void }) {
   const [notiz, setNotiz] = useState('');
   const [auswahl, setAuswahl] = useState<Partial<Record<BlockId, string>>>({});
   const [laeuft, setLaeuft] = useState(false);
-  const [fertig, setFertig] = useState<{ code: string } | null>(null);
+  const [fertig, setFertig] = useState(false);
 
   const speichern = async () => {
     setLaeuft(true);
     try {
-      const r = await erfasseAdminBuchung(auswahl, plaetze, notiz);
-      setFertig({ code: r.code });
+      await erfasseAdminBuchung(auswahl, plaetze, notiz);
+      setFertig(true);
       setAuswahl({}); setNotiz(''); setPlaetze(1);
     } catch (f) {
       melde(f instanceof AusgebuchtFehler
@@ -274,10 +272,9 @@ function Erfassen({ melde }: { melde: (t: string) => void }) {
   if (fertig) {
     return (
       <div className="stapel">
-        <div className="hinweis"><b>Anmeldung erfasst.</b> Rettungscode für den Notfall:</div>
-        <div className="code"><div className="code-wert">{fertig.code}</div></div>
-        <p className="klein">Am besten den Gästen kurz zeigen oder abfotografieren lassen.</p>
-        <button className="knopf knopf--haupt" onClick={() => setFertig(null)}>Nächste Anmeldung erfassen</button>
+        <div className="hinweis"><b>Anmeldung erfasst.</b> Die Plätze sind reserviert.</div>
+        <p className="klein">Am besten den Gästen die Auswahl kurz aufschreiben oder zeigen.</p>
+        <button className="knopf knopf--haupt" onClick={() => setFertig(false)}>Nächste Anmeldung erfassen</button>
       </div>
     );
   }
@@ -327,98 +324,6 @@ function Erfassen({ melde }: { melde: (t: string) => void }) {
   );
 }
 
-/* ------------------------------------------------------------------ Suchen */
-
-function Suchen({ melde }: { melde: (t: string) => void }) {
-  const [code, setCode] = useState('');
-  const [treffer, setTreffer] = useState<{ id: string; b: Buchung } | null>(null);
-  const [laeuft, setLaeuft] = useState(false);
-  const staende = useAlleSlots();
-
-  const suchen = async () => {
-    setLaeuft(true); setTreffer(null);
-    try {
-      const c = code.trim().toUpperCase();
-      const k = await getDoc(doc(db, 'codes', c));
-      if (!k.exists()) { melde('Kein Ticket mit diesem Code gefunden.'); return; }
-      const uid = (k.data() as { uid: string }).uid;
-      const b = await getDoc(doc(db, 'bookings', uid));
-      if (!b.exists()) { melde('Zum Code gibt es keine Anmeldung mehr.'); return; }
-      setTreffer({ id: uid, b: b.data() as Buchung });
-    } finally { setLaeuft(false); }
-  };
-
-  const aendern = async (blockId: BlockId, angebotId: string | null) => {
-    if (!treffer) return;
-    try {
-      await waehle(treffer.id, blockId, angebotId, treffer.b.plaetze, 'admin');
-      const b = await getDoc(doc(db, 'bookings', treffer.id));
-      setTreffer({ id: treffer.id, b: b.data() as Buchung });
-      melde('Geändert.');
-    } catch { melde('Änderung nicht möglich — vermutlich ausgebucht.'); }
-  };
-
-  const loeschen = async () => {
-    if (!treffer) return;
-    for (const b of BLOCK_IDS) if (treffer.b.wahl[b]) await waehle(treffer.id, b, null, treffer.b.plaetze, 'admin');
-    await deleteDoc(doc(db, 'bookings', treffer.id)).catch(() => undefined);
-    await deleteDoc(doc(db, 'codes', treffer.b.code)).catch(() => undefined);
-    setTreffer(null);
-    melde('Anmeldung gelöscht, Plätze sind wieder frei.');
-  };
-
-  return (
-    <div className="stapel" style={{ maxWidth: 640 }}>
-      <p className="lauftext">
-        Handy leer, Browserdaten gelöscht oder anderes Gerät: Rettungscode vom Ticket eingeben.
-      </p>
-      <form className="reihe" onSubmit={(e) => { e.preventDefault(); suchen(); }}>
-        <div className="feld" style={{ flex: 1 }}>
-          <label htmlFor="code">Rettungscode</label>
-          <input id="code" value={code} onChange={(e) => setCode(e.target.value)}
-            style={{ textTransform: 'uppercase', letterSpacing: '.1em' }} maxLength={6} required />
-        </div>
-        <button className="knopf knopf--haupt" disabled={laeuft} style={{ alignSelf: 'end' }}>Suchen</button>
-      </form>
-
-      {treffer && (
-        <div className="stapel">
-          <hr className="trenner" />
-          <div className="reihe">
-            <strong>{treffer.b.plaetze} {treffer.b.plaetze === 1 ? 'Person' : 'Personen'}</strong>
-            <span className="mini">{treffer.b.quelle === 'admin' ? 'vor Ort erfasst' : 'per Handy'}</span>
-            {treffer.b.notiz && <span className="mini">· {treffer.b.notiz}</span>}
-          </div>
-
-          {BLOECKE.map((b) => (
-            <div className="feld" key={b.id}>
-              <label>{b.label} <span className="zahl">({zeitraum(b)})</span></label>
-              <select
-                value={treffer.b.wahl[b.id] ?? ''}
-                onChange={(e) => aendern(b.id, e.target.value || null)}
-              >
-                <option value="">— nichts —</option>
-                {angeboteFuer(b.id).map((a) => {
-                  const s = staende[a.id];
-                  const frei = Math.max(0, (s?.kapazitaet ?? a.kapazitaet) - (s?.belegt ?? 0));
-                  return (
-                    <option key={a.id} value={a.id}
-                      disabled={frei < treffer.b.plaetze && treffer.b.wahl[b.id] !== a.id}>
-                      {a.fach}{a.klasse ? ` · ${a.klasse}` : ''} · {a.raum} — {frei} frei
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          ))}
-
-          <button className="knopf knopf--gefahr" onClick={loeschen}>Anmeldung löschen</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ------------------------------------------------------------------ Steuerung */
 
 function Steuerung({ melde }: { melde: (t: string) => void }) {
@@ -449,10 +354,9 @@ function Steuerung({ melde }: { melde: (t: string) => void }) {
     if (!confirm('Wirklich ALLE Anmeldungen löschen und alle Zähler auf 0 setzen?')) return;
     setLaeuft(true);
     try {
-      const [bu, co] = await Promise.all([getDocs(collection(db, 'bookings')), getDocs(collection(db, 'codes'))]);
+      const bu = await getDocs(collection(db, 'bookings'));
       const b = writeBatch(db);
       bu.docs.forEach((d) => b.delete(d.ref));
-      co.docs.forEach((d) => b.delete(d.ref));
       ANGEBOTE.forEach((a) => b.set(doc(db, 'slots', a.id), { belegt: 0, kapazitaet: a.kapazitaet, block: a.blockId }));
       await b.commit();
       melde('Alles zurückgesetzt.');

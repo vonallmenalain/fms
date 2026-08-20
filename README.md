@@ -97,7 +97,7 @@ Die drei Prioritäten — sauber und flüssig, wirklich live, kein Limit — sin
 | 3–4 Lehrpersonen als Admin, die Gäste eintragen? | **Ja** — eigener Admin-Bereich mit Login, «+ Anmeldung erfassen» |
 | Lehrpersonen sehen live, wer wohin kommt? | **Ja** — Live-Dashboard, Druckansicht und CSV-Export. Kostet fast nichts extra |
 | Slots wieder freigeben und neu buchen? | **Ja** — beim Wechsel wird der alte Platz in derselben Transaktion frei |
-| Ticket wieder aufrufbar? | **Ja** — automatisch auf demselben Gerät, plus 6-stelliger Rettungscode für den Notfall |
+| Auswahl wieder aufrufbar? | **Ja** — automatisch auf demselben Gerät |
 | Analoge Variante vorbereiten? | **Ja, unbedingt** — 20 Zettel pro Lektion, [Runbook §5](docs/04-eventtag-runbook.md#5-papier-fallback-am-vorabend-vorbereiten-kostet-20-minuten). Kostet 20 Minuten und nimmt allen die Nervosität |
 | Support am 28.10., 08:15–08:45? | Eingeplant: **08:00–09:15 online**, danach telefonisch. Das Runbook ist so geschrieben, dass die Lehrpersonen 90 % selbst lösen |
 

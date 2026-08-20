@@ -110,17 +110,14 @@ service cloud.firestore {
         && request.auth.uid == buchungId
         && anmeldungOffen()
         && request.resource.data.keys().hasOnly(
-             ['plaetze', 'code', 'wahl', 'quelle', 'notiz', 'erstelltAm', 'geaendertAm'])
+             ['plaetze', 'wahl', 'quelle', 'notiz', 'erstelltAm', 'geaendertAm'])
         && gueltigePlaetze(request.resource.data.plaetze)
-        && request.resource.data.quelle == 'gast'
-        && request.resource.data.code is string
-        && request.resource.data.code.size() == 6;
+        && request.resource.data.quelle == 'gast';
 
       allow update: if angemeldet()
         && request.auth.uid == buchungId
         && anmeldungOffen()
         && request.resource.data.quelle == resource.data.quelle
-        && request.resource.data.code == resource.data.code
         // Gruppengrösse nur ändern, solange noch nichts gebucht ist
         && (request.resource.data.plaetze == resource.data.plaetze
             || (keineWahl(resource.data) && gueltigePlaetze(request.resource.data.plaetze)));
@@ -129,16 +126,6 @@ service cloud.firestore {
 
       // Betreuung erfasst Anmeldungen für Gäste ohne Handy (eigene Dokument-ID).
       allow write: if istAdmin();
-    }
-
-    // ------------------------------------------------------ codes: Rettungscode
-
-    match /codes/{code} {
-      allow get, list: if istAdmin();                  // nicht durchprobierbar
-      allow create: if angemeldet()
-        && request.resource.data.keys().hasOnly(['uid'])
-        && (request.resource.data.uid == request.auth.uid || istAdmin());
-      allow update, delete: if istAdmin();
     }
 
     // ------------------------------------------------------------ alles Übrige

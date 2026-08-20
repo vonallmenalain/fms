@@ -7,7 +7,6 @@ import { AusgebuchtFehler, RechteFehler, mitWiederholung, nacheinander } from '.
 
 export interface Buchung {
   plaetze: number;
-  code: string;
   wahl: Record<BlockId, string | null>;
   quelle: 'gast' | 'admin';
   notiz: string | null;
@@ -15,20 +14,11 @@ export interface Buchung {
   geaendertAm?: unknown;
 }
 
-/** Ohne 0/O/1/I/L — beim Vorlesen am Info-Stand darf es keine Verwechslung geben. */
-const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-
-export function zufallsCode(): string {
-  const werte = crypto.getRandomValues(new Uint32Array(6));
-  return Array.from(werte, (v) => ALPHABET[v % ALPHABET.length]).join('');
-}
-
 export const leereWahl = (): Record<BlockId, string | null> =>
   Object.fromEntries(BLOCK_IDS.map((b) => [b, null])) as Record<BlockId, string | null>;
 
 export const neueBuchung = (plaetze: number, quelle: 'gast' | 'admin' = 'gast'): Buchung => ({
   plaetze,
-  code: zufallsCode(),
   wahl: leereWahl(),
   quelle,
   notiz: null,
@@ -104,13 +94,6 @@ export function waehle(
           const neu = neuRef ? await leseSlot(tx, neuRef, neuesAngebot!) : null;
           const alt = altRef ? await leseSlot(tx, altRef, altesAngebot!) : null;
 
-          // Rettungscode beim ersten Schreiben belegen. Bewusst OHNE Kollisionsprüfung:
-          // Gäste dürfen codes/ per Rules nicht lesen (sonst wären Codes durchprobierbar),
-          // und bei 31^6 ≈ 887 Mio. Möglichkeiten und ~200 Anmeldungen liegt die
-          // Kollisionswahrscheinlichkeit bei rund 1:45'000. Das spart zugleich einen
-          // Lesevorgang pro Anmeldung.
-          const codeRef = vorhanden ? null : doc(db, 'codes', buchung.code);
-
           // ---------- 2. Prüfen ----------
           if (neu && neuesAngebot && neu.belegt + plaetze > neu.kapazitaet) {
             throw new AusgebuchtFehler(neuesAngebot);
@@ -119,7 +102,6 @@ export function waehle(
           // ---------- 3. Schreiben ----------
           if (neuRef && neu && neuesAngebot) schreibeSlot(tx, neuRef, neuesAngebot, neu, neu.belegt + plaetze);
           if (altRef && alt && altesAngebot) schreibeSlot(tx, altRef, altesAngebot, alt, Math.max(0, alt.belegt - plaetze));
-          if (codeRef) tx.set(codeRef, { uid: buchungId });
 
           tx.set(
             buchungRef,
@@ -173,7 +155,7 @@ export async function erfasseAdminBuchung(
   auswahl: Partial<Record<BlockId, string | null>>,
   plaetze: number,
   notiz: string,
-): Promise<{ id: string; code: string }> {
+): Promise<{ id: string }> {
   const buchungRef = doc(collection(db, 'bookings'));
   const basis = neueBuchung(plaetze, 'admin');
 
@@ -182,7 +164,6 @@ export async function erfasseAdminBuchung(
       const ids = BLOCK_IDS.map((b) => auswahl[b] ?? null);
 
       // ---------- Lesen ----------
-      const codeRef = doc(db, 'codes', basis.code);
       const staende = await Promise.all(
         ids.map(async (id) => (id ? { id, ...(await leseSlot(tx, doc(db, 'slots', id), id)) } : null)),
       );
@@ -197,7 +178,6 @@ export async function erfasseAdminBuchung(
         if (!s) continue;
         schreibeSlot(tx, doc(db, 'slots', s.id), s.id, s, s.belegt + plaetze);
       }
-      tx.set(codeRef, { uid: buchungRef.id });
       tx.set(buchungRef, {
         ...basis,
         notiz: notiz.trim() || null,
@@ -208,5 +188,5 @@ export async function erfasseAdminBuchung(
     });
   });
 
-  return { id: buchungRef.id, code: basis.code };
+  return { id: buchungRef.id };
 }

@@ -44,10 +44,10 @@ Zugriffe auf zwei Minuten statt auf zwei Sekunden — wirksamer als jede technis
 
 | Symptom | Lösung (dauert < 30 Sekunden) |
 |---|---|
-| «Ich habe kein Handy» | Admin → **+ Anmeldung erfassen** → Auswahl → Ticket abfotografieren lassen |
-| «Mein Ticket ist weg» | Ticket-Seite über `fms.alae.app` erneut öffnen — sie kommt automatisch zurück. Sonst: Rettungscode am Info-Stand suchen |
+| «Ich habe kein Handy» | Admin → **+ Anmeldung erfassen** → Auswahl → Gästen aufschreiben oder abfotografieren lassen |
+| «Meine Auswahl ist weg» | Seite über `fms.alae.app` erneut öffnen — die Auswahl kommt auf demselben Gerät automatisch zurück. Sonst: Admin → **+ Anmeldung erfassen** neu erfassen |
 | «Das Fach ist ausgebucht» | Nachbar-Angebot vorschlagen; im Notfall Admin → Kapazität +2 (Zimmergrösse beachten!) |
-| «Ich will wechseln» | Auf dem Ticket **Ändern** tippen — der alte Platz wird sofort frei |
+| «Ich will wechseln» | In der Auswahl **Ändern** tippen — der alte Platz wird sofort frei |
 | «Wir sind zu viert» | Startseite → «Für wie viele Personen?» → **1 bis 4**, danach gemeinsam wählen |
 
 ## 4. Wenn etwas grösser schiefgeht
