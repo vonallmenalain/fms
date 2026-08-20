@@ -29,23 +29,24 @@ export function Auswahl({
     (Object.keys(wahl) as BlockId[]).filter((k) => wahl[k] !== null && wahl[k] !== undefined),
   );
 
-  // Kurzer Merkzettel: was auf diesem Gerät schon gewählt wurde (ohne den aktuellen Block).
-  const bisher = BLOCK_IDS
-    .filter((id) => id !== blockId)
-    .map((id) => ({ b: block(id), a: angebot(wahl[id]) }))
-    .filter((e): e is { b: ReturnType<typeof block>; a: NonNullable<ReturnType<typeof angebot>> } => !!e.a);
+  // Merkzettel über der Liste: alles, was auf diesem Gerät schon gewählt ist — der
+  // aktuelle Block eingeschlossen. Genau dort will man ja nachsehen, ob die eben
+  // getippte Wahl auch wirklich sitzt.
+  const uebersicht = BLOCK_IDS
+    .map((id) => ({ blk: block(id), a: angebot(wahl[id]) }))
+    .filter(({ blk, a }) => !!a || blk.id === blockId);
 
   return (
     <div className="seite">
       <Fortschritt aktuell={blockId} entschieden={entschieden} />
 
-      {bisher.length > 0 && (
-        <ul className="bisher lauftext">
-          {bisher.map(({ b: blk, a }) => (
-            <li key={blk.id}>{blk.label} – {a.fach}</li>
-          ))}
-        </ul>
-      )}
+      <ul className="bisher lauftext">
+        {uebersicht.map(({ blk, a }) => (
+          <li key={blk.id} data-aktuell={blk.id === blockId ? '1' : '0'}>
+            {blk.label} – {a ? a.fach : <span className="offen">wählst du gerade</span>}
+          </li>
+        ))}
+      </ul>
 
       <div className="stapel">
         <h1>{b.label}</h1>
