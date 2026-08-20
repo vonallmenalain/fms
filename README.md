@@ -47,6 +47,14 @@ npm install
 npm run dev                                    # gegen die echte Datenbank
 ```
 
+Die Überbuchungssicherung lässt sich jederzeit nachprüfen — sie läuft mit dem echten
+Buchungskode aus `src/`, ein Node-Prozess je «Gerät», alle drücken zur selben Millisekunde:
+
+```bash
+npx firebase emulators:start --only firestore,auth --project fmsbesuchstag
+npm run andrangtest                            # in einem zweiten Terminal
+```
+
 | Pfad | Was |
 |---|---|
 | `/` | Anmeldung für die Besuchenden |

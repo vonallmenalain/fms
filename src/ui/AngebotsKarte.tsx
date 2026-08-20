@@ -45,6 +45,7 @@ export function AngebotsKarte({
 
   const beschriftung = [
     angebot.fach, meta,
+    laedt ? 'wird gebucht' :
     zustand === 'aktiv' ? 'ausgewählt' :
     zustand === 'voll' ? 'ausgebucht' :
     zustand === 'gewaehlt-anders' ? 'dieses Fach hast du bereits gewählt' :
@@ -60,12 +61,17 @@ export function AngebotsKarte({
       disabled={gesperrt || laedt}
       onClick={onWahl}
       aria-label={beschriftung}
+      aria-busy={laedt}
     >
       <span className="karte-fach">{angebot.fach}</span>
       <span className="karte-meta">{meta}</span>
       <span className="karte-plaetze" aria-hidden="true">
-        {frei !== null && zustand !== 'voll' && <b>{frei}</b>}
-        {zustand === 'aktiv' ? '✓ gewählt' : TEXT[zustand]}
+        {laedt ? <span className="laderad" /> : (
+          <>
+            {frei !== null && zustand !== 'voll' && <b>{frei}</b>}
+            {zustand === 'aktiv' ? '✓ gewählt' : TEXT[zustand]}
+          </>
+        )}
       </span>
     </button>
   );

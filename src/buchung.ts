@@ -84,7 +84,12 @@ export function waehle(
           const buchung: Buchung = vorhanden
             ? (buchungSnap.data() as Buchung)
             : neueBuchung(vorgabePlaetze, quelle);
-          const plaetze = buchung.plaetze;
+          // Solange nichts gebucht ist, gibt der Bildschirm die Gruppengrösse vor: Der
+          // Schreibvorgang von der Startseite darf noch unterwegs sein, ohne dass hier
+          // eine überholte Zahl gebucht wird. Danach zählt der Wert aus der Datenbank —
+          // die Security Rules erzwingen dasselbe.
+          const nochNichtsGewaehlt = !Object.values(buchung.wahl ?? {}).some(Boolean);
+          const plaetze = nochNichtsGewaehlt && neuesAngebot ? vorgabePlaetze : buchung.plaetze;
           const altesAngebot = buchung.wahl?.[blockId] ?? null;
 
           if (altesAngebot === neuesAngebot) return;
@@ -107,6 +112,7 @@ export function waehle(
             buchungRef,
             {
               ...buchung,
+              plaetze,
               wahl: { ...leereWahl(), ...buchung.wahl, [blockId]: neuesAngebot },
               ...(vorhanden ? {} : { erstelltAm: serverTimestamp() }),
               geaendertAm: serverTimestamp(),
@@ -122,10 +128,21 @@ export function waehle(
   );
 }
 
+/**
+ * Zuletzt getippte Gruppengrösse. Wer schnell 1-2-3-4 durchtippt, löst sonst vier
+ * Schreibvorgänge nacheinander aus; nur der letzte ist gemeint, die übrigen verzögern
+ * bloss den nächsten Buchungsvorgang.
+ */
+let letzterPlaetzeWunsch: { id: string; wert: number } | null = null;
+
 /** Gruppengrösse ändern — nur solange nichts gebucht ist (die Rules erzwingen das ebenfalls). */
 export function setzePlaetze(buchungId: string, plaetze: number): Promise<void> {
+  letzterPlaetzeWunsch = { id: buchungId, wert: plaetze };
   return nacheinander(() =>
     mitWiederholung(async () => {
+      // Überholt: Es ist bereits ein neuerer Wert getippt worden.
+      const wunsch = letzterPlaetzeWunsch;
+      if (!wunsch || wunsch.id !== buchungId || wunsch.wert !== plaetze) return;
       await runTransaction(db, async (tx) => {
         const ref = doc(db, 'bookings', buchungId);
         const snap = await tx.get(ref);

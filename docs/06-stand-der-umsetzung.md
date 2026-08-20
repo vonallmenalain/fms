@@ -17,6 +17,7 @@ wie man es startet und wo bewusst vom Konzept abgewichen wurde.
 | Freigabeschalter, wirkt serverseitig | ✅ (Entscheid D4) |
 | Admin: Live-Dashboard, Anmeldung erfassen, Steuerung, Druck, CSV | ✅ |
 | Security Rules | ✅ gegen den Emulator geprüft |
+| Überbuchungssicherung, automatisiert nachprüfbar | ✅ `npm run andrangtest` (21 Prüfungen) |
 | Automatischer Rules-Deploy per GitHub-Action | ✅ |
 | Lasttest mit Invariantenprüfung | ✅ |
 | Netlify-Deploy aus `main` | ✅ |
@@ -85,6 +86,7 @@ Anmeldung über das Dienstkonto im Repository-Secret `FIREBASE_SERVICE_ACCOUNT`.
 | react-router | **30-Zeilen-Router** (`src/hooks/useRoute.ts`) | Es gibt zwei Pfade (`/` und `/admin`). Eine Bibliothek dafür wären ~15 KB — bei 200 gleichzeitig ladenden Geräten unnötig. |
 | Webschrift | **Systemschrift** | Nichts blockiert das erste Zeichnen, kein zusätzlicher Netzaufruf. Die Marke trägt das Logo. |
 | Rettungscode am Info-Stand | **entfernt** | Niemand merkt sich einen sechsstelligen Code für den Fall, dass das Handy streikt. Die Auswahl kommt auf demselben Gerät automatisch zurück, ein Screenshot deckt den Rest ab — das spart einen Bildschirmabschnitt, eine Firestore-Sammlung und einen Schreibvorgang je Anmeldung. |
+| Selbstheilung fehlender Zähler mit fester Kapazitätsliste | **Kapazität an den Block gebunden** | Die Rules liessen für ein fehlendes Zählerdokument jede Kapazität aus `[20, 35]` zu — ein manipulierter Client hätte einem 20er-Zimmer 35 Plätze verpassen können. Jetzt muss der Blockschlüssel zur Angebots-ID passen und die Kapazität zum Block. `npm run andrangtest` prüft beide Richtungen: der Angriff prallt ab, die ehrliche Selbstheilung funktioniert weiter. |
 | Zwei Firebase-Projekte (Test + Produktion) | **ein Projekt + Emulator Suite** | Die Emulator Suite ist das bessere Testprojekt: gratis, sofort zurückgesetzt, und sie prüft die Rules mit. Ein zweites Cloud-Projekt lohnt sich erst, wenn vor Ort mit echten Geräten geprobt wird. |
 
 ## 6. Messwerte

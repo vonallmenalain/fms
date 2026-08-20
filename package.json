@@ -11,7 +11,8 @@
     "seed": "node scripts/seed.mjs",
     "reset": "node scripts/reset.mjs",
     "lasttest": "node scripts/lasttest.mjs",
-    "pruefe": "node scripts/pruefe.mjs"
+    "pruefe": "node scripts/pruefe.mjs",
+    "andrangtest": "node scripts/andrangtest.mjs"
   },
   "dependencies": {
     "firebase": "^11.0.0",
