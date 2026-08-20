@@ -512,9 +512,7 @@ function Steuerung({ melde, ich }: { melde: (t: string) => void; ich: User }) {
           Alles zurücksetzen
         </button>
         <p className="mini">
-          Löscht alle Anmeldungen und setzt alle Zähler auf 0 — für nach der Generalprobe.
-          Das Programm selbst (Angebote, Zimmer, Zeiten) kommt aus <code>data/programm.json</code>
-          und wird bei jedem Push nach main eingespielt.
+          Löscht alle Anmeldungen und setzt alle Zähler auf 0.
         </p>
       </div>
     </div>
@@ -670,10 +668,6 @@ function Zugaenge({ melde, ich }: { melde: (t: string) => void; ich: User }) {
           </tbody>
         </table>
       </div>
-      <p className="mini">
-        «Erstzugang» steht in <code>firestore.rules</code> und lässt sich hier nicht entfernen —
-        das ist die Notbremse, falls einmal niemand mehr hineinkäme.
-      </p>
     </div>
   );
 }
