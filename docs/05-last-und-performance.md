@@ -271,7 +271,98 @@ Zwei Dinge kann die beste App nicht lösen — beide gehören vor dem Event gekl
    Personen, in Ruhe») verteilt die Last über zwei Minuten statt über zwei Sekunden — wirksamer
    als jede technische Optimierung.
 
-## 10. Geprüfte Alternative: Firebase Realtime Database
+## 10. Das Protokoll: Was kostet es, jeden Vorgang mitzuschreiben?
+
+Die Steuerung zeigt seit dem 21.08. einen **Protokollbereich**: welcher Client, welche Art
+von Gerät, welche Uhrzeit, wie viele Plätze, wie viele Slots. Die naheliegende Sorge ist,
+dass ausgerechnet ein Log den Andrang um 08:35 ausbremst. Die Antwort ist **nein**, und
+zwar aus vier Gründen, die alle in der Bauweise stecken.
+
+### 10.1 Die halbe Ansicht kostet gar nichts
+
+«Pro Client» — wer ist angemeldet, seit wann, mit wie vielen Personen, auf welchen vier
+Angeboten — steht bereits in `bookings`. Jede Anmeldung trägt seit jeher `quelle`,
+`plaetze`, `wahl`, `erstelltAm` und `geaendertAm`. Diese Sicht ist reine Darstellung:
+**null zusätzliche Schreibvorgänge, null zusätzliche Lesevorgänge** gegenüber der
+Übersicht, die es schon gab.
+
+Was dort **nicht** steht, ist der Verlauf: Wer Sport gegen Physik tauscht, überschreibt in
+der Anmeldung die vorherige Wahl. Genau dafür — und nur dafür — gibt es die Sammlung `log`.
+
+### 10.2 Der Eintrag liegt nicht auf dem kritischen Pfad
+
+Geschrieben wird **nach** der bestätigten Transaktion und **ohne `await`**:
+
+```ts
+await runTransaction(db, …);          // die Buchung — hier zählt jede Millisekunde
+protokolliere(buchungId, quelle, …);  // kehrt sofort zurück, läuft nebenher
+```
+
+Für die Person am Handy ändert sich damit nichts: Ihre Buchung ist in dem Moment fertig,
+in dem sie vorher fertig war. Das Leistungsbudget aus §7 («Tipp bis sichtbare Reaktion
+≤ 100 ms») bleibt unangetastet, weil die Anzeige ohnehin schon aus dem lokalen
+Zwischenspeicher kommt (§4a).
+
+Der Preis dafür ist ehrlich zu nennen: Wer den Browser in derselben Zehntelsekunde
+schliesst, verliert **diese eine Protokollzeile**. Die Buchung ist zu diesem Zeitpunkt
+längst bestätigt. Ein Protokoll, das eine gültige Buchung scheitern lassen könnte, wäre
+der schlechtere Tausch.
+
+### 10.3 Es gibt kein heisses Dokument — das ist der entscheidende Punkt
+
+Der Engpass aus §5 ist **nicht** die Zahl der Schreibvorgänge, sondern der Andrang auf ein
+**einzelnes Dokument**: Firestore verträgt rund einen dauerhaften Schreibvorgang pro
+Sekunde pro Dokument, und 60 Transaktionen auf denselben Zähler reihen sich auf.
+
+Protokollzeilen haben dieses Problem prinzipiell nicht: Jeder Eintrag ist ein **eigenes
+Dokument mit Zufalls-ID**. 200 gleichzeitige Einträge sind 200 unabhängige Schreibvorgänge
+auf 200 verschiedene Dokumente — der Fall, für den Firestore gebaut ist. Sie treffen sich
+nirgends. Es gibt auch keinen Zähler, der mitgeführt werden müsste; die Zahlen im
+Protokollbereich rechnet der Browser der Administration aus den Zeilen aus.
+
+### 10.4 Die Rechnung
+
+| Posten | Rechnung | Realistisch | Ungünstigster Fall |
+|---|---|---|---|
+| Buchungen (120 Gäste × 4 Blöcke) | 480 | 480 | 800 |
+| Wechsel und Freigaben (30 %) | 145 | 145 | 400 |
+| Erfassungen am Info-Stand | | 15 | 40 |
+| **Protokollzeilen total** | | **≈ 640** | **≈ 1 240** |
+| Rules-Lesevorgang je Zeile (`anmeldungOffen`) | 1 × oben | ≈ 640 | ≈ 1 240 |
+
+Gegen die Grundlast aus §3 (≈ 3 000 Schreib- und ≈ 50 000 Lesevorgänge) sind das **rund
+20 % mehr Schreibvorgänge und gut 1 % mehr Lesevorgänge**. In Franken: Schreibvorgänge
+kosten rund 0.18 USD je 100 000 — die 640 Zeilen sind **etwa ein Rappen**. Damit bleibt
+die Aussage aus §3 unverändert: der ganze Anlass unter einem Franken.
+
+Der einzige Posten, der Aufmerksamkeit verdient, ist das **Lesen** des Protokolls: Ein
+Listener auf eine wachsende Sammlung liest beim Aufbau jedes Dokument einmal. Deshalb
+zwei Vorkehrungen: Der Bereich ist **zugeklappt** und baut erst beim Öffnen eine
+Verbindung auf, und die Abfrage ist auf die **500 neusten Zeilen** gedeckelt. Wer in der
+heissen Phase die Steuerung offen hat, aber das Protokoll nicht aufklappt, zahlt nichts.
+
+### 10.5 Der Schalter, falls doch
+
+`config/app.protokoll` schaltet das Mitschreiben zur Laufzeit ab — genau wie
+`liveZaehler` in §8, sofort auf allen Geräten. Ausgeschaltet fehlt danach der Verlauf;
+«Pro Client» bleibt vollständig, weil es aus den Anmeldungen kommt.
+
+**Fazit für den Eventmorgen:** Das Protokoll ist keine Gefahr für die Leistung. Wenn am
+28. Oktober etwas klemmt, liegt es an einer der Ursachen aus §5, §5a oder §9 — nicht hier.
+Der Schalter ist trotzdem da, weil eine Reserve nichts kostet, solange man sie nicht braucht.
+
+### 10.6 Was das Protokoll nicht ist
+
+Es enthält **keine Personendaten**: Ein «Client» ist die anonyme Firebase-Geräte-ID, die
+Spalte «Gerät» nennt nur Familie und Browser (`iPhone · Safari`), ohne Versionen, ohne die
+vollständige User-Agent-Zeile, ohne IP-Adresse. Es ist damit dieselbe Datenlage wie in
+[01 §10](01-fachkonzept.md#10-datenschutz-dsgdsgvo-tauglich-weil-es-nichts-zu-schützen-gibt) —
+und es wird zusammen mit den Anmeldungen gelöscht (`npm run reset`, «Alles zurücksetzen»).
+
+Angeschrieben wird eine Zeile genau einmal: `update` ist in den Security Rules für alle
+gesperrt, auch für die Administration. Aufräumen heisst deshalb löschen, nicht ändern.
+
+## 11. Geprüfte Alternative: Firebase Realtime Database
 
 Der Vollständigkeit halber, weil sie für Live-Zähler naheliegt: Die Realtime Database rechnet
 nach Datenmenge statt nach Zugriffen — das Kontingentproblem aus §3 gäbe es dort gar nicht, und

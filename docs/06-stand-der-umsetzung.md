@@ -30,6 +30,7 @@ wie man es startet und wo bewusst vom Konzept abgewichen wurde.
 | Ganzer Gast-Ablauf als automatisierter Browsertest | ✅ [07 §4](07-pruefbericht.md) |
 | «Deine Auswahl» farblich abgesetzt, letzter Schritt nur noch mit «Abschliessen» | ✅ seit 20.08. |
 | Betreuung kann sich selbst ein Konto erstellen (Passwort, Link oder Google) | ✅ seit 20.08. — nur für eingetragene Adressen |
+| Protokoll in der Steuerung: pro Client und chronologischer Verlauf | ✅ seit 21.08. — abschaltbar, [05 §10](05-last-und-performance.md) |
 
 **Noch offen:** Latenzmessung gegen die echte Datenbank mit 200/400 Clients (muss von einem
 gewöhnlichen Anschluss aus laufen, siehe unten), Generalprobe, CI-Grün aus dem
@@ -69,11 +70,11 @@ VITE_EMULATOR=1 npm run dev                                    # Terminal 2
 | `node scripts/seed.mjs` | Programm aus `data/programm.json` nach Firestore spiegeln (idempotent, Zählerstände bleiben) |
 | `node scripts/seed.mjs --oeffnen` | dasselbe, öffnet zusätzlich die Anmeldung |
 | `node scripts/pruefe.mjs` | Invarianten L1–L3 gegen die Datenbank prüfen |
-| `node scripts/reset.mjs --ja` | alle Anmeldungen löschen, Zähler auf 0, Anmeldung schliessen |
+| `node scripts/reset.mjs --ja` | alle Anmeldungen löschen, Protokoll leeren, Zähler auf 0, Anmeldung schliessen |
 | `EMULATOR=1 node scripts/lasttest.mjs --clients 150` | Lasttest gegen die Emulator Suite — der Normalfall |
 | `node scripts/lasttest.mjs --clients 200 --produktion` | Lasttest gegen die **echte** Datenbank. `--produktion` ist Pflicht, sonst bricht das Skript ab; danach zwingend `reset` |
 | `npm run andrangtest` | 21 Prüfungen: Überbuchung und Angriffe eines manipulierten Clients |
-| `npm run regeltest` | 36 Prüfungen der Security Rules, startet den Emulator selbst |
+| `npm run regeltest` | 53 Prüfungen der Security Rules, startet den Emulator selbst |
 | `npm run mailtest` | 19 Prüfungen der drei Mail-Funktionen gegen die Emulator Suite, startet sie selbst ([docs/08](08-bestaetigungsmail.md)) |
 | `npm run mailvorschau` | Alle drei Mails als `mailvorschau.html` ansehen; mit `-- adresse@example.ch` zusätzlich echter Testversand |
 

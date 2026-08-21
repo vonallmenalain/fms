@@ -150,11 +150,23 @@ Gleicher 4-Schritt-Flow wie für Gäste, aber:
 - Kapazität eines einzelnen Angebots ad hoc erhöhen (z. B. 20 → 24)
 - **Druckansicht** aller Angebote mit Belegung → für den Info-Stand auf Papier
 
-**7.4 Export**
+**7.4 Protokoll** (Steuerung → Protokoll, nur `admin`)
+Zwei Sichten auf denselben Morgen:
+- **Pro Client** — eine Zeile je Gerät: Art (eigenes Handy / am Info-Stand erfasst),
+  Geräteart, Uhrzeit der Anmeldung, letzte Änderung, Personen, Anzahl Slots, belegte
+  Plätze und die vier gewählten Angebote. Kommt vollständig aus den Anmeldungen.
+- **Verlauf** — eine Zeile je Vorgang, chronologisch: auch Wechsel und Freigaben, die in
+  der Anmeldung selbst überschrieben werden. Dafür wird zusätzlich mitgeschrieben —
+  abschaltbar, und nachweislich ohne Einfluss auf die Leistung ([05 §10](05-last-und-performance.md)).
+
+Beide Sichten lassen sich als CSV herunterladen. Ein «Client» ist die anonyme Geräte-ID,
+kein Name — siehe §10.
+
+**7.5 Export**
 Ein Klick → CSV mit `Block, Fach, Klasse, Zimmer, Lehrperson, Belegt, Kapazität`.
 Für die Nachbesprechung und als Papier-Backup um 08:45.
 
-**7.5 Zugänge** (Steuerung → Zugänge, nur `admin`)
+**7.6 Zugänge** (Steuerung → Zugänge, nur `admin`)
 Adresse eintragen, Rolle wählen, fertig — Firebase verschickt auf Wunsch gleich einen
 Anmeldelink. Die Person schaltet sich beim ersten Anmelden selbst frei, und zwar mit genau
 der Rolle aus der Einladung. Sie kann sich dazu im Login auch selbst ein Konto erstellen
@@ -220,11 +232,15 @@ Bei den Ateliers entfällt die Klasse, dort steht nur Fach und Zimmer.
 
 - **Keine Personendaten.** Gespeichert werden nur: anonyme Geräte-ID, Gruppengrösse,
   4 Angebots-IDs, Zeitstempel.
+- **Auch im Protokoll nicht** (§7.4): Es hält je Vorgang dieselben Angaben fest, dazu die
+  Geräteart in der Form `iPhone · Safari` — ohne Versionsnummern, ohne die vollständige
+  User-Agent-Zeile, ohne IP-Adresse.
 - Die anonyme ID ist eine Firebase-Zufalls-ID, keinem Menschen zuordenbar.
 - Keine Analytics, kein Google Analytics, keine Cookies ausser dem technisch nötigen
   Auth-Token im Local Storage → **kein Cookie-Banner nötig**.
 - Kurzer Datenschutz-Absatz (5 Zeilen) verlinkt auf der Startseite.
-- **Löschung:** Alle Buchungen werden 7 Tage nach dem Event gelöscht (Skript `npm run reset`).
+- **Löschung:** Alle Buchungen und das Protokoll werden 7 Tage nach dem Event gelöscht
+  (Skript `npm run reset`, oder «Alles zurücksetzen» in der Steuerung).
 - Serverstandort Firestore: **`eur3` (europe-west)** wählen — Daten bleiben in der EU.
 
 ## 11. Getroffene Entscheide

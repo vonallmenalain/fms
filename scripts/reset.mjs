@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Löscht alle Anmeldungen und setzt sämtliche Zähler auf 0.
+ * Löscht alle Anmeldungen, leert das Protokoll und setzt sämtliche Zähler auf 0.
  * Nach der Generalprobe und nach dem Event.
  *
  *   node scripts/reset.mjs --ja [--project fmsbesuchstag]
@@ -39,6 +39,8 @@ const loesche = async (name) => {
 };
 
 const buchungen = await loesche('bookings');
+// Protokollzeilen zu Anmeldungen, die es nicht mehr gibt, sind nur noch Verwirrung.
+const protokoll = await loesche('log');
 
 const b = db.batch();
 for (const a of programm.offerings) {
@@ -47,4 +49,5 @@ for (const a of programm.offerings) {
 b.set(db.doc('config/app'), { anmeldungOffen: false, banner: '' }, { merge: true });
 await b.commit();
 
-console.log(`${buchungen} Anmeldungen gelöscht, ${programm.offerings.length} Zähler auf 0, Anmeldung geschlossen.`);
+console.log(`${buchungen} Anmeldungen gelöscht, ${protokoll} Protokollzeilen geleert, `
+  + `${programm.offerings.length} Zähler auf 0, Anmeldung geschlossen.`);

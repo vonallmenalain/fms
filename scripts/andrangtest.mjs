@@ -95,7 +95,7 @@ await esbuild.build({
 });
 
 const zuruecksetzen = async (kapazitaeten = {}) => {
-  for (const name of ['bookings', 'slots', 'config']) {
+  for (const name of ['bookings', 'slots', 'config', 'log']) {
     const s = await db.collection(name).get();
     await Promise.all(s.docs.map((d) => d.ref.delete()));
   }
@@ -105,7 +105,7 @@ const zuruecksetzen = async (kapazitaeten = {}) => {
       { belegt: 0, kapazitaet: kapazitaeten[o.id] ?? o.kapazitaet, block: o.blockId });
   }
   b.set(db.doc('config/app'),
-    { anmeldungOffen: true, maxPlaetzeProGeraet: 4, liveZaehler: true, banner: '' });
+    { anmeldungOffen: true, maxPlaetzeProGeraet: 4, liveZaehler: true, protokoll: true, banner: '' });
   await b.commit();
 };
 
