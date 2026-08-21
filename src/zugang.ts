@@ -139,11 +139,13 @@ export async function kontoErstellen(mail: string, passwort: string): Promise<vo
  * Entwicklungsserver ohne Funktionen —, verschickt Firebase die Mail wie bisher
  * selbst. Sie sieht dann nüchtern aus, aber niemand bleibt vor der Tür stehen.
  */
-export async function bestaetigungSenden(u: User): Promise<MailWeg> {
+export async function bestaetigungSenden(u: User): Promise<MailErgebnis> {
   const idToken = await u.getIdToken();
-  if (await mailSchnittstelle('/api/bestaetigung', { idToken }, ['gesendet', 'schon-bestaetigt'])) return 'eigen';
+  const eigen = await mailSchnittstelle('/api/bestaetigung', { idToken },
+    ['gesendet', 'schon-bestaetigt', 'gesperrt']);
+  if (eigen) return { weg: 'eigen', ...eigen };
   await sendEmailVerification(u, { url: `${window.location.origin}/admin` });
-  return 'firebase';
+  return { weg: 'firebase' };
 }
 
 /**
@@ -158,6 +160,21 @@ export async function bestaetigungSenden(u: User): Promise<MailWeg> {
  * wie der Normalfall — man wartet auf die schöne Mail und bekommt immer die von Firebase.
  */
 export type MailWeg = 'eigen' | 'firebase';
+
+/**
+ * Was aus einer Mail geworden ist.
+ *
+ * `stand` und `grund` füllt der Server nur, wenn er ehrlich antworten durfte — beim
+ * Einladen schickt die Administration ihr ID-Token mit. Ohne das bleibt die Antwort
+ * bewusst nichtssagend, damit sich nicht durchprobieren lässt, wer Zugang hat.
+ */
+export interface MailErgebnis {
+  weg: MailWeg;
+  /** `gesendet`, `nicht-eingeladen`, `gesperrt`, `schon-bestaetigt` — oder `erledigt`. */
+  stand?: string;
+  /** Wortlaut des Servers, wenn der eigene Versand scheiterte. */
+  grund?: string;
+}
 
 /** Was die Schnittstelle beim Scheitern in die Browserkonsole schreibt. */
 function rueckfallGrund(status: number, rumpf: string): string {
@@ -184,11 +201,15 @@ function rueckfallGrund(status: number, rumpf: string): string {
  * Liefert `true`, sobald sie den Fall erledigt hat — dann ist der Rückfall auf
  * Firebase weder nötig noch erwünscht.
  */
-async function mailSchnittstelle(pfad: string, rumpf: object, erledigt: string[]): Promise<boolean> {
-  const gescheitert = (status: number, text: string) => {
+type Antwort = { stand?: string; grund?: string } | null;
+
+async function mailSchnittstelle(
+  pfad: string, rumpf: object, erledigt: string[],
+): Promise<Antwort> {
+  const gescheitert = (status: number, text: string, grund?: string) => {
     console.warn(`[mail] ${pfad} hat nicht übernommen (HTTP ${status || 0}) — die Mail geht `
-      + `darum über Firebase.\n${rueckfallGrund(status, text)}\nAntwort: ${text.slice(0, 200)}`);
-    return false;
+      + `darum über Firebase.\n${grund ?? rueckfallGrund(status, text)}\nAntwort: ${text.slice(0, 200)}`);
+    return null;
   };
 
   let antwort: Response;
@@ -200,24 +221,23 @@ async function mailSchnittstelle(pfad: string, rumpf: object, erledigt: string[]
     });
   } catch (fehler) {
     console.warn(`[mail] ${pfad} war nicht erreichbar — die Mail geht über Firebase.`, fehler);
-    return false;
+    return null;
   }
 
   // Zu schnell hintereinander: Die vorige Mail ist eben erst rausgegangen —
   // ein Rückfall auf Firebase würde jetzt nur eine zweite Mail erzeugen.
-  if (antwort.status === 429) return true;
+  if (antwort.status === 429) return { stand: 'gesperrt' };
 
   const text = await antwort.text().catch(() => '');
-  if (!antwort.ok) return gescheitert(antwort.status, text);
-
+  let daten: { stand?: string; grund?: string } = {};
   // Ohne Funktionen (npm run dev) beantwortet der Entwicklungsserver den Aufruf
   // mit der Startseite — Status 200, aber HTML. Erst die Marke im Rumpf beweist,
   // dass wirklich die Funktion geantwortet hat.
-  try {
-    const daten = JSON.parse(text) as { stand?: string };
-    if (erledigt.includes(daten.stand ?? '')) return true;
-  } catch { /* kein JSON — unten als Fehlschlag behandelt */ }
-  return gescheitert(antwort.status, text);
+  try { daten = JSON.parse(text); } catch { /* kein JSON — gilt als Fehlschlag */ }
+
+  if (!antwort.ok) return gescheitert(antwort.status, text, daten.grund);
+  if (erledigt.includes(daten.stand ?? '')) return daten;
+  return gescheitert(antwort.status, text, daten.grund);
 }
 
 /**
@@ -254,17 +274,27 @@ const MAIL_MERKER = 'fms-anmeldemail';
  * → «E-Mail-Adresse/Passwort» mit **E-Mail-Link (passwortloses Anmelden)** aktiviert, und
  * die Domain unter Authentication → Settings → Authorized domains eingetragen.
  */
-export async function anmeldelinkSenden(mail: string, aufDiesemGeraet: boolean): Promise<MailWeg> {
+export async function anmeldelinkSenden(
+  mail: string, aufDiesemGeraet: boolean, alsAdministration = false,
+): Promise<MailErgebnis> {
   const adresse = mailSchluessel(mail);
   if (aufDiesemGeraet) window.localStorage.setItem(MAIL_MERKER, adresse);
 
-  if (await mailSchnittstelle('/api/anmeldelink', { mail: adresse }, ['erledigt'])) return 'eigen';
+  // Beim Einladen weiss die Administration ohnehin, wen sie eingetragen hat — ihr
+  // gegenüber antwortet der Server offen, ob die Mail wirklich rausging. Ohne diese
+  // Auskunft ist ein ausbleibendes Mail nicht von einem stillen «nicht eingeladen»
+  // zu unterscheiden, und man sucht am falschen Ende.
+  const idToken = alsAdministration ? await auth.currentUser?.getIdToken() : undefined;
+
+  const eigen = await mailSchnittstelle('/api/anmeldelink', { mail: adresse, idToken },
+    ['erledigt', 'gesendet', 'nicht-eingeladen', 'gesperrt']);
+  if (eigen) return { weg: 'eigen', ...eigen };
 
   await sendSignInLinkToEmail(auth, adresse, {
     url: `${window.location.origin}/admin`,
     handleCodeInApp: true,
   });
-  return 'firebase';
+  return { weg: 'firebase' };
 }
 
 /** Wurde diese Seite über einen Anmeldelink geöffnet? */
@@ -294,9 +324,10 @@ export async function mitLinkAnmelden(mail: string): Promise<void> {
  * Das Passwort selbst wird auf der Firebase-Seite hinter dem Link neu gesetzt; wir
  * gestalten nur die Mail.
  */
-export async function passwortZuruecksetzen(mail: string): Promise<MailWeg> {
+export async function passwortZuruecksetzen(mail: string): Promise<MailErgebnis> {
   const adresse = mailSchluessel(mail);
-  if (await mailSchnittstelle('/api/passwort', { mail: adresse }, ['erledigt'])) return 'eigen';
+  const eigen = await mailSchnittstelle('/api/passwort', { mail: adresse }, ['erledigt', 'gesperrt']);
+  if (eigen) return { weg: 'eigen', ...eigen };
 
   try {
     await sendPasswordResetEmail(auth, adresse, { url: `${window.location.origin}/admin` });
@@ -305,5 +336,5 @@ export async function passwortZuruecksetzen(mail: string): Promise<MailWeg> {
     // (etwa eine unsinnige Adresse) darf der Bildschirm ruhig melden.
     if ((fehler as { code?: string })?.code !== 'auth/user-not-found') throw fehler;
   }
-  return 'firebase';
+  return { weg: 'firebase' };
 }

@@ -192,9 +192,19 @@ ist: Hätte die Funktion geantwortet, gäbe es gar keinen Rückfall — auch dan
 sie bewusst nichts verschickt (nicht eingeladene Adresse). Die Suche gilt also nie der
 Adresse, sondern immer dem Aufruf.
 
-**Schritt 0 — Browserkonsole.** Seit dem Umbau schreibt die App den Grund selbst hinein:
-`[mail] /api/anmeldelink hat nicht übernommen (HTTP …)`. Das benennt bereits die Klasse
-des Fehlers. Beim Einladen sagt es zusätzlich die Meldung im Bildschirm.
+**Schritt 0 — die Meldung beim Einladen lesen.** Wer als Administration einlädt, schickt
+sein ID-Token mit, und die Schnittstelle antwortet dann **ehrlich** statt neutral. Der
+Bildschirm sagt also direkt, was passiert ist:
+
+| Meldung | Bedeutung |
+|---|---|
+| «Anmeldelink an … verschickt» | Resend hat die Mail angenommen → kommt trotzdem nichts an, weiter bei §4.2 |
+| «der Server findet die Adresse weder unter den Zugängen noch unter den Konten» | Die Schranke hat abgeblockt — meist eine andere Schreibweise der Adresse |
+| «vor weniger als 30 Sekunden schon einer» | Die Sperre; der erste Link gilt weiterhin |
+| «über Firebase statt über alae.app» | Der eigene Versand hat nicht geantwortet, der Grund steht dabei |
+
+Dazu schreibt die App den technischen Grund in die Browserkonsole:
+`[mail] /api/anmeldelink hat nicht übernommen (HTTP …)`.
 
 **Schritt 1 — antwortet die Funktion überhaupt?** Der Aufruf verschickt nichts, weil die
 Adresse nicht eingeladen ist:
@@ -221,6 +231,19 @@ curl -i -X POST https://fms.alae.app/api/anmeldelink \
 `502` heisst: Resend hat abgelehnt. **Den Wortlaut nennt nur das Protokoll** — Netlify →
 Site `fms` → **Logs** → **Functions** → `anmeldelink`, Zeile `[anmeldelink] Versand
 fehlgeschlagen: Resend hat abgelehnt (HTTP …)`.
+
+### 4.2 Der Server sagt «verschickt», es kommt aber nichts an
+
+Dann liegt es nicht mehr an dieser App: Resend hat die Mail angenommen, die Zustellung ist
+danach gescheitert. Nachzusehen ist das in **Resend → Emails** — dort steht jede
+angenommene Mail mit ihrem Ausgang:
+
+| Dort steht | Bedeutung |
+|---|---|
+| gar kein Eintrag | Der Schlüssel gehört zu einem anderen Resend-Konto oder Team |
+| `Delivered` | Zugestellt — dann liegt sie beim Empfänger (Spam, Filter, Weiterleitung) |
+| `Bounced` | Der Empfänger hat abgelehnt; der Grund steht daneben |
+| `Blocked` / Hinweis auf Testmodus | Ohne verifizierte Domain nimmt Resend nur die eigene Kontoadresse an |
 
 **Schritt 3 — Resend allein prüfen**, ohne Netlify und ohne Firebase dazwischen:
 

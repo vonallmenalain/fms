@@ -127,7 +127,7 @@ pruefe('zweiter Versuch sofort danach ist gesperrt — mit derselben Antwort',
   r.status === 200 && (await r.json()).stand === 'erledigt' && letzteMail === null);
 
 // Freigeschaltetes Konto ohne Einladung — etwa der Erstzugang aus den Rules.
-await neuesKonto('konto@example.ch');
+const admin = await neuesKonto('konto@example.ch');
 const wer = await adminAuth().getUserByEmail('konto@example.ch');
 await adminDb().collection('admins').doc(wer.uid)
   .set({ rolle: 'admin', name: 'Erstzugang', email: 'konto@example.ch', seit: '2026-01-01' });
@@ -135,13 +135,44 @@ letzteMail = null;
 r = await post(anmeldelink, { mail: 'konto@example.ch' });
 pruefe('freigeschaltetes Konto ohne Einladung: Mail geht raus', letzteMail?.to?.[0] === 'konto@example.ch');
 
-await neuesKonto('nurkonto@example.ch');
+const ohneRolle = await neuesKonto('nurkonto@example.ch');
 letzteMail = null;
 r = await post(anmeldelink, { mail: 'nurkonto@example.ch' });
 pruefe('Konto ohne Freischaltung: keine Mail', letzteMail === null);
 
 r = await post(anmeldelink, { mail: 'keine-adresse' });
 pruefe('unsinnige Adresse wird abgewiesen', r.status === 400);
+
+// Gegenüber der Administration ist die Antwort ehrlich: Sie weiss ohnehin, wen sie
+// eingetragen hat, und ohne diese Auskunft ist «nichts verschickt» nicht von «Mail
+// unterwegs» zu unterscheiden. Für alle anderen bleibt es bei der neutralen Antwort.
+await adminDb().collection('zugang').doc('offen@example.ch')
+  .set({ email: 'offen@example.ch', name: 'Test', rolle: 'betreuung' });
+letzteMail = null;
+r = await post(anmeldelink, { mail: 'offen@example.ch', idToken: admin.idToken });
+d = await r.json();
+pruefe('Administration erfährt, dass verschickt wurde',
+  r.status === 200 && d.stand === 'gesendet' && letzteMail?.to?.[0] === 'offen@example.ch',
+  JSON.stringify(d));
+
+letzteMail = null;
+r = await post(anmeldelink, { mail: 'niemand@example.ch', idToken: admin.idToken });
+d = await r.json();
+pruefe('Administration erfährt, dass nichts verschickt wurde',
+  r.status === 200 && d.stand === 'nicht-eingeladen' && letzteMail === null, JSON.stringify(d));
+
+letzteMail = null;
+r = await post(anmeldelink, { mail: 'offen@example.ch', idToken: admin.idToken });
+pruefe('Administration erfährt, dass die Sperre griff',
+  (await r.json()).stand === 'gesperrt' && letzteMail === null);
+
+r = await post(anmeldelink, { mail: 'niemand2@example.ch', idToken: ohneRolle.idToken });
+pruefe('Konto ohne Rolle «admin» bekommt weiterhin die neutrale Antwort',
+  (await r.json()).stand === 'erledigt');
+
+r = await post(anmeldelink, { mail: 'niemand3@example.ch', idToken: 'unsinn' });
+pruefe('ungültiges Token bekommt weiterhin die neutrale Antwort',
+  (await r.json()).stand === 'erledigt');
 
 /* --------------------------------------------------- Passwort zurücksetzen */
 console.log('\nPasswort zurücksetzen');
