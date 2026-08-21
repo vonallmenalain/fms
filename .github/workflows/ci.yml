@@ -17,6 +17,10 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+      # Faengt den Fall ab, der die Mailfunktionen in der Produktion mit 502
+      # sterben liess: eine Abhaengigkeit, die nur auf ganz neuen Node-Versionen
+      # laedt. Der Bau merkt davon nichts — die Funktionen baut Netlify.
+      - run: npm run funktionstest
       - name: Bündelgrösse melden
         run: |
           echo "### Bündelgrössen (gzip)" >> $GITHUB_STEP_SUMMARY

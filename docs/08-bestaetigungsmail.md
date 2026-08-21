@@ -241,7 +241,7 @@ und nicht an dieser App.
 |---|---|---|
 | Firebase-Mail statt der eigenen | Funktion antwortete nicht mit `gesendet` | Schritt 0–3 oben |
 | Im Funktionsprotokoll steht gar nichts | Der Aufruf hat die Funktion nie erreicht | `netlify.toml` und Deploy prüfen (§2.5) |
-| `502` mit `require() of ES Module …/jose/… not supported` | Die Funktion läuft auf einer zu alten Node-Laufzeit — sie stirbt schon beim Laden von `firebase-admin` | `AWS_LAMBDA_JS_RUNTIME = "nodejs22.x"` in `netlify.toml` (steht dort), danach neu veröffentlichen |
+| `502` mit `require() of ES Module …/jose/… not supported` | Die Funktion stirbt beim Laden von `firebase-admin`: Sein `jwks-rsa` holt `jose` per `require()`, und ab `jose` 6 ist das reines ESM — das lädt erst Node ≥ 22.12, AWS' `nodejs22.x` liegt darunter | Behoben durch `overrides: { "jose": "^5" }` in `package.json`. `npm run funktionstest` prüft es (läuft in der CI mit) |
 | Log: `Resend hat abgelehnt (HTTP 401)` | Schlüssel falsch, abgelaufen oder aus einem anderen Resend-Konto | neuen Schlüssel erstellen (§2.2) |
 | Log: `Einrichtung unvollständig` | `FIREBASE_SERVICE_ACCOUNT` fehlt oder ist kein gültiges JSON | 2.3/2.4 wiederholen, danach neu deployen |
 | Log: `Resend hat abgelehnt (HTTP 403)` | Absenderdomain im Schlüssel nicht erlaubt | Schlüssel mit Domain `alae.app` neu erstellen |
