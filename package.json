@@ -16,8 +16,13 @@
     "pruefe": "node scripts/pruefe.mjs",
     "andrangtest": "node scripts/andrangtest.mjs",
     "regeltest": "npx --yes firebase-tools@^14 emulators:exec --only firestore --project fms-regeltest \"node scripts/regeltest.mjs\"",
+    "funktionstest": "node --no-experimental-require-module scripts/funktionstest.mjs",
     "mailtest": "npx --yes firebase-tools@^14 emulators:exec --only auth,firestore --project fms-mailtest \"node scripts/mailtest.mjs\"",
     "mailvorschau": "node scripts/mailvorschau.mjs"
+  },
+  "//overrides": "jwks-rsa (via firebase-admin) laedt jose mit require(). jose 6 ist reines ESM — das geht erst ab Node 22.12, und AWS' nodejs22.x liegt darunter. jose 5 bringt zusaetzlich CommonJS mit und macht die Funktionen von der Laufzeitversion unabhaengig.",
+  "overrides": {
+    "jose": "^5.10.0"
   },
   "dependencies": {
     "firebase": "^11.0.0",

@@ -67,6 +67,15 @@ also wird geprüft, was der Server erlaubt — nicht, was die Oberfläche anzeig
 npm run regeltest                              # startet den Emulator selbst
 ```
 
+Und die drei Mailfunktionen: Sie laufen bei Netlify in einer eigenen, älteren
+Node-Laufzeit als der Bau. Der Test lädt sie mit abgeschaltetem `require(ESM)` — genau
+das, was der alten Laufzeit fehlt — und würde sonst erst in der Produktion auffallen:
+
+```bash
+npm run funktionstest                          # kein Versand, keine Schlüssel
+npm run mailtest                               # der ganze Ablauf gegen die Emulatoren
+```
+
 | Pfad | Was |
 |---|---|
 | `/` | Anmeldung für die Besuchenden |
