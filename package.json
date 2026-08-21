@@ -13,10 +13,13 @@
     "lasttest": "node scripts/lasttest.mjs",
     "pruefe": "node scripts/pruefe.mjs",
     "andrangtest": "node scripts/andrangtest.mjs",
-    "regeltest": "npx --yes firebase-tools@^14 emulators:exec --only firestore --project fms-regeltest \"node scripts/regeltest.mjs\""
+    "regeltest": "npx --yes firebase-tools@^14 emulators:exec --only firestore --project fms-regeltest \"node scripts/regeltest.mjs\"",
+    "mailtest": "npx --yes firebase-tools@^14 emulators:exec --only auth,firestore --project fms-mailtest \"node scripts/mailtest.mjs\"",
+    "mailvorschau": "node scripts/mailvorschau.mjs"
   },
   "dependencies": {
     "firebase": "^11.0.0",
+    "firebase-admin": "^14.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
@@ -25,7 +28,6 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
-    "firebase-admin": "^14.3.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.0"
   }

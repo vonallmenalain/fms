@@ -5,6 +5,27 @@
 [build.environment]
   NODE_VERSION = "22"
 
+# Serverseitiger Teil: zwei Funktionen, beide nur für den Mailversand —
+# die Bestätigungsmail und der Anmeldelink (netlify/functions/). Sie brauchen
+# einen Server, weil weder der Resend-Schlüssel noch der Firebase-Dienstschlüssel
+# jemals ins Browser-Bündel gelangen dürfen. Im Gast-Ablauf steckt nach wie vor
+# kein Serverkode.
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  # Das Admin-SDK bringt eigene Binärteile und optionale Abhängigkeiten mit,
+  # die esbuild nicht einpacken kann; extern eingebunden nimmt Netlify es
+  # unverändert aus node_modules mit.
+  external_node_modules = ["firebase-admin"]
+
+# Die Funktionen melden ihren Pfad zwar selbst (config.path), die Regel hier
+# steht aber VOR dem Auffangnetz für die Einzelseiten-App — ohne sie
+# beantwortet /index.html den Aufruf und die Mail ginge stillschweigend nicht raus.
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
