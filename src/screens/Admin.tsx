@@ -19,7 +19,7 @@ import { Kopf, Meldung } from '../ui/Bausteine';
 import {
   ROLLEN_TEXT, anmeldelinkSenden, bestaetigungPruefen, bestaetigungSenden, gemerkteMail,
   kontoEntfernen, kontoErstellen, kontoRolleSetzen, linkAnmeldung, mailSchluessel,
-  mitLinkAnmelden, zugangEntfernen, zugangKlaeren, zugangSetzen,
+  mitLinkAnmelden, passwortZuruecksetzen, zugangEntfernen, zugangKlaeren, zugangSetzen,
   type Konto, type Rolle, type Zugang,
 } from '../zugang';
 
@@ -189,6 +189,7 @@ function Anmelden({ onRaus }: { onRaus: () => void }) {
   const [fehler, setFehler] = useState<{ text: string; hinweis?: string } | null>(null);
   const [laeuft, setLaeuft] = useState(false);
   const [linkGesendet, setLinkGesendet] = useState(false);
+  const [pwGesendet, setPwGesendet] = useState(false);
   // Über einen Anmeldelink hereingekommen? Dann zählt nur noch, ihn einzulösen.
   const [ueberLink] = useState(linkAnmeldung);
 
@@ -205,7 +206,9 @@ function Anmelden({ onRaus }: { onRaus: () => void }) {
 
   // Beim Wechsel bleibt nur die Adresse stehen — eine Fehlermeldung oder ein «Link
   // verschickt» aus der anderen Ansicht gehörte sonst plötzlich zu etwas anderem.
-  const wechsle = (m: AnmeldeModus) => { setModus(m); setFehler(null); setLinkGesendet(false); };
+  const wechsle = (m: AnmeldeModus) => {
+    setModus(m); setFehler(null); setLinkGesendet(false); setPwGesendet(false);
+  };
 
   const fehlerKasten = fehler && (
     <div className="hinweis hinweis--fehler">
@@ -322,6 +325,21 @@ function Anmelden({ onRaus }: { onRaus: () => void }) {
         {fehlerKasten}
         <button className="knopf knopf--haupt knopf--breit" disabled={laeuft}>Anmelden</button>
       </form>
+
+      {/* Passwort vergessen: Der Server verschickt nur, wenn es zu dieser Adresse ein
+          freigeschaltetes Konto mit Passwort gibt — die Meldung sagt das offen, statt
+          Versand zu behaupten (siehe passwortZuruecksetzen). */}
+      {pwGesendet ? (
+        <div className="hinweis">
+          <b>Bitte das Postfach prüfen.</b> Gibt es zu {mail} ein Konto mit Passwort, liegt
+          der Link zum Neusetzen dort (auch im Spam-Ordner nachsehen).
+        </div>
+      ) : (
+        <button className="knopf knopf--still" disabled={laeuft || !mail}
+          onClick={() => melden(() => passwortZuruecksetzen(mail).then(() => setPwGesendet(true)))}>
+          Passwort vergessen?
+        </button>
+      )}
 
       {google}
 

@@ -6,8 +6,9 @@ Der Betreuungsbereich verschickt zwei Mails:
 |---|---|
 | **Bestätigungsmail** | nach «Konto erstellen» — `firestore.rules` verlangt `email_verified` |
 | **Anmeldelink** | Anmelden ohne Passwort; auch beim Einladen unter «Steuerung → Zugänge» |
+| **Passwort zurücksetzen** | über «Passwort vergessen?» im Login |
 
-Bisher verschickte **Firebase** beide: englisch angehauchtes Standardlayout, Absender
+Bisher verschickte **Firebase** sie alle: englisch angehauchtes Standardlayout, Absender
 `noreply@fmsbesuchstag.firebaseapp.com`.
 
 Neu verschickt die App sie **selbst**: eigene Gestaltung mit FMS-Logo, Absender auf
@@ -37,12 +38,18 @@ Verpackung und Briefträger aus. Am Anmeldeablauf, an den Security Rules und am
 - **Bestätigungsmail:** Es zählt das mitgeschickte **ID-Token**, nicht die Adresse im
   Formular. Verschickt wird nur an die Adresse, die im Token steht — sonst könnte jede und
   jeder über diese Schnittstelle fremde Adressen anschreiben lassen.
-- **Anmeldelink:** Hier ist noch niemand angemeldet, die Adresse kommt ungeprüft aus dem
-  Formular. Darum verschickt die Funktion nur an Adressen, die **eingeladen** (Dokument in
-  `zugang`) oder **bereits freigeschaltet** (Konto in `admins`) sind. Alle anderen bekommen
-  nichts — und **dieselbe Antwort wie alle**, damit sich nicht durchprobieren lässt, wer an
-  der Schule Zugang hat. Für die Person am Bildschirm ändert das nichts: Ein Link an eine
-  nicht eingeladene Adresse führte ohnehin nur auf «Kein Zugang».
+- **Anmeldelink und Passwort:** Hier ist noch niemand angemeldet, die Adresse kommt
+  ungeprüft aus dem Formular. Darum verschicken diese Funktionen nur an Adressen, die
+  **eingeladen** (Dokument in `zugang`) oder **bereits freigeschaltet** (Konto in `admins`)
+  sind — die gemeinsame Schranke `darfPostBekommen` in `netlify/lib/dienst.mjs`. Alle
+  anderen bekommen nichts, und **dieselbe Antwort wie alle**, damit sich nicht
+  durchprobieren lässt, wer an der Schule Zugang hat. Für die Person am Bildschirm ändert
+  das nichts: Ein Link an eine nicht eingeladene Adresse führte ohnehin nur auf «Kein
+  Zugang».
+
+  Beim Zurücksetzen kommt eine zweite Bedingung dazu: Es muss zu der Adresse ein **Konto
+  mit Passwort** geben. Firebase liesse ein Zurücksetzen auch für reine Google-Konten zu —
+  und legte dort stillschweigend ein Passwort an.
 
 Beide Wege lassen an dieselbe Adresse höchstens alle 30 Sekunden eine Mail zu.
 
@@ -57,11 +64,12 @@ Niemand bleibt vor der Tür stehen; die Mail sieht dann nur wieder nüchtern aus
 |---|---|
 | `netlify/functions/bestaetigung.mjs` | `POST /api/bestaetigung` — Token prüfen, Link erzeugen, Mail auslösen |
 | `netlify/functions/anmeldelink.mjs` | `POST /api/anmeldelink` — Adresse prüfen, Link erzeugen, Mail auslösen |
+| `netlify/functions/passwort.mjs` | `POST /api/passwort` — dasselbe für das Zurücksetzen |
 | `netlify/lib/mail.mjs` | Vorlagen (Logo, Farben, Text) und Versand über die Resend-API |
-| `netlify/lib/dienst.mjs` | Admin-SDK, einheitliche Antworten, die 30-Sekunden-Sperre |
+| `netlify/lib/dienst.mjs` | Admin-SDK, die Schranke, einheitliche Antworten, die 30-Sekunden-Sperre |
 | `src/zugang.ts` | Ruft die Schnittstellen auf, mit Rückfall auf Firebase |
 | `scripts/mailvorschau.mjs` | Vorschau im Browser und Testversand |
-| `scripts/mailtest.mjs` | 13 Prüfungen gegen die Emulator Suite (`npm run mailtest`) |
+| `scripts/mailtest.mjs` | 19 Prüfungen gegen die Emulator Suite (`npm run mailtest`) |
 
 ---
 
@@ -153,7 +161,7 @@ RESEND_API_KEY=re_… MAIL_ABSENDER='FMS Neufeld <besuchsmorgen@alae.app>' \
 Resend wird dabei abgefangen, es geht keine Post raus:
 
 ```bash
-npm run mailtest                # 13 Prüfungen, startet die Emulatoren selbst
+npm run mailtest                # 19 Prüfungen, startet die Emulatoren selbst
 ```
 
 Darin steckt auch die Schranke aus §1: eingeladen → Mail, nicht eingeladen → keine Mail,
@@ -168,6 +176,7 @@ beide Male dieselbe Antwort.
 4. Für den Anmeldelink: **Steuerung → Zugänge** → eine Adresse eintragen und
    «Anmeldelink schicken» ankreuzen — oder im Login **«Anmeldelink per E-Mail schicken»**
    mit einer bereits eingeladenen Adresse
+5. Für das Zurücksetzen: im Login die Adresse eintippen und **«Passwort vergessen?»**
 
 Kommt trotzdem die Firebase-Mail, hat der Rückfall gegriffen: In Netlify → **Logs** →
 **Functions** → `bestaetigung` steht die Ursache.
@@ -192,9 +201,9 @@ Kommt trotzdem die Firebase-Mail, hat der Rückfall gegriffen: In Netlify → **
 
 Alles steckt in `netlify/lib/mail.mjs`:
 
-- `bestaetigungsMail()` und `anmeldelinkMail()` — Betreff, Titel, der eine Satz,
-  Knopfbeschriftung, Kleingedrucktes
-- `geruest()` — Logo, Farben, Abstände; für beide Mails dasselbe. Die Farben sind dieselben
+- `bestaetigungsMail()`, `anmeldelinkMail()` und `passwortMail()` — Betreff, Titel, der
+  eine Satz, Knopfbeschriftung, Kleingedrucktes
+- `geruest()` — Logo, Farben, Abstände; für alle drei Mails dasselbe. Die Farben sind dieselben
   wie in `src/index.css`.
 
 Nach jeder Änderung `npm run mailvorschau` und die Datei im Browser ansehen.
@@ -210,8 +219,6 @@ zusammen.
 - **Die Adresse hinter dem Link** zeigt weiterhin auf `fmsbesuchstag.firebaseapp.com`.
   Eine eigene Adresse dafür verlangt, dass die App den Firebase-Aktionsablauf
   (`/__/auth/action`) selbst bedient — deutlich mehr Aufwand als Nutzen für vier Konten.
-- **Das Zurücksetzen des Passworts** läuft weiterhin über Firebase. Die App bietet es gar
-  nicht an; wer sein Passwort vergisst, nimmt den Anmeldelink.
 - **Gäste bekommen weiterhin keine Mail.** Das ist Absicht: Die App erhebt bewusst keine
   Personendaten (siehe [01-fachkonzept §7](01-fachkonzept.md)).
 
