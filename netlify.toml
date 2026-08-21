@@ -4,6 +4,17 @@
 
 [build.environment]
   NODE_VERSION = "22"
+  # Achtung, zwei verschiedene Node-Versionen: NODE_VERSION gilt nur für den Bau,
+  # die Funktionen laufen in einer eigenen Laufzeit. Sie muss hier ausdrücklich
+  # gesetzt werden, sonst nimmt Netlify eine ältere.
+  #
+  # Node 22 ist Pflicht, nicht Geschmackssache: firebase-admin verlangt `>=22`,
+  # und sein jwks-rsa verlangt `^20.19 || ^22.12 || >=23` — erst ab diesen
+  # Versionen darf CommonJS ein ES-Modul mit require() laden. Auf einer älteren
+  # Laufzeit stirbt die Funktion schon beim Laden mit
+  # «require() of ES Module …/jose/dist/webapi/index.js … not supported»,
+  # Netlify antwortet mit 502, und die App fällt auf die Firebase-Mail zurück.
+  AWS_LAMBDA_JS_RUNTIME = "nodejs22.x"
 
 # Serverseitiger Teil: zwei Funktionen, beide nur für den Mailversand —
 # die Bestätigungsmail und der Anmeldelink (netlify/functions/). Sie brauchen
