@@ -778,8 +778,14 @@ function Zugaenge({ melde, ich }: { melde: (t: string) => void; ich: User }) {
       if (linkSchicken) {
         // false: Die Adresse gehört nicht diesem Gerät — sie darf hier nicht gemerkt werden.
         try {
-          await anmeldelinkSenden(adresse, false);
-          melde(`${adresse} eingeladen — Anmeldelink verschickt.`);
+          const weg = await anmeldelinkSenden(adresse, false);
+          // Sagt offen, welcher Weg es war: Kommt der Link von Firebase statt in unserer
+          // Gestaltung, ist der eigene Versand gestört — das darf nicht unbemerkt bleiben.
+          melde(weg === 'eigen'
+            ? `${adresse} eingeladen — Anmeldelink verschickt.`
+            : `${adresse} eingeladen — Anmeldelink verschickt, aber über Firebase statt über `
+              + 'alae.app: Der eigene Versand hat nicht geantwortet. Grund in der '
+              + 'Browserkonsole und in Netlify → Logs → Functions.');
         } catch {
           melde(`${adresse} eingetragen. Der Anmeldelink liess sich nicht verschicken — `
             + 'die Person kann sich mit Google oder über «Anmeldelink per E-Mail schicken» anmelden.');
