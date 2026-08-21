@@ -87,13 +87,23 @@ const LINIE = '#DCDFD0';
 const SCHRIFT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
 /**
- * Gerüst für alle Mails dieser App: Logo, Titel, ein Satz, ein Knopf, Kleingedrucktes.
+ * Dasselbe Kleingedruckte in allen drei Mails — auch beim Zurücksetzen. Wer die
+ * Nachricht nicht angefordert hat, soll überall dieselbe Antwort finden.
+ */
+const KLEINGEDRUCKTES = 'Der Link gilt einmalig. Nicht angefordert? Dann diese Nachricht einfach löschen.';
+
+/**
+ * Gerüst für alle Mails dieser App: Logo, Titel, Knopf, Kleingedrucktes.
+ *
+ * Bewusst ohne erklärenden Satz zwischen Titel und Knopf: Der Titel sagt bereits, worum
+ * es geht, der Knopf sagt, was zu tun ist. `vorschau` ist die Zeile, die im Postfach
+ * neben dem Betreff steht — sie ist im Mail selbst unsichtbar und bleibt darum bestehen.
  *
  * Aufgebaut mit Tabellen und Attributen statt mit Flexbox — nicht aus Nostalgie,
  * sondern weil Outlook auf Windows bis heute mit der Word-Maschine rendert und
  * moderne Anordnung dort schlicht zusammenfällt.
  */
-function geruest({ titel, satz, knopfText, link, klein, vorschau }) {
+function geruest({ titel, knopfText, link, klein, vorschau }) {
   const url = sicher(link);
   return `<!doctype html>
 <html lang="de-CH">
@@ -122,11 +132,6 @@ function geruest({ titel, satz, knopfText, link, klein, vorschau }) {
           <tr>
             <td style="padding:26px 28px 0;font-family:${SCHRIFT};font-size:21px;line-height:1.3;font-weight:700;color:${SCHWARZ};">
               ${sicher(titel)}
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:10px 28px 0;font-family:${SCHRIFT};font-size:16px;line-height:1.5;color:${SCHWARZ};">
-              ${sicher(satz)}
             </td>
           </tr>
           <tr>
@@ -170,22 +175,20 @@ export function bestaetigungsMail(link) {
   const betreff = 'E-Mail bestätigen — Besuchsmorgen FMS Neufeld';
   const html = geruest({
     titel: 'E-Mail bestätigen',
-    satz: 'Ein Klick, dann ist dein Zugang zum Betreuungsbereich bereit.',
     knopfText: 'E-Mail bestätigen',
     link,
-    vorschau: 'Ein Klick, dann ist dein Zugang zum Betreuungsbereich bereit.',
+    vorschau: KLEINGEDRUCKTES,
     // Bewusst ohne den ausgeschriebenen Link: Er ist über 200 Zeichen lang und würde das
     // kurze Mail optisch beherrschen. Wer HTML abgeschaltet hat, sieht die Textfassung
     // unten — dort steht er.
-    klein: 'Der Link gilt einmalig. Nicht angefordert? Dann diese Nachricht einfach löschen.',
+    klein: KLEINGEDRUCKTES,
   });
   const text = [
     'E-Mail bestätigen',
     '',
-    'Ein Klick, dann ist dein Zugang zum Betreuungsbereich bereit:',
     link,
     '',
-    'Der Link gilt einmalig. Nicht angefordert? Dann diese Nachricht einfach löschen.',
+    KLEINGEDRUCKTES,
     '',
     'Besuchsmorgen FMS Neufeld',
   ].join('\n');
@@ -202,19 +205,17 @@ export function anmeldelinkMail(link) {
   const betreff = 'Anmelden — Besuchsmorgen FMS Neufeld';
   const html = geruest({
     titel: 'Anmelden',
-    satz: 'Ein Klick, und du bist im Betreuungsbereich angemeldet.',
     knopfText: 'Jetzt anmelden',
     link,
-    vorschau: 'Ein Klick, und du bist im Betreuungsbereich angemeldet.',
-    klein: 'Der Link gilt einmalig. Nicht angefordert? Dann diese Nachricht einfach löschen.',
+    vorschau: KLEINGEDRUCKTES,
+    klein: KLEINGEDRUCKTES,
   });
   const text = [
     'Anmelden',
     '',
-    'Ein Klick, und du bist im Betreuungsbereich angemeldet:',
     link,
     '',
-    'Der Link gilt einmalig. Nicht angefordert? Dann diese Nachricht einfach löschen.',
+    KLEINGEDRUCKTES,
     '',
     'Besuchsmorgen FMS Neufeld',
   ].join('\n');
@@ -229,21 +230,17 @@ export function passwortMail(link) {
   const betreff = 'Passwort zurücksetzen — Besuchsmorgen FMS Neufeld';
   const html = geruest({
     titel: 'Passwort zurücksetzen',
-    satz: 'Ein Klick, dann kannst du ein neues Passwort setzen.',
     knopfText: 'Neues Passwort setzen',
     link,
-    vorschau: 'Ein Klick, dann kannst du ein neues Passwort setzen.',
-    klein: 'Der Link gilt einmalig. Nicht angefordert? Dann diese Nachricht einfach löschen — '
-      + 'das Passwort bleibt unverändert.',
+    vorschau: KLEINGEDRUCKTES,
+    klein: KLEINGEDRUCKTES,
   });
   const text = [
     'Passwort zurücksetzen',
     '',
-    'Ein Klick, dann kannst du ein neues Passwort setzen:',
     link,
     '',
-    'Der Link gilt einmalig. Nicht angefordert? Dann diese Nachricht einfach löschen — '
-      + 'das Passwort bleibt unverändert.',
+    KLEINGEDRUCKTES,
     '',
     'Besuchsmorgen FMS Neufeld',
   ].join('\n');
