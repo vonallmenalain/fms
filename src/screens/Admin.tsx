@@ -20,6 +20,7 @@ import {
   ROLLEN_TEXT, anmeldelinkSenden, bestaetigungPruefen, bestaetigungSenden, gemerkteMail,
   kontoEntfernen, kontoErstellen, kontoRolleSetzen, linkAnmeldung, mailSchluessel,
   mitLinkAnmelden, passwortZuruecksetzen, zugangEntfernen, zugangKlaeren, zugangSetzen,
+  type MailErgebnis,
   type Konto, type Rolle, type Zugang,
 } from '../zugang';
 
@@ -425,6 +426,27 @@ function MailBestaetigen(
   );
 }
 
+/** Was aus dem Anmeldelink geworden ist — im Klartext für die Administration. */
+function mailStandText(adresse: string, post: MailErgebnis): string {
+  if (post.weg === 'firebase') {
+    return 'Anmeldelink verschickt, aber über Firebase statt über alae.app: Der eigene '
+      + `Versand hat nicht geantwortet.${post.grund ? ` ${post.grund}` : ''} Mehr steht in der `
+      + 'Browserkonsole und in Netlify → Logs → Functions.';
+  }
+  switch (post.stand) {
+    case 'gesendet':
+      return `Anmeldelink an ${adresse} verschickt.`;
+    case 'nicht-eingeladen':
+      return 'aber kein Anmeldelink verschickt — der Server findet die Adresse weder unter '
+        + 'den Zugängen noch unter den Konten. Bitte die Schreibweise prüfen.';
+    case 'gesperrt':
+      return 'aber kein zweiter Anmeldelink verschickt: An diese Adresse ging vor weniger '
+        + 'als 30 Sekunden schon einer. Der erste gilt.';
+    default:
+      return 'Anmeldelink verschickt.';
+  }
+}
+
 /* ------------------------------------------------------------------ Übersicht */
 
 function Uebersicht() {
@@ -778,14 +800,10 @@ function Zugaenge({ melde, ich }: { melde: (t: string) => void; ich: User }) {
       if (linkSchicken) {
         // false: Die Adresse gehört nicht diesem Gerät — sie darf hier nicht gemerkt werden.
         try {
-          const weg = await anmeldelinkSenden(adresse, false);
-          // Sagt offen, welcher Weg es war: Kommt der Link von Firebase statt in unserer
-          // Gestaltung, ist der eigene Versand gestört — das darf nicht unbemerkt bleiben.
-          melde(weg === 'eigen'
-            ? `${adresse} eingeladen — Anmeldelink verschickt.`
-            : `${adresse} eingeladen — Anmeldelink verschickt, aber über Firebase statt über `
-              + 'alae.app: Der eigene Versand hat nicht geantwortet. Grund in der '
-              + 'Browserkonsole und in Netlify → Logs → Functions.');
+          // true: als Administration — der Server darf ehrlich antworten, sonst wäre ein
+          // ausbleibendes Mail nicht von einem stillen «nicht eingeladen» zu unterscheiden.
+          const post = await anmeldelinkSenden(adresse, false, true);
+          melde(`${adresse} eingeladen — ${mailStandText(adresse, post)}`);
         } catch {
           melde(`${adresse} eingetragen. Der Anmeldelink liess sich nicht verschicken — `
             + 'die Person kann sich mit Google oder über «Anmeldelink per E-Mail schicken» anmelden.');

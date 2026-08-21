@@ -96,6 +96,29 @@ export const mailSchluessel = (mail) => String(mail).trim().toLowerCase();
  * Die Aufrufer antworten in beiden Fällen gleich — sonst liesse sich
  * durchprobieren, wer an der Schule Zugang hat.
  */
+/**
+ * Steht hinter diesem Aufruf eine angemeldete Administration?
+ *
+ * Nur dann darf die Antwort ehrlich sein. Für alle anderen bleibt sie neutral —
+ * sonst liesse sich über die Schnittstelle durchprobieren, wer an der Schule
+ * Zugang hat. Wer schon in `admins` steht, weiss das ohnehin.
+ *
+ * Liefert das geprüfte Konto oder `null`; ein ungültiges Token ist kein Fehler,
+ * sondern schlicht «keine Administration».
+ */
+export async function istAdministration(idToken) {
+  if (typeof idToken !== 'string' || !idToken) return null;
+  const auth = adminAuth();                       // EinrichtungsFehler darf hoch
+  try {
+    const konto = await auth.verifyIdToken(idToken);
+    const eintrag = await adminDb().collection('admins').doc(konto.uid).get();
+    if (!eintrag.exists || eintrag.data()?.rolle !== 'admin') return null;
+    return { uid: konto.uid, email: konto.email ?? null };
+  } catch {
+    return null;
+  }
+}
+
 export async function darfPostBekommen(adresse) {
   const db = adminDb();
 
