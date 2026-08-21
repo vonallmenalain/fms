@@ -11,3 +11,6 @@ dist
 tsconfig.tsbuildinfo
 *-debug.log
 .firebase
+
+# Vorschau der Bestätigungsmail (npm run mailvorschau)
+mailvorschau.html

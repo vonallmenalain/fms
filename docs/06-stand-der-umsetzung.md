@@ -74,6 +74,7 @@ VITE_EMULATOR=1 npm run dev                                    # Terminal 2
 | `node scripts/lasttest.mjs --clients 200 --produktion` | Lasttest gegen die **echte** Datenbank. `--produktion` ist Pflicht, sonst bricht das Skript ab; danach zwingend `reset` |
 | `npm run andrangtest` | 21 Prüfungen: Überbuchung und Angriffe eines manipulierten Clients |
 | `npm run regeltest` | 36 Prüfungen der Security Rules, startet den Emulator selbst |
+| `npm run mailvorschau` | Bestätigungsmail als `mailvorschau.html` ansehen; mit `-- adresse@example.ch` zusätzlich echter Testversand ([docs/08](08-bestaetigungsmail.md)) |
 
 Für die Skripte gegen die Produktion braucht es `GOOGLE_APPLICATION_CREDENTIALS`.
 Ohne Schlüssel lokal: dieselben Aktionen laufen über die **GitHub-Action «Firebase»**

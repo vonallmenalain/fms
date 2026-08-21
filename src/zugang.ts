@@ -128,9 +128,44 @@ export async function kontoErstellen(mail: string, passwort: string): Promise<vo
   await bestaetigungSenden(user);
 }
 
-/** Bestätigungsmail (nochmals) verschicken. Firebase verschickt sie selbst. */
-export function bestaetigungSenden(u: User): Promise<void> {
-  return sendEmailVerification(u, { url: `${window.location.origin}/admin` });
+/**
+ * Bestätigungsmail (nochmals) verschicken.
+ *
+ * Erste Wahl ist die eigene Mail: `netlify/functions/bestaetigung.mjs` lässt sich
+ * denselben Einmal-Link von Firebase geben und verschickt ihn in der Gestaltung der
+ * App von unserer eigenen Domain (siehe docs/08-bestaetigungsmail.md).
+ *
+ * Klappt das nicht — Schlüssel fehlt, Resend gestört, oder es läuft gerade der
+ * Entwicklungsserver ohne Funktionen —, verschickt Firebase die Mail wie bisher
+ * selbst. Sie sieht dann nüchtern aus, aber niemand bleibt vor der Tür stehen.
+ */
+export async function bestaetigungSenden(u: User): Promise<void> {
+  if (await eigeneBestaetigungSenden(u)) return;
+  await sendEmailVerification(u, { url: `${window.location.origin}/admin` });
+}
+
+/** `true`, sobald der Versand über die eigene Schnittstelle feststeht. */
+async function eigeneBestaetigungSenden(u: User): Promise<boolean> {
+  try {
+    const antwort = await fetch('/api/bestaetigung', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken: await u.getIdToken() }),
+    });
+
+    // Zu schnell hintereinander: Die vorige Mail ist eben erst rausgegangen —
+    // ein Rückfall auf Firebase würde jetzt nur eine zweite Mail erzeugen.
+    if (antwort.status === 429) return true;
+    if (!antwort.ok) return false;
+
+    // Ohne Funktionen (npm run dev) beantwortet der Entwicklungsserver den Aufruf
+    // mit der Startseite — Status 200, aber HTML. Erst die Marke im Rumpf beweist,
+    // dass wirklich die Funktion geantwortet hat.
+    const daten = (await antwort.json()) as { stand?: string };
+    return daten.stand === 'gesendet' || daten.stand === 'schon-bestaetigt';
+  } catch {
+    return false;
+  }
 }
 
 /**

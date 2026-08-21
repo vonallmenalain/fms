@@ -5,6 +5,26 @@
 [build.environment]
   NODE_VERSION = "22"
 
+# Serverseitiger Teil: bislang genau eine Funktion — der Versand der eigenen
+# Bestätigungsmail (netlify/functions/bestaetigung.mjs). Sie braucht einen
+# Server, weil weder der Resend-Schlüssel noch der Firebase-Dienstschlüssel
+# jemals ins Browser-Bündel gelangen dürfen.
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  # Das Admin-SDK bringt eigene Binärteile und optionale Abhängigkeiten mit,
+  # die esbuild nicht einpacken kann; extern eingebunden nimmt Netlify es
+  # unverändert aus node_modules mit.
+  external_node_modules = ["firebase-admin"]
+
+# Die Funktion meldet ihren Pfad zwar selbst (config.path), die Regel hier
+# steht aber VOR dem Auffangnetz für die Einzelseiten-App — ohne sie
+# beantwortet /index.html den Aufruf und die Mail ginge stillschweigend nicht raus.
+[[redirects]]
+  from = "/api/bestaetigung"
+  to = "/.netlify/functions/bestaetigung"
+  status = 200
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

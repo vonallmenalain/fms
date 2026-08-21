@@ -23,6 +23,7 @@ ohne Handy selbst eintragen.
 |---|---|
 | **Frontend + Hosting** | Vite + React + TypeScript auf **Netlify** — Gratis-Tier |
 | **Backend** | **Firebase Firestore** + Firebase Auth (anonym für Gäste, E-Mail für Organisierende) — **Blaze-Tarif**, keine Cloud Functions |
+| **Serverkode** | eine einzige Netlify-Funktion, ausserhalb des Gast-Ablaufs: der Versand der Bestätigungsmail ([docs/08](docs/08-bestaetigungsmail.md)) |
 | **Domain** | `fms.alae.app` |
 | **Kosten** | **< CHF 1 für den ganzen Anlass** ([Rechnung](docs/05-last-und-performance.md)) |
 | **Aufwand** | **27–29 h**, verteilt auf 8 Phasen |
@@ -41,6 +42,7 @@ ohne Handy selbst eintragen.
 | **[data/programm.json](data/programm.json)** | Das vollständige Programm: 14 Atelier- und 24 Lektionsangebote mit Fach, Klasse, Zimmer, Lehrperson, Kapazität — aus der Programm-PPT übernommen |
 | **[docs/06-stand-der-umsetzung.md](docs/06-stand-der-umsetzung.md)** | **Was gebaut ist**, lokal starten, Skripte, GitHub-Actions, bewusste Abweichungen vom Konzept, Messwerte |
 | **[docs/07-pruefbericht.md](docs/07-pruefbericht.md)** | **Prüfbericht vor der ersten Vorführung:** Stresstest mit 150 Geräten, Browsertest, gefundene Schwachstellen, **ToDo-Listen** und ein Drehbuch für die Vorführung |
+| **[docs/08-bestaetigungsmail.md](docs/08-bestaetigungsmail.md)** | **Eigene Bestätigungsmail statt der von Firebase:** wie sie funktioniert, Einrichtung in Resend/Netlify Schritt für Schritt, Vorschau und Testversand, Fehlersuche |
 | **[docs/snippets/](docs/snippets/)** | Entwurfsfassungen aus der Konzeptphase — verbindlich ist der Kode im Repo |
 
 ## Schnellstart
@@ -91,6 +93,11 @@ funktionieren nur Adressen, die hier schon eine Rolle erhalten haben; alle ander
 auf «Kein Zugang». Ein Konto mit Passwort muss zusätzlich seine Adresse bestätigen (die
 Mail kommt sofort) — die Datenbank verlangt das, damit niemand ein Konto auf eine fremde,
 eingeladene Adresse anlegen kann.
+
+Diese **Bestätigungsmail verschickt die App selbst**: eigene Gestaltung mit FMS-Logo,
+Absender auf `alae.app`, Zustellung über Resend. Geprüft wird die Adresse weiterhin von
+Firebase — umgestellt sind nur Aussehen und Absender. Einrichtung, Vorschau und
+Fehlersuche: **[docs/08-bestaetigungsmail.md](docs/08-bestaetigungsmail.md)**.
 
 > Damit der Anmeldelink verschickt werden kann, muss in der Firebase-Konsole unter
 > Authentication → Sign-in method bei «E-Mail-Adresse/Passwort» auch **E-Mail-Link
