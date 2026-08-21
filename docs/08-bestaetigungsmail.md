@@ -185,9 +185,63 @@ Kommt trotzdem die Firebase-Mail, hat der Rückfall gegriffen: In Netlify → **
 
 ## 4 · Wenn etwas klemmt
 
+### 4.1 Kommt weiterhin die Firebase-Mail — in drei Schritten eingrenzen
+
+Eine Firebase-Mail **beweist**, dass der Aufruf der eigenen Schnittstelle fehlgeschlagen
+ist: Hätte die Funktion geantwortet, gäbe es gar keinen Rückfall — auch dann nicht, wenn
+sie bewusst nichts verschickt (nicht eingeladene Adresse). Die Suche gilt also nie der
+Adresse, sondern immer dem Aufruf.
+
+**Schritt 0 — Browserkonsole.** Seit dem Umbau schreibt die App den Grund selbst hinein:
+`[mail] /api/anmeldelink hat nicht übernommen (HTTP …)`. Das benennt bereits die Klasse
+des Fehlers. Beim Einladen sagt es zusätzlich die Meldung im Bildschirm.
+
+**Schritt 1 — antwortet die Funktion überhaupt?** Der Aufruf verschickt nichts, weil die
+Adresse nicht eingeladen ist:
+
+```bash
+curl -i -X POST https://fms.alae.app/api/anmeldelink \
+  -H 'Content-Type: application/json' -d '{"mail":"niemand@example.com"}'
+```
+
+| Antwort | Bedeutung |
+|---|---|
+| `200` + `{"stand":"erledigt"}` | Funktion läuft, Dienstkonto und Datenbank sind in Ordnung → weiter mit Schritt 2 |
+| `503` | `FIREBASE_SERVICE_ACCOUNT` fehlt oder ist ungültig (§2.3/2.4) |
+| HTML statt JSON, `404` | Funktion nicht veröffentlicht oder `/api/*` greift nicht (§2.5, `netlify.toml`) |
+
+**Schritt 2 — nimmt Resend die Mail an?** Jetzt mit der Adresse, die eingeladen ist. Bei
+Erfolg geht wirklich eine Mail raus (Sperre: höchstens alle 30 Sekunden eine):
+
+```bash
+curl -i -X POST https://fms.alae.app/api/anmeldelink \
+  -H 'Content-Type: application/json' -d '{"mail":"eingeladene@adresse.ch"}'
+```
+
+`502` heisst: Resend hat abgelehnt. **Den Wortlaut nennt nur das Protokoll** — Netlify →
+Site `fms` → **Logs** → **Functions** → `anmeldelink`, Zeile `[anmeldelink] Versand
+fehlgeschlagen: Resend hat abgelehnt (HTTP …)`.
+
+**Schritt 3 — Resend allein prüfen**, ohne Netlify und ohne Firebase dazwischen:
+
+```bash
+RESEND_API_KEY=re_… MAIL_ABSENDER='FMS Neufeld <besuchsmorgen@alae.app>' \
+  npm run mailvorschau -- deine@adresse.ch
+```
+
+Scheitert schon das, liegt es am Schlüssel, an der Absenderadresse oder an der Domain —
+und nicht an dieser App.
+
+> **Der häufigste Fall zuerst:** Umgebungsvariablen wirken in den Funktionen erst mit
+> einer neuen Veröffentlichung. Wer sie nach dem letzten Deploy gesetzt hat, muss einmal
+> **Deploys → Trigger deploy → Clear cache and deploy site** auslösen — sonst läuft dort
+> weiterhin der Stand ohne Schlüssel.
+
 | Beobachtung | Ursache | Abhilfe |
 |---|---|---|
-| Firebase-Mail statt der eigenen | Funktion antwortete nicht mit `gesendet` | Netlify-Funktionsprotokoll lesen |
+| Firebase-Mail statt der eigenen | Funktion antwortete nicht mit `gesendet` | Schritt 0–3 oben |
+| Im Funktionsprotokoll steht gar nichts | Der Aufruf hat die Funktion nie erreicht | `netlify.toml` und Deploy prüfen (§2.5) |
+| Log: `Resend hat abgelehnt (HTTP 401)` | Schlüssel falsch, abgelaufen oder aus einem anderen Resend-Konto | neuen Schlüssel erstellen (§2.2) |
 | Log: `Einrichtung unvollständig` | `FIREBASE_SERVICE_ACCOUNT` fehlt oder ist kein gültiges JSON | 2.3/2.4 wiederholen, danach neu deployen |
 | Log: `Resend hat abgelehnt (HTTP 403)` | Absenderdomain im Schlüssel nicht erlaubt | Schlüssel mit Domain `alae.app` neu erstellen |
 | Log: `Resend hat abgelehnt (HTTP 422)` | `MAIL_ABSENDER` passt nicht zur verifizierten Domain | Adresse auf `…@alae.app` ändern |

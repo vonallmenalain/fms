@@ -139,10 +139,44 @@ export async function kontoErstellen(mail: string, passwort: string): Promise<vo
  * Entwicklungsserver ohne Funktionen —, verschickt Firebase die Mail wie bisher
  * selbst. Sie sieht dann nüchtern aus, aber niemand bleibt vor der Tür stehen.
  */
-export async function bestaetigungSenden(u: User): Promise<void> {
+export async function bestaetigungSenden(u: User): Promise<MailWeg> {
   const idToken = await u.getIdToken();
-  if (await mailSchnittstelle('/api/bestaetigung', { idToken }, ['gesendet', 'schon-bestaetigt'])) return;
+  if (await mailSchnittstelle('/api/bestaetigung', { idToken }, ['gesendet', 'schon-bestaetigt'])) return 'eigen';
   await sendEmailVerification(u, { url: `${window.location.origin}/admin` });
+  return 'firebase';
+}
+
+/**
+ * Welcher Weg hat die Mail verschickt?
+ *
+ * `eigen` — unsere Gestaltung, Absender auf `alae.app`, verschickt über Resend.
+ * `firebase` — der Rückfall: Firebase verschickt selbst, nüchtern und von
+ *   `noreply@fmsbesuchstag.firebaseapp.com`.
+ *
+ * Der Rückfall ist Absicht (niemand soll vor der Tür stehen bleiben), aber er darf nicht
+ * stillschweigend geschehen: Sonst sieht eine unvollständige Einrichtung genau gleich aus
+ * wie der Normalfall — man wartet auf die schöne Mail und bekommt immer die von Firebase.
+ */
+export type MailWeg = 'eigen' | 'firebase';
+
+/** Was die Schnittstelle beim Scheitern in die Browserkonsole schreibt. */
+function rueckfallGrund(status: number, rumpf: string): string {
+  if (status === 503) {
+    return 'Auf dem Server fehlt ein Schlüssel (RESEND_API_KEY, MAIL_ABSENDER oder '
+      + 'FIREBASE_SERVICE_ACCOUNT). Netlify → Site configuration → Environment variables, '
+      + 'danach Deploys → Trigger deploy.';
+  }
+  if (status === 502) {
+    return 'Der Server hat die Mail nicht loswerden können — meist lehnt Resend ab '
+      + '(Domain nicht verifiziert, Schlüssel ungültig, Absender passt nicht zur Domain). '
+      + 'Den genauen Grund nennt Netlify → Logs → Functions.';
+  }
+  if (status === 404 || rumpf.startsWith('<')) {
+    return 'Die Funktion ist unter diesem Pfad nicht erreichbar — läuft hier der '
+      + 'Entwicklungsserver (npm run dev) statt netlify dev, oder fehlt der /api/*-Umweg '
+      + 'in netlify.toml?';
+  }
+  return 'Unerwartete Antwort der Schnittstelle.';
 }
 
 /**
@@ -151,26 +185,39 @@ export async function bestaetigungSenden(u: User): Promise<void> {
  * Firebase weder nötig noch erwünscht.
  */
 async function mailSchnittstelle(pfad: string, rumpf: object, erledigt: string[]): Promise<boolean> {
+  const gescheitert = (status: number, text: string) => {
+    console.warn(`[mail] ${pfad} hat nicht übernommen (HTTP ${status || 0}) — die Mail geht `
+      + `darum über Firebase.\n${rueckfallGrund(status, text)}\nAntwort: ${text.slice(0, 200)}`);
+    return false;
+  };
+
+  let antwort: Response;
   try {
-    const antwort = await fetch(pfad, {
+    antwort = await fetch(pfad, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(rumpf),
     });
-
-    // Zu schnell hintereinander: Die vorige Mail ist eben erst rausgegangen —
-    // ein Rückfall auf Firebase würde jetzt nur eine zweite Mail erzeugen.
-    if (antwort.status === 429) return true;
-    if (!antwort.ok) return false;
-
-    // Ohne Funktionen (npm run dev) beantwortet der Entwicklungsserver den Aufruf
-    // mit der Startseite — Status 200, aber HTML. Erst die Marke im Rumpf beweist,
-    // dass wirklich die Funktion geantwortet hat.
-    const daten = (await antwort.json()) as { stand?: string };
-    return erledigt.includes(daten.stand ?? '');
-  } catch {
+  } catch (fehler) {
+    console.warn(`[mail] ${pfad} war nicht erreichbar — die Mail geht über Firebase.`, fehler);
     return false;
   }
+
+  // Zu schnell hintereinander: Die vorige Mail ist eben erst rausgegangen —
+  // ein Rückfall auf Firebase würde jetzt nur eine zweite Mail erzeugen.
+  if (antwort.status === 429) return true;
+
+  const text = await antwort.text().catch(() => '');
+  if (!antwort.ok) return gescheitert(antwort.status, text);
+
+  // Ohne Funktionen (npm run dev) beantwortet der Entwicklungsserver den Aufruf
+  // mit der Startseite — Status 200, aber HTML. Erst die Marke im Rumpf beweist,
+  // dass wirklich die Funktion geantwortet hat.
+  try {
+    const daten = JSON.parse(text) as { stand?: string };
+    if (erledigt.includes(daten.stand ?? '')) return true;
+  } catch { /* kein JSON — unten als Fehlschlag behandelt */ }
+  return gescheitert(antwort.status, text);
 }
 
 /**
@@ -207,16 +254,17 @@ const MAIL_MERKER = 'fms-anmeldemail';
  * → «E-Mail-Adresse/Passwort» mit **E-Mail-Link (passwortloses Anmelden)** aktiviert, und
  * die Domain unter Authentication → Settings → Authorized domains eingetragen.
  */
-export async function anmeldelinkSenden(mail: string, aufDiesemGeraet: boolean): Promise<void> {
+export async function anmeldelinkSenden(mail: string, aufDiesemGeraet: boolean): Promise<MailWeg> {
   const adresse = mailSchluessel(mail);
   if (aufDiesemGeraet) window.localStorage.setItem(MAIL_MERKER, adresse);
 
-  if (await mailSchnittstelle('/api/anmeldelink', { mail: adresse }, ['erledigt'])) return;
+  if (await mailSchnittstelle('/api/anmeldelink', { mail: adresse }, ['erledigt'])) return 'eigen';
 
   await sendSignInLinkToEmail(auth, adresse, {
     url: `${window.location.origin}/admin`,
     handleCodeInApp: true,
   });
+  return 'firebase';
 }
 
 /** Wurde diese Seite über einen Anmeldelink geöffnet? */
@@ -246,9 +294,9 @@ export async function mitLinkAnmelden(mail: string): Promise<void> {
  * Das Passwort selbst wird auf der Firebase-Seite hinter dem Link neu gesetzt; wir
  * gestalten nur die Mail.
  */
-export async function passwortZuruecksetzen(mail: string): Promise<void> {
+export async function passwortZuruecksetzen(mail: string): Promise<MailWeg> {
   const adresse = mailSchluessel(mail);
-  if (await mailSchnittstelle('/api/passwort', { mail: adresse }, ['erledigt'])) return;
+  if (await mailSchnittstelle('/api/passwort', { mail: adresse }, ['erledigt'])) return 'eigen';
 
   try {
     await sendPasswordResetEmail(auth, adresse, { url: `${window.location.origin}/admin` });
@@ -257,4 +305,5 @@ export async function passwortZuruecksetzen(mail: string): Promise<void> {
     // (etwa eine unsinnige Adresse) darf der Bildschirm ruhig melden.
     if ((fehler as { code?: string })?.code !== 'auth/user-not-found') throw fehler;
   }
+  return 'firebase';
 }
