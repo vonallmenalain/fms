@@ -191,3 +191,32 @@ export function bestaetigungsMail(link) {
   ].join('\n');
   return { betreff, html, text };
 }
+
+/**
+ * Der Anmeldelink — der Weg in den Betreuungsbereich ohne Passwort.
+ *
+ * Wieder ist `link` der von Firebase erzeugte Einmal-Link (siehe
+ * anmeldelink.mjs). Er wird in der App eingelöst, nicht auf einer Firebase-Seite.
+ */
+export function anmeldelinkMail(link) {
+  const betreff = 'Anmelden — Besuchsmorgen FMS Neufeld';
+  const html = geruest({
+    titel: 'Anmelden',
+    satz: 'Ein Klick, und du bist im Betreuungsbereich angemeldet.',
+    knopfText: 'Jetzt anmelden',
+    link,
+    vorschau: 'Ein Klick, und du bist im Betreuungsbereich angemeldet.',
+    klein: 'Der Link gilt einmalig. Nicht angefordert? Dann diese Nachricht einfach löschen.',
+  });
+  const text = [
+    'Anmelden',
+    '',
+    'Ein Klick, und du bist im Betreuungsbereich angemeldet:',
+    link,
+    '',
+    'Der Link gilt einmalig. Nicht angefordert? Dann diese Nachricht einfach löschen.',
+    '',
+    'Besuchsmorgen FMS Neufeld',
+  ].join('\n');
+  return { betreff, html, text };
+}

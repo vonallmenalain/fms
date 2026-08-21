@@ -279,11 +279,13 @@ function Anmelden({ onRaus }: { onRaus: () => void }) {
 
         <p className="mini">Oder ohne Passwort:</p>
 
-        {/* Ohne Passwort: Firebase schickt einen Einmal-Link an die Adresse. */}
+        {/* Ohne Passwort: ein Einmal-Link an die Adresse — verschickt wird er nur an
+            eingeladene oder bereits freigeschaltete Adressen, und die Meldung sagt
+            bewusst nicht, welcher Fall vorlag (siehe anmeldelinkSenden). */}
         {linkGesendet ? (
           <div className="hinweis">
-            <b>Anmeldelink verschickt.</b> Bitte das Postfach von {mail} prüfen (auch den Spam-Ordner)
-            und den Link auf diesem Gerät öffnen.
+            <b>Bitte das Postfach prüfen.</b> Ist {mail} für den Betreuungsbereich freigeschaltet,
+            liegt der Anmeldelink dort (auch im Spam-Ordner nachsehen). Bitte auf diesem Gerät öffnen.
           </div>
         ) : (
           <button className="knopf knopf--rand knopf--breit" disabled={laeuft || !mail}

@@ -188,17 +188,49 @@ export async function bestaetigungPruefen(): Promise<boolean> {
 const MAIL_MERKER = 'fms-anmeldemail';
 
 /**
- * Firebase verschickt den Anmeldelink selbst — kein Mailserver, keine Cloud Function.
- * Voraussetzung in der Firebase-Konsole: Authentication → Sign-in method →
- * «E-Mail-Adresse/Passwort» mit **E-Mail-Link (passwortloses Anmelden)** aktiviert,
- * und die Domain unter Authentication → Settings → Authorized domains eingetragen.
+ * Anmeldelink verschicken — wie die Bestätigungsmail zuerst über die eigene
+ * Schnittstelle (`netlify/functions/anmeldelink.mjs`), sonst über Firebase.
+ *
+ * Ein Unterschied zur Bestätigungsmail: Unsere Schnittstelle schickt den Link nur an
+ * Adressen, die eingeladen oder bereits freigeschaltet sind — sonst wäre sie ein offenes
+ * Tor, um von unserer Domain aus beliebige Leute anzuschreiben. Sie sagt bewusst nicht,
+ * welcher Fall vorlag, damit sich nicht durchprobieren lässt, wer Zugang hat. Für die
+ * Person am Bildschirm ändert das nichts: Ein Link an eine nicht eingeladene Adresse
+ * führte ohnehin nur auf «Kein Zugang».
+ *
+ * Voraussetzung in der Firebase-Konsole (für beide Wege): Authentication → Sign-in method
+ * → «E-Mail-Adresse/Passwort» mit **E-Mail-Link (passwortloses Anmelden)** aktiviert, und
+ * die Domain unter Authentication → Settings → Authorized domains eingetragen.
  */
-export function anmeldelinkSenden(mail: string, aufDiesemGeraet: boolean): Promise<void> {
-  if (aufDiesemGeraet) window.localStorage.setItem(MAIL_MERKER, mailSchluessel(mail));
-  return sendSignInLinkToEmail(auth, mailSchluessel(mail), {
+export async function anmeldelinkSenden(mail: string, aufDiesemGeraet: boolean): Promise<void> {
+  const adresse = mailSchluessel(mail);
+  if (aufDiesemGeraet) window.localStorage.setItem(MAIL_MERKER, adresse);
+
+  if (await eigenenAnmeldelinkSenden(adresse)) return;
+
+  await sendSignInLinkToEmail(auth, adresse, {
     url: `${window.location.origin}/admin`,
     handleCodeInApp: true,
   });
+}
+
+/** `true`, sobald die eigene Schnittstelle den Fall erledigt hat — verschickt oder nicht. */
+async function eigenenAnmeldelinkSenden(adresse: string): Promise<boolean> {
+  try {
+    const antwort = await fetch('/api/anmeldelink', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mail: adresse }),
+    });
+    if (!antwort.ok) return false;
+    // Ohne Funktionen (npm run dev) beantwortet der Entwicklungsserver den Aufruf mit
+    // der Startseite — Status 200, aber HTML. Erst die Marke im Rumpf beweist, dass
+    // wirklich die Funktion geantwortet hat.
+    const daten = (await antwort.json()) as { stand?: string };
+    return daten.stand === 'erledigt';
+  } catch {
+    return false;
+  }
 }
 
 /** Wurde diese Seite über einen Anmeldelink geöffnet? */

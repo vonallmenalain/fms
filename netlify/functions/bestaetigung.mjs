@@ -20,42 +20,8 @@
    nur die Verpackung und den Briefträger aus.
    ========================================================================= */
 
-import { cert, getApps, initializeApp } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import { bestaetigungsMail, MailFehler, sendeMail, seitenUrl } from '../lib/mail.mjs';
-
-/** Zwischen zwei Mails an dasselbe Konto. Der Knopf im Bildschirm sperrt schon,
- *  das hier fängt den Fall ab, dass jemand die Schnittstelle direkt bedient.
- *  Bewusst nur im Arbeitsspeicher: Netlify hält eine Instanz einige Minuten
- *  warm, das genügt für den Zweck; ein kalter Start setzt zurück. Eine echte
- *  Sperre liegt ohnehin bei Firebase (Kontingent für Bestätigungslinks). */
-const SPERRE_MS = 30_000;
-const zuletzt = new Map();
-
-let bereit = false;
-
-/**
- * Admin-SDK einrichten. Die Zugangsdaten stehen in der Netlify-Umgebung als
- * FIREBASE_SERVICE_ACCOUNT (der JSON-Inhalt der Schlüsseldatei, einzeilig).
- * Ohne sie kann die Funktion nichts tun — dann bleibt der Rückfall im Browser.
- */
-function firebaseBereit() {
-  if (bereit || getApps().length) { bereit = true; return; }
-  const roh = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!roh) throw new Error('FIREBASE_SERVICE_ACCOUNT ist nicht gesetzt');
-  const konto = JSON.parse(roh);
-  // In den meisten Oberflächen für Umgebungsvariablen überleben echte
-  // Zeilenumbrüche im Schlüssel nicht — dann stehen dort \n als zwei Zeichen.
-  if (typeof konto.private_key === 'string') konto.private_key = konto.private_key.replace(/\\n/g, '\n');
-  initializeApp({ credential: cert(konto) });
-  bereit = true;
-}
-
-const antwort = (status, daten) =>
-  new Response(JSON.stringify(daten), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
-  });
+import { adminAuth, antwort, EinrichtungsFehler, sperreLoesen, zuSchnell } from '../lib/dienst.mjs';
+import { bestaetigungsMail, sendeMail, seitenUrl } from '../lib/mail.mjs';
 
 export default async function handler(anfrage) {
   if (anfrage.method !== 'POST') return antwort(405, { fehler: 'Nur POST' });
@@ -68,15 +34,16 @@ export default async function handler(anfrage) {
   }
   if (typeof idToken !== 'string' || !idToken) return antwort(400, { fehler: 'idToken fehlt' });
 
+  let auth;
   let konto;
   try {
-    firebaseBereit();
-    konto = await getAuth().verifyIdToken(idToken);
+    auth = adminAuth();
+    konto = await auth.verifyIdToken(idToken);
   } catch (fehler) {
     // Zwischen «Server falsch eingerichtet» und «Token ungültig» unterscheiden:
     // Ersteres soll in den Netlify-Protokollen auffallen, Letzteres nicht.
-    if (!bereit) {
-      console.error('[bestaetigung] Einrichtung unvollständig:', fehler);
+    if (fehler instanceof EinrichtungsFehler) {
+      console.error('[bestaetigung] Einrichtung unvollständig:', fehler.message);
       return antwort(503, { fehler: 'Mailversand ist nicht eingerichtet' });
     }
     return antwort(401, { fehler: 'Anmeldung nicht gültig' });
@@ -86,28 +53,21 @@ export default async function handler(anfrage) {
   // Schon bestätigt: kein Grund für eine weitere Mail — und kein Fehler.
   if (konto.email_verified) return antwort(200, { stand: 'schon-bestaetigt' });
 
-  const jetzt = Date.now();
-  const letzte = zuletzt.get(konto.uid) ?? 0;
-  if (jetzt - letzte < SPERRE_MS) {
-    return antwort(429, { fehler: 'Bitte einen Moment warten', stand: 'zu-schnell' });
-  }
-  zuletzt.set(konto.uid, jetzt);
+  const schluessel = `bestaetigung:${konto.uid}`;
+  if (zuSchnell(schluessel)) return antwort(429, { fehler: 'Bitte einen Moment warten', stand: 'zu-schnell' });
 
   try {
     // Derselbe Link, den Firebase sonst selbst verschickt hätte. `url` ist die
     // Seite, auf der die Person nach dem Bestätigen landet — sie muss in der
     // Firebase-Konsole unter Authentication → Settings → Authorized domains stehen.
-    const link = await getAuth().generateEmailVerificationLink(konto.email, {
-      url: `${seitenUrl()}/admin`,
-    });
+    const link = await auth.generateEmailVerificationLink(konto.email, { url: `${seitenUrl()}/admin` });
     const { betreff, html, text } = bestaetigungsMail(link);
     await sendeMail({ an: konto.email, betreff, html, text });
     return antwort(200, { stand: 'gesendet' });
   } catch (fehler) {
-    zuletzt.delete(konto.uid);           // nicht zugestellt, also auch nicht sperren
+    sperreLoesen(schluessel);
     console.error('[bestaetigung] Versand fehlgeschlagen:', fehler);
-    const grund = fehler instanceof MailFehler ? 'mail' : 'link';
-    return antwort(502, { fehler: 'Die E-Mail konnte nicht verschickt werden', stand: grund });
+    return antwort(502, { fehler: 'Die E-Mail konnte nicht verschickt werden' });
   }
 }
 

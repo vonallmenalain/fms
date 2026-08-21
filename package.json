@@ -14,6 +14,7 @@
     "pruefe": "node scripts/pruefe.mjs",
     "andrangtest": "node scripts/andrangtest.mjs",
     "regeltest": "npx --yes firebase-tools@^14 emulators:exec --only firestore --project fms-regeltest \"node scripts/regeltest.mjs\"",
+    "mailtest": "npx --yes firebase-tools@^14 emulators:exec --only auth,firestore --project fms-mailtest \"node scripts/mailtest.mjs\"",
     "mailvorschau": "node scripts/mailvorschau.mjs"
   },
   "dependencies": {

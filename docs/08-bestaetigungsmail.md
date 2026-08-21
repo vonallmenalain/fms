@@ -1,10 +1,16 @@
-# 08 · Eigene Bestätigungsmail (Resend)
+# 08 · Eigene Mails an die Betreuung (Resend)
 
-Wer im Betreuungsbereich ein Konto anlegt, muss seine E-Mail-Adresse bestätigen —
-`firestore.rules` verlangt `email_verified`. Bisher verschickte **Firebase** diese Mail:
-englisch angehauchtes Standardlayout, Absender `noreply@fmsbesuchstag.firebaseapp.com`.
+Der Betreuungsbereich verschickt zwei Mails:
 
-Neu verschickt die App die Mail **selbst**: eigene Gestaltung mit FMS-Logo, Absender auf
+| Mail | Wann |
+|---|---|
+| **Bestätigungsmail** | nach «Konto erstellen» — `firestore.rules` verlangt `email_verified` |
+| **Anmeldelink** | Anmelden ohne Passwort; auch beim Einladen unter «Steuerung → Zugänge» |
+
+Bisher verschickte **Firebase** beide: englisch angehauchtes Standardlayout, Absender
+`noreply@fmsbesuchstag.firebaseapp.com`.
+
+Neu verschickt die App sie **selbst**: eigene Gestaltung mit FMS-Logo, Absender auf
 `alae.app`, Zustellung über **Resend**.
 
 ---
@@ -16,7 +22,7 @@ Browser                      Netlify-Funktion                 Firebase        Re
   │  POST /api/bestaetigung        │                              │              │
   │  { idToken } ─────────────────►│                              │              │
   │                                │ ID-Token prüfen ────────────►│              │
-  │                                │ Bestätigungslink erzeugen ──►│              │
+  │                                │ Einmal-Link erzeugen ───────►│              │
   │                                │ Mail mit Logo + Link ───────────────────────►│
   │◄──── { stand: "gesendet" } ────│                              │       Zustellung
 ```
@@ -25,6 +31,20 @@ Wichtig: **Die Prüfung der Adresse bleibt bei Firebase.** Wir erzeugen mit dem 
 genau denselben Einmal-Link, den Firebase sonst selbst verschickt hätte, und tauschen nur
 Verpackung und Briefträger aus. Am Anmeldeablauf, an den Security Rules und am
 `email_verified`-Merkmal ändert sich nichts.
+
+**Wer darf eine Mail auslösen?** Die beiden Wege beantworten das verschieden:
+
+- **Bestätigungsmail:** Es zählt das mitgeschickte **ID-Token**, nicht die Adresse im
+  Formular. Verschickt wird nur an die Adresse, die im Token steht — sonst könnte jede und
+  jeder über diese Schnittstelle fremde Adressen anschreiben lassen.
+- **Anmeldelink:** Hier ist noch niemand angemeldet, die Adresse kommt ungeprüft aus dem
+  Formular. Darum verschickt die Funktion nur an Adressen, die **eingeladen** (Dokument in
+  `zugang`) oder **bereits freigeschaltet** (Konto in `admins`) sind. Alle anderen bekommen
+  nichts — und **dieselbe Antwort wie alle**, damit sich nicht durchprobieren lässt, wer an
+  der Schule Zugang hat. Für die Person am Bildschirm ändert das nichts: Ein Link an eine
+  nicht eingeladene Adresse führte ohnehin nur auf «Kein Zugang».
+
+Beide Wege lassen an dieselbe Adresse höchstens alle 30 Sekunden eine Mail zu.
 
 Warum ein Server nötig ist: Der Resend-Schlüssel und der Firebase-Dienstschlüssel dürfen
 niemals ins Browser-Bündel — wer sie hat, verschickt Post von deiner Domain.
@@ -35,10 +55,13 @@ Niemand bleibt vor der Tür stehen; die Mail sieht dann nur wieder nüchtern aus
 
 | Datei | Rolle |
 |---|---|
-| `netlify/functions/bestaetigung.mjs` | Die Schnittstelle: Token prüfen, Link erzeugen, Mail auslösen |
-| `netlify/lib/mail.mjs` | Vorlage (Logo, Farben, Text) und Versand über die Resend-API |
-| `src/zugang.ts` → `bestaetigungSenden` | Ruft die Schnittstelle auf, mit Rückfall auf Firebase |
+| `netlify/functions/bestaetigung.mjs` | `POST /api/bestaetigung` — Token prüfen, Link erzeugen, Mail auslösen |
+| `netlify/functions/anmeldelink.mjs` | `POST /api/anmeldelink` — Adresse prüfen, Link erzeugen, Mail auslösen |
+| `netlify/lib/mail.mjs` | Vorlagen (Logo, Farben, Text) und Versand über die Resend-API |
+| `netlify/lib/dienst.mjs` | Admin-SDK, einheitliche Antworten, die 30-Sekunden-Sperre |
+| `src/zugang.ts` | Ruft die Schnittstellen auf, mit Rückfall auf Firebase |
 | `scripts/mailvorschau.mjs` | Vorschau im Browser und Testversand |
+| `scripts/mailtest.mjs` | 13 Prüfungen gegen die Emulator Suite (`npm run mailtest`) |
 
 ---
 
@@ -119,12 +142,22 @@ Umgebungsvariablen wirken **erst nach einem neuen Deploy**: Nach dem Setzen also
 npm run mailvorschau            # schreibt mailvorschau.html, im Browser öffnen
 ```
 
-**Echter Testversand** (an eine beliebige Adresse):
+**Echter Testversand** (beide Mails an eine beliebige Adresse):
 
 ```bash
 RESEND_API_KEY=re_… MAIL_ABSENDER='FMS Neufeld <besuchsmorgen@alae.app>' \
   npm run mailvorschau -- deine@adresse.ch
 ```
+
+**Automatisch prüfen** — der echte Funktionskode gegen die Firebase-Emulatoren,
+Resend wird dabei abgefangen, es geht keine Post raus:
+
+```bash
+npm run mailtest                # 13 Prüfungen, startet die Emulatoren selbst
+```
+
+Darin steckt auch die Schranke aus §1: eingeladen → Mail, nicht eingeladen → keine Mail,
+beide Male dieselbe Antwort.
 
 **Der ganze Weg durch die App:**
 
@@ -132,6 +165,9 @@ RESEND_API_KEY=re_… MAIL_ABSENDER='FMS Neufeld <besuchsmorgen@alae.app>' \
    kein Konto hat
 2. Die Mail muss innert Sekunden ankommen — mit Logo, Absender `alae.app`
 3. Auf **E-Mail bestätigen** tippen, danach in der App auf **Ich habe bestätigt**
+4. Für den Anmeldelink: **Steuerung → Zugänge** → eine Adresse eintragen und
+   «Anmeldelink schicken» ankreuzen — oder im Login **«Anmeldelink per E-Mail schicken»**
+   mit einer bereits eingeladenen Adresse
 
 Kommt trotzdem die Firebase-Mail, hat der Rückfall gegriffen: In Netlify → **Logs** →
 **Functions** → `bestaetigung` steht die Ursache.
@@ -156,8 +192,10 @@ Kommt trotzdem die Firebase-Mail, hat der Rückfall gegriffen: In Netlify → **
 
 Alles steckt in `netlify/lib/mail.mjs`:
 
-- `bestaetigungsMail()` — Betreff, Titel, der eine Satz, Knopfbeschriftung, Kleingedrucktes
-- `geruest()` — Logo, Farben, Abstände. Die Farben sind dieselben wie in `src/index.css`.
+- `bestaetigungsMail()` und `anmeldelinkMail()` — Betreff, Titel, der eine Satz,
+  Knopfbeschriftung, Kleingedrucktes
+- `geruest()` — Logo, Farben, Abstände; für beide Mails dasselbe. Die Farben sind dieselben
+  wie in `src/index.css`.
 
 Nach jeder Änderung `npm run mailvorschau` und die Datei im Browser ansehen.
 
@@ -169,13 +207,11 @@ zusammen.
 
 ## 6 · Was bewusst **nicht** umgestellt wurde
 
-- **Der Anmeldelink** (`sendSignInLinkToEmail` in `src/zugang.ts`) kommt weiterhin von
-  Firebase. Er lässt sich mit derselben Mechanik umstellen —
-  `getAuth().generateSignInWithEmailLink(mail, { url, handleCodeInApp: true })` in einer
-  zweiten Funktion, dazu eine zweite Vorlage in `netlify/lib/mail.mjs`.
 - **Die Adresse hinter dem Link** zeigt weiterhin auf `fmsbesuchstag.firebaseapp.com`.
   Eine eigene Adresse dafür verlangt, dass die App den Firebase-Aktionsablauf
   (`/__/auth/action`) selbst bedient — deutlich mehr Aufwand als Nutzen für vier Konten.
+- **Das Zurücksetzen des Passworts** läuft weiterhin über Firebase. Die App bietet es gar
+  nicht an; wer sein Passwort vergisst, nimmt den Anmeldelink.
 - **Gäste bekommen weiterhin keine Mail.** Das ist Absicht: Die App erhebt bewusst keine
   Personendaten (siehe [01-fachkonzept §7](01-fachkonzept.md)).
 
