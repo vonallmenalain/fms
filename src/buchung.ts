@@ -4,6 +4,7 @@ import {
 import { db } from './firebase';
 import { angebot, block, type BlockId, type Wahl, BLOCK_IDS } from './programm';
 import { AusgebuchtFehler, RechteFehler, mitWiederholung, nacheinander } from './wiederholung';
+import { protokolliere, type Vorgangsnotiz } from './protokoll';
 
 export interface Buchung {
   plaetze: number;
@@ -72,10 +73,16 @@ export function waehle(
   vorgabePlaetze: number,
   quelle: 'gast' | 'admin' = 'gast',
 ): Promise<void> {
+  // Was die Transaktion getan hat, für das Protokoll. In einem Merkerobjekt, weil die
+  // Transaktion bei Andrang mehrmals durchläuft — es zählt ausschliesslich der letzte,
+  // erfolgreiche Durchgang.
+  const merker: { notiz: Vorgangsnotiz | null } = { notiz: null };
+
   return nacheinander(() =>
     mitWiederholung(async () => {
       try {
         await runTransaction(db, async (tx) => {
+          merker.notiz = null;
           const buchungRef = doc(db, 'bookings', buchungId);
 
           // ---------- 1. Lesen ----------
@@ -108,22 +115,35 @@ export function waehle(
           if (neuRef && neu && neuesAngebot) schreibeSlot(tx, neuRef, neuesAngebot, neu, neu.belegt + plaetze);
           if (altRef && alt && altesAngebot) schreibeSlot(tx, altRef, altesAngebot, alt, Math.max(0, alt.belegt - plaetze));
 
+          const wahlDanach = { ...leereWahl(), ...buchung.wahl, [blockId]: neuesAngebot };
           tx.set(
             buchungRef,
             {
               ...buchung,
               plaetze,
-              wahl: { ...leereWahl(), ...buchung.wahl, [blockId]: neuesAngebot },
+              wahl: wahlDanach,
               ...(vorhanden ? {} : { erstelltAm: serverTimestamp() }),
               geaendertAm: serverTimestamp(),
             },
             { merge: true },
           );
+
+          merker.notiz = {
+            vorgang: neuesAngebot ? (altesAngebot ? 'gewechselt' : 'gebucht') : 'freigegeben',
+            block: blockId,
+            angebot: neuesAngebot,
+            vorher: altesAngebot,
+            plaetze,
+            slots: Object.values(wahlDanach).filter(Boolean).length,
+          };
         });
       } catch (fehler) {
         if (istRechteFehler(fehler)) throw new RechteFehler();
         throw fehler;
       }
+      // Erst hier, nach der bestätigten Transaktion, und ohne `await`: Das Protokoll darf
+      // die Buchung weder verzögern noch scheitern lassen. Siehe src/protokoll.ts.
+      if (merker.notiz) protokolliere(buchungId, quelle, merker.notiz);
     }),
   );
 }
@@ -203,6 +223,18 @@ export async function erfasseAdminBuchung(
         geaendertAm: serverTimestamp(),
       });
     });
+  });
+
+  // Eine Zeile für die ganze Erfassung — sie ist ja auch EIN Vorgang am Info-Stand,
+  // nicht vier. `block` und `angebot` bleiben darum leer; was gewählt wurde, steht in
+  // der Anmeldung selbst.
+  protokolliere(buchungRef.id, 'admin', {
+    vorgang: 'erfasst',
+    block: null,
+    angebot: null,
+    vorher: null,
+    plaetze,
+    slots: BLOCK_IDS.filter((b) => auswahl[b]).length,
   });
 
   return { id: buchungRef.id };

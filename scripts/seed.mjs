@@ -55,7 +55,7 @@ batch.set(configRef, {
   // anmeldungOffen wird NIE automatisch verändert (Entscheid D4: manueller Schalter),
   // ausser beim allerersten Anlegen oder mit --oeffnen.
   ...(config.exists && !flag('oeffnen') ? {} : { anmeldungOffen: flag('oeffnen') }),
-  ...(config.exists ? {} : { banner: '' }),
+  ...(config.exists ? {} : { banner: '', protokoll: true }),
 }, { merge: true });
 
 await batch.commit();

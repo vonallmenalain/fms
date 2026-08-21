@@ -118,6 +118,38 @@ service cloud.firestore {
       return gueltigeWahl(d) && gueltigeNotiz(d);
     }
 
+    // ------------------------------------------------- log: Protokollzeilen
+
+    function protokollFelder() {
+      return ['zeitpunkt', 'client', 'art', 'geraet', 'vorgang', 'block', 'angebot',
+              'vorher', 'plaetze', 'slots'];
+    }
+
+    /**
+     * Eine Protokollzeile ist eng geschnürt: exakt diese zehn Felder, jedes mit Typ und
+     * Obergrenze. Sie ist die einzige Sammlung, in die ein Gast BELIEBIG viele Dokumente
+     * legen kann — bei `bookings` und `slots` ist die Dokument-ID vorgegeben. Ohne diese
+     * Prüfung wäre sie der bequemste Ort, um die Datenbank vollzuschreiben.
+     *
+     * `zeitpunkt == request.time` erzwingt die Serverzeit: Ein Protokoll, in dem der
+     * Client seine eigene Uhr einträgt, taugt nicht als Nachweis.
+     */
+    function gueltigesProtokoll(d) {
+      return d.keys().hasOnly(protokollFelder())
+        && d.keys().hasAll(protokollFelder())
+        && d.zeitpunkt == request.time
+        && d.client is string && d.client.size() <= 64
+        && d.art in ['gast', 'admin']
+        && d.geraet is string && d.geraet.size() <= 40
+        && d.vorgang in ['gebucht', 'gewechselt', 'freigegeben', 'erfasst']
+        && (d.block == null || d.block in ['a1', 'a2', 'l1', 'l2'])
+        && (d.angebot == null || (d.angebot is string && d.angebot.size() <= 60))
+        && (d.vorher == null || (d.vorher is string && d.vorher.size() <= 60))
+        && gueltigePlaetze(d.plaetze)
+        // Höchstens die vier Blöcke — mehr Slots kann eine Anmeldung gar nicht halten.
+        && d.slots is int && d.slots >= 0 && d.slots <= 4;
+    }
+
     // ------------------------------------------------------ config: Steuerung
 
     match /config/{dok} {
@@ -225,6 +257,37 @@ service cloud.firestore {
 
       // Fremde Anmeldungen löschen gehört zum Aufräumen — also zur Administration.
       allow delete: if request.auth.uid == buchungId || istAdmin();
+    }
+
+    // ------------------------------------------------------- log: Protokoll
+
+    /**
+     * Wer wann welchen Vorgang ausgelöst hat — die Grundlage des Protokollbereichs in
+     * der Steuerung. Angeschrieben wird EINMAL: `update` ist für alle gesperrt, auch für
+     * die Administration. Ein Protokoll, das sich nachträglich ändern lässt, beweist
+     * nichts. Aufräumen (nach der Generalprobe, nach dem Event) heisst deshalb löschen.
+     */
+    match /log/{eintragId} {
+      allow get, list: if istBetreuung();
+
+      allow create: if (angemeldet()
+          // Ein Gast protokolliert ausschliesslich seinen eigenen Vorgang — die
+          // Client-Kennung MUSS seine uid sein, sonst liessen sich fremde Zeilen erfinden.
+          && request.auth.uid == request.resource.data.client
+          && request.resource.data.art == 'gast'
+          // Dieselbe Bedingung wie für die Buchung selbst: Ist die Anmeldung zu, gibt es
+          // auch nichts zu protokollieren. Das schliesst die Sammlung ausserhalb des
+          // Anlasses zu — sie ist die einzige mit frei wählbarer Dokument-ID.
+          && anmeldungOffen()
+          && gueltigesProtokoll(request.resource.data))
+        // Am Info-Stand erfasste Anmeldungen tragen die Buchungs-ID als Client, nicht die
+        // uid der Betreuungsperson: Protokolliert wird der Vorgang, nicht wer tippt.
+        || (istBetreuung()
+          && request.resource.data.art == 'admin'
+          && gueltigesProtokoll(request.resource.data));
+
+      allow update: if false;
+      allow delete: if istAdmin();
     }
 
     // ------------------------------------------------------------ alles Übrige
