@@ -78,3 +78,37 @@ export const istMailAdresse = (wert) =>
   typeof wert === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(wert) && wert.length <= 254;
 
 export const mailSchluessel = (mail) => String(mail).trim().toLowerCase();
+
+/* ------------------------------------------------------------- Schranke */
+
+/**
+ * Darf an diese Adresse überhaupt Post gehen?
+ *
+ * Für alles, was ohne Anmeldung ausgelöst wird — Anmeldelink und
+ * Passwort-Zurücksetzen. Dort kommt die Adresse ungeprüft aus einem Formular;
+ * ohne Schranke wäre die Schnittstelle ein offenes Tor, um von unserer Domain
+ * aus beliebige Leute anschreiben zu lassen.
+ *
+ * Erlaubt ist, wer etwas mit dem Betreuungsbereich zu tun hat:
+ *   · eingeladen unter «Steuerung → Zugänge» (Dokument in `zugang`), oder
+ *   · bereits freigeschaltet (Konto in `admins`).
+ *
+ * Die Aufrufer antworten in beiden Fällen gleich — sonst liesse sich
+ * durchprobieren, wer an der Schule Zugang hat.
+ */
+export async function darfPostBekommen(adresse) {
+  const db = adminDb();
+
+  const einladung = await db.collection('zugang').doc(adresse).get();
+  if (einladung.exists) return true;
+
+  // Kein Eintrag unter «Zugänge» — es kann trotzdem ein Konto geben, etwa der
+  // Erstzugang aus den Rules oder eine zurückgezogene Einladung mit Konto.
+  try {
+    const benutzer = await adminAuth().getUserByEmail(adresse);
+    const konto = await db.collection('admins').doc(benutzer.uid).get();
+    return konto.exists;
+  } catch {
+    return false;                       // auth/user-not-found und alles andere
+  }
+}

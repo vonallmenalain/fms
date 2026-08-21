@@ -6,43 +6,20 @@
    Link mit dem Admin-SDK und verschicken ihn in der Gestaltung der App.
 
    ANDERS ALS BEI DER BESTÄTIGUNGSMAIL gibt es hier niemanden, der schon
-   angemeldet wäre — die Adresse kommt ungeprüft aus dem Formular. Ohne Schranke
-   wäre das ein offenes Tor: Jede und jeder könnte von unserer Domain aus
-   beliebige Adressen anschreiben lassen. Darum verschicken wir nur an Adressen,
-   die überhaupt etwas mit dem Betreuungsbereich zu tun haben:
-
-     · eingeladen unter «Steuerung → Zugänge» (Dokument in `zugang`), oder
-     · bereits freigeschaltet (Konto in `admins`).
-
-   Alle anderen bekommen nichts — und dieselbe Antwort wie alle. Sonst liesse
-   sich über diese Schnittstelle durchprobieren, wer an der Schule Zugang hat.
-   Für die Person am Bildschirm ändert das nichts: Ein Link an eine nicht
-   eingeladene Adresse führte ohnehin nur auf «Kein Zugang».
+   angemeldet wäre — die Adresse kommt ungeprüft aus dem Formular. Darum
+   entscheidet `darfPostBekommen` (siehe lib/dienst.mjs), ob überhaupt etwas
+   rausgeht: nur an eingeladene oder bereits freigeschaltete Adressen. Alle
+   anderen bekommen nichts — und dieselbe Antwort wie alle, damit sich nicht
+   durchprobieren lässt, wer an der Schule Zugang hat. Für die Person am
+   Bildschirm ändert das nichts: Ein Link an eine nicht eingeladene Adresse
+   führte ohnehin nur auf «Kein Zugang».
    ========================================================================= */
 
 import {
-  adminAuth, adminDb, antwort, EinrichtungsFehler, istMailAdresse, mailSchluessel,
+  adminAuth, antwort, darfPostBekommen, EinrichtungsFehler, istMailAdresse, mailSchluessel,
   sperreLoesen, zuSchnell,
 } from '../lib/dienst.mjs';
 import { anmeldelinkMail, sendeMail, seitenUrl } from '../lib/mail.mjs';
-
-/** Ist diese Adresse eingeladen oder bereits freigeschaltet? */
-async function darfEinenLinkBekommen(adresse) {
-  const db = adminDb();
-
-  const einladung = await db.collection('zugang').doc(adresse).get();
-  if (einladung.exists) return true;
-
-  // Kein Eintrag unter «Zugänge» — es kann trotzdem ein Konto geben, etwa der
-  // Erstzugang aus den Rules oder eine zurückgezogene Einladung mit Konto.
-  try {
-    const benutzer = await adminAuth().getUserByEmail(adresse);
-    const konto = await db.collection('admins').doc(benutzer.uid).get();
-    return konto.exists;
-  } catch {
-    return false;                       // auth/user-not-found und alles andere
-  }
-}
 
 export default async function handler(anfrage) {
   if (anfrage.method !== 'POST') return antwort(405, { fehler: 'Nur POST' });
@@ -62,7 +39,7 @@ export default async function handler(anfrage) {
   if (zuSchnell(schluessel)) return antwort(200, { stand: 'erledigt' });
 
   try {
-    if (!(await darfEinenLinkBekommen(adresse))) {
+    if (!(await darfPostBekommen(adresse))) {
       console.info('[anmeldelink] nicht eingeladen, nichts verschickt');
       return antwort(200, { stand: 'erledigt' });
     }

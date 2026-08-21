@@ -2,7 +2,7 @@
    Vorschau der verschickten Mails — und auf Wunsch ein echter Testversand.
    -------------------------------------------------------------------------
      npm run mailvorschau                  → schreibt mailvorschau.html
-     npm run mailvorschau -- du@example.ch → schickt beide Mails zusätzlich hin
+     npm run mailvorschau -- du@example.ch → schickt alle drei Mails zusätzlich hin
 
    Für den Versand braucht es RESEND_API_KEY und MAIL_ABSENDER in der Umgebung:
      RESEND_API_KEY=re_… MAIL_ABSENDER='FMS Neufeld <besuchsmorgen@alae.app>' \
@@ -10,7 +10,7 @@
    ========================================================================= */
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { anmeldelinkMail, bestaetigungsMail, sendeMail } from '../netlify/lib/mail.mjs';
+import { anmeldelinkMail, bestaetigungsMail, passwortMail, sendeMail } from '../netlify/lib/mail.mjs';
 
 const empfaenger = process.argv[2] ?? null;
 
@@ -22,6 +22,7 @@ const beispielLink = (modus) =>
 const mails = [
   { name: 'Bestätigungsmail', ...bestaetigungsMail(beispielLink('verifyEmail')) },
   { name: 'Anmeldelink', ...anmeldelinkMail(beispielLink('signIn')) },
+  { name: 'Passwort zurücksetzen', ...passwortMail(beispielLink('resetPassword')) },
 ];
 
 // Im echten Mail wird das Logo von der Website geladen. Für die Ansicht auf der eigenen
@@ -30,7 +31,7 @@ const mails = [
 const logo = readFileSync(new URL('../public/fms-neufeld.png', import.meta.url)).toString('base64');
 const mitLogo = (html) => html.replace(/src="[^"]*fms-neufeld\.png"/, `src="data:image/png;base64,${logo}"`);
 
-// Beide Mails untereinander in EINER Datei: So sieht man auf einen Blick, ob sie
+// Alle Mails untereinander in EINER Datei: So sieht man auf einen Blick, ob sie
 // zusammenpassen. Die <body>-Hüllen der einzelnen Mails stören dabei nicht.
 writeFileSync(
   'mailvorschau.html',

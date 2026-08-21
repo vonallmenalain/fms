@@ -220,3 +220,32 @@ export function anmeldelinkMail(link) {
   ].join('\n');
   return { betreff, html, text };
 }
+
+/**
+ * Passwort zurücksetzen — der Link führt auf die Firebase-Seite, auf der sich ein
+ * neues Passwort setzen lässt (siehe passwort.mjs).
+ */
+export function passwortMail(link) {
+  const betreff = 'Passwort zurücksetzen — Besuchsmorgen FMS Neufeld';
+  const html = geruest({
+    titel: 'Passwort zurücksetzen',
+    satz: 'Ein Klick, dann kannst du ein neues Passwort setzen.',
+    knopfText: 'Neues Passwort setzen',
+    link,
+    vorschau: 'Ein Klick, dann kannst du ein neues Passwort setzen.',
+    klein: 'Der Link gilt einmalig. Nicht angefordert? Dann diese Nachricht einfach löschen — '
+      + 'das Passwort bleibt unverändert.',
+  });
+  const text = [
+    'Passwort zurücksetzen',
+    '',
+    'Ein Klick, dann kannst du ein neues Passwort setzen:',
+    link,
+    '',
+    'Der Link gilt einmalig. Nicht angefordert? Dann diese Nachricht einfach löschen — '
+      + 'das Passwort bleibt unverändert.',
+    '',
+    'Besuchsmorgen FMS Neufeld',
+  ].join('\n');
+  return { betreff, html, text };
+}

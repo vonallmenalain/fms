@@ -1,6 +1,6 @@
 import {
   createUserWithEmailAndPassword, isSignInWithEmailLink, sendEmailVerification,
-  sendSignInLinkToEmail, signInWithEmailLink, type User,
+  sendPasswordResetEmail, sendSignInLinkToEmail, signInWithEmailLink, type User,
 } from 'firebase/auth';
 import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -140,17 +140,22 @@ export async function kontoErstellen(mail: string, passwort: string): Promise<vo
  * selbst. Sie sieht dann nüchtern aus, aber niemand bleibt vor der Tür stehen.
  */
 export async function bestaetigungSenden(u: User): Promise<void> {
-  if (await eigeneBestaetigungSenden(u)) return;
+  const idToken = await u.getIdToken();
+  if (await mailSchnittstelle('/api/bestaetigung', { idToken }, ['gesendet', 'schon-bestaetigt'])) return;
   await sendEmailVerification(u, { url: `${window.location.origin}/admin` });
 }
 
-/** `true`, sobald der Versand über die eigene Schnittstelle feststeht. */
-async function eigeneBestaetigungSenden(u: User): Promise<boolean> {
+/**
+ * Eine der drei Mail-Schnittstellen aufrufen (siehe netlify/functions/).
+ * Liefert `true`, sobald sie den Fall erledigt hat — dann ist der Rückfall auf
+ * Firebase weder nötig noch erwünscht.
+ */
+async function mailSchnittstelle(pfad: string, rumpf: object, erledigt: string[]): Promise<boolean> {
   try {
-    const antwort = await fetch('/api/bestaetigung', {
+    const antwort = await fetch(pfad, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idToken: await u.getIdToken() }),
+      body: JSON.stringify(rumpf),
     });
 
     // Zu schnell hintereinander: Die vorige Mail ist eben erst rausgegangen —
@@ -162,7 +167,7 @@ async function eigeneBestaetigungSenden(u: User): Promise<boolean> {
     // mit der Startseite — Status 200, aber HTML. Erst die Marke im Rumpf beweist,
     // dass wirklich die Funktion geantwortet hat.
     const daten = (await antwort.json()) as { stand?: string };
-    return daten.stand === 'gesendet' || daten.stand === 'schon-bestaetigt';
+    return erledigt.includes(daten.stand ?? '');
   } catch {
     return false;
   }
@@ -206,31 +211,12 @@ export async function anmeldelinkSenden(mail: string, aufDiesemGeraet: boolean):
   const adresse = mailSchluessel(mail);
   if (aufDiesemGeraet) window.localStorage.setItem(MAIL_MERKER, adresse);
 
-  if (await eigenenAnmeldelinkSenden(adresse)) return;
+  if (await mailSchnittstelle('/api/anmeldelink', { mail: adresse }, ['erledigt'])) return;
 
   await sendSignInLinkToEmail(auth, adresse, {
     url: `${window.location.origin}/admin`,
     handleCodeInApp: true,
   });
-}
-
-/** `true`, sobald die eigene Schnittstelle den Fall erledigt hat — verschickt oder nicht. */
-async function eigenenAnmeldelinkSenden(adresse: string): Promise<boolean> {
-  try {
-    const antwort = await fetch('/api/anmeldelink', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mail: adresse }),
-    });
-    if (!antwort.ok) return false;
-    // Ohne Funktionen (npm run dev) beantwortet der Entwicklungsserver den Aufruf mit
-    // der Startseite — Status 200, aber HTML. Erst die Marke im Rumpf beweist, dass
-    // wirklich die Funktion geantwortet hat.
-    const daten = (await antwort.json()) as { stand?: string };
-    return daten.stand === 'erledigt';
-  } catch {
-    return false;
-  }
 }
 
 /** Wurde diese Seite über einen Anmeldelink geöffnet? */
@@ -245,4 +231,30 @@ export async function mitLinkAnmelden(mail: string): Promise<void> {
   // Den Einmal-Link aus der Adresszeile putzen: Ein Neuladen soll ihn nicht nochmals
   // einlösen (er ist dann verbraucht und ergäbe eine verwirrende Fehlermeldung).
   window.history.replaceState({}, '', '/admin');
+}
+
+/* ------------------------------------------------ Passwort zurücksetzen */
+
+/**
+ * Mail zum Zurücksetzen des Passworts auslösen.
+ *
+ * Wie beim Anmeldelink entscheidet der Server, ob überhaupt etwas rausgeht: nur an
+ * eingeladene oder freigeschaltete Adressen, und nur wenn es dazu ein Konto mit Passwort
+ * gibt. Die Antwort ist in allen Fällen dieselbe — der Bildschirm sagt darum «falls es ein
+ * Konto gibt», statt Versand zu behaupten.
+ *
+ * Das Passwort selbst wird auf der Firebase-Seite hinter dem Link neu gesetzt; wir
+ * gestalten nur die Mail.
+ */
+export async function passwortZuruecksetzen(mail: string): Promise<void> {
+  const adresse = mailSchluessel(mail);
+  if (await mailSchnittstelle('/api/passwort', { mail: adresse }, ['erledigt'])) return;
+
+  try {
+    await sendPasswordResetEmail(auth, adresse, { url: `${window.location.origin}/admin` });
+  } catch (fehler) {
+    // Auch im Rückfall nicht verraten, ob es die Adresse gibt. Alles andere
+    // (etwa eine unsinnige Adresse) darf der Bildschirm ruhig melden.
+    if ((fehler as { code?: string })?.code !== 'auth/user-not-found') throw fehler;
+  }
 }

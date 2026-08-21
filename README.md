@@ -23,7 +23,7 @@ ohne Handy selbst eintragen.
 |---|---|
 | **Frontend + Hosting** | Vite + React + TypeScript auf **Netlify** — Gratis-Tier |
 | **Backend** | **Firebase Firestore** + Firebase Auth (anonym für Gäste, E-Mail für Organisierende) — **Blaze-Tarif**, keine Cloud Functions |
-| **Serverkode** | zwei Netlify-Funktionen, ausserhalb des Gast-Ablaufs: der Versand der beiden Mails an die Betreuung ([docs/08](docs/08-bestaetigungsmail.md)) |
+| **Serverkode** | drei Netlify-Funktionen, ausserhalb des Gast-Ablaufs: der Versand der Mails an die Betreuung ([docs/08](docs/08-bestaetigungsmail.md)) |
 | **Domain** | `fms.alae.app` |
 | **Kosten** | **< CHF 1 für den ganzen Anlass** ([Rechnung](docs/05-last-und-performance.md)) |
 | **Aufwand** | **27–29 h**, verteilt auf 8 Phasen |
@@ -42,7 +42,7 @@ ohne Handy selbst eintragen.
 | **[data/programm.json](data/programm.json)** | Das vollständige Programm: 14 Atelier- und 24 Lektionsangebote mit Fach, Klasse, Zimmer, Lehrperson, Kapazität — aus der Programm-PPT übernommen |
 | **[docs/06-stand-der-umsetzung.md](docs/06-stand-der-umsetzung.md)** | **Was gebaut ist**, lokal starten, Skripte, GitHub-Actions, bewusste Abweichungen vom Konzept, Messwerte |
 | **[docs/07-pruefbericht.md](docs/07-pruefbericht.md)** | **Prüfbericht vor der ersten Vorführung:** Stresstest mit 150 Geräten, Browsertest, gefundene Schwachstellen, **ToDo-Listen** und ein Drehbuch für die Vorführung |
-| **[docs/08-bestaetigungsmail.md](docs/08-bestaetigungsmail.md)** | **Eigene Mails statt derer von Firebase:** Bestätigungsmail und Anmeldelink, wer eine Mail auslösen darf, Einrichtung in Resend/Netlify Schritt für Schritt, Vorschau, Testversand und Fehlersuche |
+| **[docs/08-bestaetigungsmail.md](docs/08-bestaetigungsmail.md)** | **Eigene Mails statt derer von Firebase:** Bestätigungsmail, Anmeldelink und Passwort-Zurücksetzen, wer eine Mail auslösen darf, Einrichtung in Resend/Netlify Schritt für Schritt, Vorschau, Testversand und Fehlersuche |
 | **[docs/snippets/](docs/snippets/)** | Entwurfsfassungen aus der Konzeptphase — verbindlich ist der Kode im Repo |
 
 ## Schnellstart
@@ -94,12 +94,14 @@ auf «Kein Zugang». Ein Konto mit Passwort muss zusätzlich seine Adresse best�
 Mail kommt sofort) — die Datenbank verlangt das, damit niemand ein Konto auf eine fremde,
 eingeladene Adresse anlegen kann.
 
-**Bestätigungsmail und Anmeldelink verschickt die App selbst**: eigene Gestaltung mit
-FMS-Logo, Absender auf `alae.app`, Zustellung über Resend. Erzeugt und geprüft werden die
-Links weiterhin von Firebase — umgestellt sind nur Aussehen und Absender. Den Anmeldelink
-bekommen dabei nur eingeladene oder bereits freigeschaltete Adressen, ohne dass die Antwort
-verrät, welcher Fall vorlag. Einrichtung, Vorschau und Fehlersuche:
-**[docs/08-bestaetigungsmail.md](docs/08-bestaetigungsmail.md)**.
+Wer sein Passwort vergessen hat, tippt im Login auf **«Passwort vergessen?»**.
+
+**Bestätigungsmail, Anmeldelink und Passwort-Zurücksetzen verschickt die App selbst**:
+eigene Gestaltung mit FMS-Logo, Absender auf `alae.app`, Zustellung über Resend. Erzeugt
+und geprüft werden die Links weiterhin von Firebase — umgestellt sind nur Aussehen und
+Absender. Anmeldelink und Rücksetzlink bekommen dabei nur eingeladene oder bereits
+freigeschaltete Adressen, ohne dass die Antwort verrät, welcher Fall vorlag. Einrichtung,
+Vorschau und Fehlersuche: **[docs/08-bestaetigungsmail.md](docs/08-bestaetigungsmail.md)**.
 
 > Damit der Anmeldelink eingelöst werden kann, muss in der Firebase-Konsole unter
 > Authentication → Sign-in method bei «E-Mail-Adresse/Passwort» auch **E-Mail-Link

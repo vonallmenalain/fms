@@ -5,9 +5,9 @@
 
    Geprüft wird der echte Kode aus netlify/ — nur der Versand über Resend wird
    abgefangen, damit im Test keine Post rausgeht. Wichtigster Punkt ist die
-   Schranke beim Anmeldelink: Sie ist die einzige Stelle, die verhindert, dass
-   sich über die Schnittstelle beliebige Adressen von unserer Domain aus
-   anschreiben lassen — und sie soll nicht verraten, wer Zugang hat.
+   Schranke bei Anmeldelink und Passwort: Sie ist die einzige Stelle, die
+   verhindert, dass sich über die Schnittstellen beliebige Adressen von unserer
+   Domain aus anschreiben lassen — und sie soll nicht verraten, wer Zugang hat.
    ========================================================================= */
 
 import { generateKeyPairSync } from 'node:crypto';
@@ -45,6 +45,7 @@ globalThis.fetch = async (url, opt) => {
 
 const { default: bestaetigung } = await import('../netlify/functions/bestaetigung.mjs');
 const { default: anmeldelink } = await import('../netlify/functions/anmeldelink.mjs');
+const { default: passwort } = await import('../netlify/functions/passwort.mjs');
 const { adminAuth, adminDb } = await import('../netlify/lib/dienst.mjs');
 
 const post = (fn, rumpf) => fn(new Request('https://fms.alae.app/api/x', {
@@ -141,6 +142,36 @@ pruefe('Konto ohne Freischaltung: keine Mail', letzteMail === null);
 
 r = await post(anmeldelink, { mail: 'keine-adresse' });
 pruefe('unsinnige Adresse wird abgewiesen', r.status === 400);
+
+/* --------------------------------------------------- Passwort zurücksetzen */
+console.log('\nPasswort zurücksetzen');
+
+letzteMail = null;
+r = await post(passwort, { mail: 'fremde@example.ch' });
+d = await r.json();
+pruefe('fremde Adresse: keine Mail, aber unauffällige Antwort',
+  r.status === 200 && d.stand === 'erledigt' && letzteMail === null);
+
+// Eingeladen, aber es gibt noch gar kein Konto — es gibt nichts zurückzusetzen.
+letzteMail = null;
+r = await post(passwort, { mail: 'eingeladen@example.ch' });
+pruefe('eingeladen ohne Konto: keine Mail', r.status === 200 && letzteMail === null);
+
+// Freigeschaltetes Konto mit Passwort — der eigentliche Fall.
+letzteMail = null;
+r = await post(passwort, { mail: 'konto@example.ch' });
+pruefe('freigeschaltetes Konto mit Passwort: Mail geht raus', letzteMail?.to?.[0] === 'konto@example.ch');
+pruefe('enthält den Rücksetzlink von Firebase', /mode=resetPassword/.test(html()) && /oobCode=/.test(html()));
+
+letzteMail = null;
+r = await post(passwort, { mail: 'konto@example.ch' });
+pruefe('zweiter Versuch sofort danach ist gesperrt — mit derselben Antwort',
+  r.status === 200 && (await r.json()).stand === 'erledigt' && letzteMail === null);
+
+// Konto ohne Freischaltung: Passwort ja, Zugang nein.
+letzteMail = null;
+r = await post(passwort, { mail: 'nurkonto@example.ch' });
+pruefe('Konto ohne Freischaltung: keine Mail', letzteMail === null);
 
 console.log(fehler === 0 ? '\nAlle Prüfungen bestanden.\n' : `\n${fehler} Prüfung(en) fehlgeschlagen.\n`);
 process.exit(fehler === 0 ? 0 : 1);
