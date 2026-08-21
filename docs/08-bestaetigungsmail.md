@@ -279,8 +279,10 @@ und nicht an dieser App.
 
 Alles steckt in `netlify/lib/mail.mjs`:
 
-- `bestaetigungsMail()`, `anmeldelinkMail()` und `passwortMail()` — Betreff, Titel, der
-  eine Satz, Knopfbeschriftung, Kleingedrucktes
+- `bestaetigungsMail()`, `anmeldelinkMail()` und `passwortMail()` — Betreff, Titel,
+  Knopfbeschriftung und die Vorschauzeile fürs Postfach. Jede Mail steht **zweimal** da:
+  als HTML und als reine Textfassung darunter — beide gehören geändert
+- `KLEINGEDRUCKTES` — der eine Satz unter dem Knopf, in allen drei Mails derselbe
 - `geruest()` — Logo, Farben, Abstände; für alle drei Mails dasselbe. Die Farben sind dieselben
   wie in `src/index.css`.
 
