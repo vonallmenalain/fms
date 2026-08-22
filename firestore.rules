@@ -141,7 +141,7 @@ service cloud.firestore {
         && d.client is string && d.client.size() <= 64
         && d.art in ['gast', 'admin']
         && d.geraet is string && d.geraet.size() <= 40
-        && d.vorgang in ['gebucht', 'gewechselt', 'freigegeben', 'erfasst']
+        && d.vorgang in ['gebucht', 'gewechselt', 'freigegeben', 'erfasst', 'uebernommen']
         && (d.block == null || d.block in ['a1', 'a2', 'l1', 'l2'])
         && (d.angebot == null || (d.angebot is string && d.angebot.size() <= 60))
         && (d.vorher == null || (d.vorher is string && d.vorher.size() <= 60))
@@ -255,8 +255,20 @@ service cloud.firestore {
               || (keineWahl(resource.data) && gueltigePlaetze(request.resource.data.plaetze))))
         || istAdmin();
 
-      // Fremde Anmeldungen löschen gehört zum Aufräumen — also zur Administration.
-      allow delete: if request.auth.uid == buchungId || istAdmin();
+      /**
+       * Löschen darf, wem die Anmeldung gehört — und die Betreuung.
+       *
+       * Letzteres aus zwei Gründen. Erstens erfasst sie Anmeldungen am Info-Stand unter
+       * einer eigenen Dokument-ID; ohne dieses Recht könnte sie einen Vertipper nie
+       * selbst korrigieren, sondern müsste dafür die Administration holen. Zweitens holt
+       * `uebernimmGeraeteAnmeldung` die eigene Gast-Anmeldung ins Konto — dabei wird das
+       * alte Dokument gelöscht, und zu diesem Zeitpunkt ist die anonyme Sitzung, der es
+       * gehörte, bereits verschwunden.
+       *
+       * Die Massenvorgänge bleiben der Administration vorbehalten: «Alles zurücksetzen»
+       * fasst `config` und `slots` an, und beides darf nur `istAdmin()`.
+       */
+      allow delete: if request.auth.uid == buchungId || istBetreuung();
     }
 
     // ------------------------------------------------------- log: Protokoll

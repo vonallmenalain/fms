@@ -151,22 +151,56 @@ Gleicher 4-Schritt-Flow wie für Gäste, aber:
 - **Druckansicht** aller Angebote mit Belegung → für den Info-Stand auf Papier
 
 **7.4 Protokoll** (Steuerung → Protokoll, nur `admin`)
-Zwei Sichten auf denselben Morgen:
-- **Pro Client** — eine Zeile je Gerät: Art (eigenes Handy / am Info-Stand erfasst),
-  Geräteart, Uhrzeit der Anmeldung, letzte Änderung, Personen, Anzahl Slots, belegte
-  Plätze und die vier gewählten Angebote. Kommt vollständig aus den Anmeldungen.
-- **Verlauf** — eine Zeile je Vorgang, chronologisch: auch Wechsel und Freigaben, die in
-  der Anmeldung selbst überschrieben werden. Dafür wird zusätzlich mitgeschrieben —
-  abschaltbar, und nachweislich ohne Einfluss auf die Leistung ([05 §10](05-last-und-performance.md)).
+Zwei Sichten auf denselben Morgen, beide als Liste aus **aufklappbaren Zeilen** — die
+Steuerung wird am Eventmorgen auf dem Handy gelesen, und eine Tabelle mit zwölf Spalten
+hiesse dort waagrecht schieben:
+- **Pro Gerät** — zugeklappt: Gerätenummer, Geräteart, Zahl der Vorgänge, Uhrzeit.
+  Aufgeklappt: Kennung, Personen, Slots, belegte Plätze, die vier gewählten Angebote,
+  Notiz und die vollständige Liste der Vorgänge dieses Geräts.
+- **Verlauf** — eine Zeile je Vorgang, chronologisch über alle Geräte.
 
-Beide Sichten lassen sich als CSV herunterladen. Ein «Client» ist die anonyme Geräte-ID,
+**«Gerät 12» statt «iJovaGD9».** Die Firebase-Kennung ist eindeutig, aber unlesbar und
+unsprechbar. Die Zeilen werden darum nach erstem Auftreten durchnummeriert; die echte
+Kennung steht in der aufgeklappten Zeile.
+
+**«Vorgänge» zählt jede Serveränderung.** Vier Angebote buchen sind vier Vorgänge; alles
+freigeben und neu buchen kommt dazu. Genau diese Zahl zeigt, wie viel ein Gerät die
+Datenbank beschäftigt hat.
+
+**Löschen.** Die Administration kann eine einzelne Anmeldung löschen — die belegten Plätze
+werden dabei in derselben Transaktion wieder frei — sowie einzelne Protokollzeilen, das
+Protokoll eines Geräts oder das ganze Protokoll.
+
+Beide Sichten lassen sich als CSV herunterladen. Ein «Gerät» ist die anonyme Kennung,
 kein Name — siehe §10.
+
+**Keine IP-Adressen.** Sie wären hier die naheliegende Kennung, kommen aber nicht in
+Frage: Die App spricht ohne Serverkode direkt mit Firestore, die Security Rules kennen
+die IP des Aufrufers gar nicht — und am Besuchsmorgen teilen sich im Gast-WLAN **alle
+Geräte eine einzige öffentliche IP** ([05 §5a](05-last-und-performance.md)). Sie würde
+also nichts unterscheiden, wäre aber ein Personendatum. Ausführlich:
+[05 §10.7](05-last-und-performance.md).
 
 **7.5 Export**
 Ein Klick → CSV mit `Block, Fach, Klasse, Zimmer, Lehrperson, Belegt, Kapazität`.
 Für die Nachbesprechung und als Papier-Backup um 08:45.
 
-**7.6 Zugänge** (Steuerung → Zugänge, nur `admin`)
+**7.6 Wenn eine Betreuungsperson selbst mitmacht**
+Der Fall kommt garantiert vor: Eine Lehrperson meldet sich morgens wie jeder Gast selbst
+an und meldet sich später mit ihrer Adresse im Betreuungsbereich an. Firebase ersetzt
+dabei die anonyme Sitzung — ihre Anmeldung läge danach unter einer Kennung, die niemand
+mehr besitzt. Eine **Schattenbuchung**: sichtbar, Plätze belegend, für sie selbst nicht
+mehr änderbar.
+
+Zwei Dinge verhindern das:
+- Der Knopf **«Hauptseite ↗»** neben den Reitern führt aus dem Betreuungsbereich zurück
+  zur Anmeldung.
+- Beim ersten Aufruf der Hauptseite als angemeldete Person wird die auf diesem Gerät
+  erstellte Anmeldung **automatisch ins eigene Konto geholt** — in einer Transaktion, die
+  Zähler bleiben unberührt. Danach gilt sie wie jede andere eigene Anmeldung: änderbar,
+  freigebbar. Das Protokoll hält die Übernahme als eigenen Vorgang fest.
+
+**7.7 Zugänge** (Steuerung → Zugänge, nur `admin`)
 Adresse eintragen, Rolle wählen, fertig — Firebase verschickt auf Wunsch gleich einen
 Anmeldelink. Die Person schaltet sich beim ersten Anmelden selbst frei, und zwar mit genau
 der Rolle aus der Einladung. Sie kann sich dazu im Login auch selbst ein Konto erstellen
@@ -234,7 +268,8 @@ Bei den Ateliers entfällt die Klasse, dort steht nur Fach und Zimmer.
   4 Angebots-IDs, Zeitstempel.
 - **Auch im Protokoll nicht** (§7.4): Es hält je Vorgang dieselben Angaben fest, dazu die
   Geräteart in der Form `iPhone · Safari` — ohne Versionsnummern, ohne die vollständige
-  User-Agent-Zeile, ohne IP-Adresse.
+  User-Agent-Zeile, **ohne IP-Adresse**. Die IP wäre ein Personendatum und würde das
+  «kein Cookie-Banner nötig» oben kippen; sie wird deshalb nirgends erhoben.
 - Die anonyme ID ist eine Firebase-Zufalls-ID, keinem Menschen zuordenbar.
 - Keine Analytics, kein Google Analytics, keine Cookies ausser dem technisch nötigen
   Auth-Token im Local Storage → **kein Cookie-Banner nötig**.

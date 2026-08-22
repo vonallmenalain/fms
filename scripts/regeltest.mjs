@@ -69,8 +69,29 @@ await pruefe('Admin sieht alle Anmeldungen', () => assertSucceeds(getDocs(collec
 await pruefe('Fremde sehen sie NICHT', () => assertFails(getDocs(collection(fremd, 'bookings'))));
 await pruefe('Betreuung erfasst Anmeldung (quelle admin)', () => assertSucceeds(setDoc(doc(betreuung, 'bookings/vomstand1'),
   { plaetze: 2, wahl: { a1: null, a2: null, l1: null, l2: null }, quelle: 'admin', notiz: null, erstelltAm: new Date(), geaendertAm: new Date() })));
-await pruefe('Betreuung darf fremde Anmeldung NICHT löschen', () => assertFails(deleteDoc(doc(betreuung, 'bookings/gast1'))));
+await pruefe('Gast darf eine fremde Anmeldung NICHT löschen', () => assertFails(deleteDoc(doc(gast, 'bookings/vomstand1'))));
+// Neu erlaubt: Ohne das könnte die Betreuung einen eigenen Vertipper am Info-Stand nie
+// korrigieren — und die Übernahme der eigenen Gast-Anmeldung (unten) ginge auch nicht.
+await pruefe('Betreuung darf eine Anmeldung löschen', () => assertSucceeds(deleteDoc(doc(betreuung, 'bookings/vomstand1'))));
 await pruefe('Admin darf fremde Anmeldung löschen', () => assertSucceeds(deleteDoc(doc(admin, 'bookings/gast1'))));
+
+console.log('\nÜbernahme der eigenen Gast-Anmeldung');
+// Der Fall: Die Betreuungsperson hat sich morgens als Gast angemeldet (uid «altgeraet»),
+// meldet sich danach mit ihrer Adresse an — und Firebase wirft die anonyme Sitzung weg.
+// Ohne Übernahme bliebe ihre Anmeldung als Schattenbuchung stehen.
+await setDoc(doc(admin, 'config/app'), { anmeldungOffen: true }, { merge: true });
+const alteAnmeldung = { plaetze: 2, wahl: { a1: 'a1-psychologie', a2: null, l1: null, l2: null },
+  quelle: 'gast', notiz: null };
+await env.withSecurityRulesDisabled(async (c) => {
+  await setDoc(doc(c.firestore(), 'bookings/altgeraet'), alteAnmeldung);
+});
+await pruefe('Betreuung schreibt sie unter die eigene uid', () => assertSucceeds(
+  setDoc(doc(betreuung, 'bookings/uid-betreuung'),
+    { ...alteAnmeldung, erstelltAm: new Date(), geaendertAm: new Date() })));
+await pruefe('… und löscht dabei das alte Dokument', () => assertSucceeds(
+  deleteDoc(doc(betreuung, 'bookings/altgeraet'))));
+await pruefe('ein Gast kann sich fremde Anmeldungen NICHT so aneignen', () => assertFails(
+  setDoc(doc(gast, 'bookings/uid-betreuung'), alteAnmeldung)));
 
 console.log('\nZugänge (zugang)');
 await pruefe('Admin darf einladen', () => assertSucceeds(setDoc(doc(admin, 'zugang/x@example.ch'), { email: 'x@example.ch', name: 'X', rolle: 'betreuung' })));

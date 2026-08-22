@@ -5,6 +5,7 @@ import { db } from './firebase';
 import { angebot, block, type BlockId, type Wahl, BLOCK_IDS } from './programm';
 import { AusgebuchtFehler, RechteFehler, mitWiederholung, nacheinander } from './wiederholung';
 import { protokolliere, type Vorgangsnotiz } from './protokoll';
+import { gemerktesGeraet, vergissGeraet } from './geraet';
 
 export interface Buchung {
   plaetze: number;
@@ -238,4 +239,118 @@ export async function erfasseAdminBuchung(
   });
 
   return { id: buchungRef.id };
+}
+
+/**
+ * Eine Anmeldung löschen und die Plätze dabei wieder freigeben — in EINER Transaktion.
+ *
+ * Für die Administration im Protokollbereich. Das blosse Löschen des Dokuments wäre ein
+ * Fehler: Die Zähler in `slots` wüssten nichts davon, und die Invariante L1 aus
+ * docs/05 §6 («Summe der Zähler = Summe der gebuchten Plätze») wäre gebrochen — die
+ * Plätze blieben für immer belegt, ohne dass jemand darauf sitzt.
+ */
+export async function loescheAnmeldung(buchungId: string): Promise<void> {
+  await mitWiederholung(async () => {
+    await runTransaction(db, async (tx) => {
+      const buchungRef = doc(db, 'bookings', buchungId);
+
+      // ---------- Lesen ----------
+      const snap = await tx.get(buchungRef);
+      if (!snap.exists()) return;                    // schon weg, nichts zu tun
+      const b = snap.data() as Buchung;
+      const ids = BLOCK_IDS.map((k) => b.wahl?.[k] ?? null).filter(Boolean) as string[];
+      const staende = await Promise.all(
+        ids.map(async (id) => ({ id, ...(await leseSlot(tx, doc(db, 'slots', id), id)) })),
+      );
+
+      // ---------- Schreiben ----------
+      for (const s of staende) {
+        // Fehlt der Zähler ganz, gibt es auch nichts freizugeben — ihn dafür neu
+        // anzulegen hiesse, einen Platzstand zu erfinden.
+        if (s.neu) continue;
+        tx.update(doc(db, 'slots', s.id), { belegt: Math.max(0, s.belegt - (b.plaetze || 0)) });
+      }
+      tx.delete(buchungRef);
+    });
+  });
+}
+
+/**
+ * Die auf diesem Gerät als Gast erstellte Anmeldung ins eigene Konto holen.
+ *
+ * Der Fall: Eine Betreuungsperson meldet sich morgens wie jeder Gast selbst an, meldet
+ * sich danach unter /admin mit ihrer Adresse an — und Firebase ersetzt dabei die anonyme
+ * Sitzung. Ihre Anmeldung läge ab da unter einer uid, die niemand mehr besitzt: eine
+ * Schattenbuchung, die Plätze belegt und die nur noch die Administration wegräumen kann.
+ *
+ * Verschoben wird in EINER Transaktion — altes Dokument lesen, neues schreiben, altes
+ * löschen. Die Zähler bleiben unberührt, weil sich an der Zahl der belegten Plätze nichts
+ * ändert; ein Zwischenzustand, in dem die Anmeldung weg und die Plätze noch belegt sind,
+ * kann gar nicht entstehen.
+ *
+ * Gibt `true` zurück, wenn tatsächlich etwas übernommen wurde.
+ */
+let laufendeUebernahme: Promise<boolean> | null = null;
+
+export function uebernimmGeraeteAnmeldung(neueUid: string): Promise<boolean> {
+  // React ruft Effekte im Entwicklungsmodus doppelt auf, und ein schneller Wechsel
+  // zwischen Betreuung und Hauptseite kann dasselbe. Beide Aufrufe lasen sonst denselben
+  // Merker, bevor der erste ihn löschte — und das Protokoll bekäme zwei Übernahmen für
+  // einen Vorgang. Der zweite Aufruf hängt sich deshalb an den ersten an.
+  laufendeUebernahme ??= holeGeraeteAnmeldung(neueUid)
+    .finally(() => { laufendeUebernahme = null; });
+  return laufendeUebernahme;
+}
+
+async function holeGeraeteAnmeldung(neueUid: string): Promise<boolean> {
+  const alteUid = gemerktesGeraet();
+  if (!alteUid || alteUid === neueUid) return false;
+
+  // Merkerobjekt wie in `waehle`: Die Transaktion kann mehrmals durchlaufen, es zählt
+  // ausschliesslich der letzte, erfolgreiche Durchgang.
+  const merker: { geholt: { slots: number; plaetze: number } | null } = { geholt: null };
+  await mitWiederholung(async () => {
+    merker.geholt = null;
+    await runTransaction(db, async (tx) => {
+      const altRef = doc(db, 'bookings', alteUid);
+      const neuRef = doc(db, 'bookings', neueUid);
+      const [alt, neu] = [await tx.get(altRef), await tx.get(neuRef)];
+
+      if (!alt.exists()) return;
+      const b = alt.data() as Buchung;
+      if (!Object.values(b.wahl ?? {}).some(Boolean)) return;   // leere Hülle, nichts wert
+
+      // Das Konto hat bereits eine eigene Anmeldung. Sie zu überschreiben würde deren
+      // Plätze verwaisen lassen — dann lieber gar nichts tun und die alte der
+      // Administration überlassen, die sie im Protokoll löschen kann.
+      if (neu.exists() && Object.values((neu.data() as Buchung).wahl ?? {}).some(Boolean)) return;
+
+      tx.set(neuRef, { ...b, geaendertAm: serverTimestamp() });
+      tx.delete(altRef);
+      merker.geholt = {
+        slots: Object.values(b.wahl ?? {}).filter(Boolean).length,
+        plaetze: b.plaetze,
+      };
+    });
+  });
+
+  // Auch wenn nichts zu holen war: Der Merker hat seinen Zweck erfüllt. Bliebe er
+  // stehen, erbte die nächste Person am selben Gerät fremde Anmeldungen.
+  vergissGeraet();
+
+  const geholt = merker.geholt;
+  if (!geholt) return false;
+  // Die Protokollzeilen der alten Kennung bleiben stehen — sie sind angeschrieben und
+  // unveränderlich, das ist der Sinn eines Protokolls. Damit die Administration die
+  // plötzlich vorgangslose Anmeldung trotzdem einordnen kann, bekommt die neue Kennung
+  // hier ihre erste eigene Zeile.
+  protokolliere(neueUid, 'gast', {
+    vorgang: 'uebernommen',
+    block: null,
+    angebot: null,
+    vorher: null,
+    plaetze: geholt.plaetze,
+    slots: geholt.slots,
+  });
+  return true;
 }

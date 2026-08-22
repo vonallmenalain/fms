@@ -158,7 +158,8 @@ Die drei Prioritäten — sauber und flüssig, wirklich live, kein Limit — sin
 | Anmeldung für mehrere Personen auf einem Gerät? | **Ja** — Gruppengrösse 1–4 auf der Startseite, die Gruppe belegt entsprechend viele Plätze |
 | 3–4 Lehrpersonen als Admin, die Gäste eintragen? | **Ja** — eigener Admin-Bereich mit Login, «+ Anmeldung erfassen» |
 | Lehrpersonen sehen live, wer wohin kommt? | **Ja** — Live-Dashboard, Druckansicht und CSV-Export. Kostet fast nichts extra |
-| Nachvollziehen, welcher Client wann wie viel gebucht hat? | **Ja** — Protokoll in der Steuerung, pro Client und als Verlauf. Bremst den Andrang nicht ([Rechnung](docs/05-last-und-performance.md#10-das-protokoll-was-kostet-es-jeden-vorgang-mitzuschreiben)) |
+| Nachvollziehen, welches Gerät wann wie viel gebucht hat? | **Ja** — Protokoll in der Steuerung, pro Gerät und als Verlauf, mit Zahl der Vorgänge. Bremst den Andrang nicht ([Rechnung](docs/05-last-und-performance.md#10-das-protokoll-was-kostet-es-jeden-vorgang-mitzuschreiben)) |
+| Was, wenn eine Lehrperson selbst bucht und sich dann anmeldet? | Ihre Anmeldung **wandert ins eigene Konto**, statt als Schattenbuchung liegen zu bleiben ([05 §10a](docs/05-last-und-performance.md)) |
 | Slots wieder freigeben und neu buchen? | **Ja** — beim Wechsel wird der alte Platz in derselben Transaktion frei |
 | Auswahl wieder aufrufbar? | **Ja** — automatisch auf demselben Gerät |
 | Analoge Variante vorbereiten? | **Ja, unbedingt** — 20 Zettel pro Lektion, [Runbook §5](docs/04-eventtag-runbook.md#5-papier-fallback-am-vorabend-vorbereiten-kostet-20-minuten). Kostet 20 Minuten und nimmt allen die Nervosität |

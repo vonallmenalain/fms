@@ -24,13 +24,14 @@ import { addDoc, collection, serverTimestamp, type Timestamp } from 'firebase/fi
 import { db } from './firebase';
 import type { BlockId } from './programm';
 
-export type Vorgang = 'gebucht' | 'gewechselt' | 'freigegeben' | 'erfasst';
+export type Vorgang = 'gebucht' | 'gewechselt' | 'freigegeben' | 'erfasst' | 'uebernommen';
 
 export const VORGANG_TEXT: Record<Vorgang, string> = {
   gebucht: 'gebucht',
   gewechselt: 'gewechselt',
   freigegeben: 'freigegeben',
   erfasst: 'am Stand erfasst',
+  uebernommen: 'ins Konto übernommen',
 };
 
 /** Was bei einem einzelnen Vorgang passiert ist — der Teil, den die Buchung kennt. */
