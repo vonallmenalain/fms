@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator, type User } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { merkeGeraet } from './geraet';
 
 /**
  * Die Firebase-Web-Konfiguration ist öffentlich — das ist so vorgesehen und kein Geheimnis.
@@ -59,15 +60,15 @@ export class AnmeldeAndrangFehler extends Error {
 const ANMELDE_WARTE_MS = [400, 1200, 2600, 5000];
 
 export async function benutzerBereit(): Promise<User> {
-  if (auth.currentUser) return auth.currentUser;
+  if (auth.currentUser) return merken(auth.currentUser);
   const vorhanden = await bestehenderBenutzer();
-  if (vorhanden) return vorhanden;
+  if (vorhanden) return merken(vorhanden);
 
   let letzter: unknown;
   for (let versuch = 0; versuch <= ANMELDE_WARTE_MS.length; versuch++) {
     try {
       const ergebnis = await signInAnonymously(auth);
-      return ergebnis.user;
+      return merken(ergebnis.user);
     } catch (fehler) {
       letzter = fehler;
       const code = (fehler as { code?: string })?.code;
@@ -79,4 +80,14 @@ export async function benutzerBereit(): Promise<User> {
   }
   if ((letzter as { code?: string })?.code === 'auth/too-many-requests') throw new AnmeldeAndrangFehler();
   throw letzter;
+}
+
+/**
+ * Anonyme Sitzungen hinterlassen ihre uid auf dem Gerät — damit eine Betreuungsperson
+ * ihre als Gast erstellte Anmeldung nach dem eigenen Anmelden wiederfindet. Siehe
+ * src/geraet.ts für den ganzen Grund.
+ */
+function merken(u: User): User {
+  if (u.isAnonymous) merkeGeraet(u.uid);
+  return u;
 }

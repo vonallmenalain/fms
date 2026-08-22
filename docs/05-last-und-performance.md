@@ -351,7 +351,46 @@ heissen Phase die Steuerung offen hat, aber das Protokoll nicht aufklappt, zahlt
 28. Oktober etwas klemmt, liegt es an einer der Ursachen aus §5, §5a oder §9 — nicht hier.
 Der Schalter ist trotzdem da, weil eine Reserve nichts kostet, solange man sie nicht braucht.
 
-### 10.6 Was das Protokoll nicht ist
+### 10.6 Warum «Gerät 12» und nicht die Firebase-Kennung
+
+`iJovaGD9…` ist eindeutig, aber unlesbar, unsprechbar und im Gespräch am Info-Stand
+wertlos. Die Zeilen werden darum nach **erstem Auftreten** durchnummeriert — «Gerät 12»
+lässt sich vorlesen und wiederfinden; die echte Kennung steht in der aufgeklappten Zeile.
+
+Nach *erstem* Auftreten, weil eine Nummer, die sich bei jeder fremden Buchung verschiebt,
+schlechter wäre als gar keine. Aus demselben Grund zählt die erste **Protokollzeile** und
+nicht die Anmeldung, sobald es beides gibt: Sonst verschöbe eine gelöschte Anmeldung die
+Nummern aller Geräte, die kurz danach dazugekommen sind.
+
+Restrisiko, bewusst in Kauf genommen: Taucht nachträglich ein Gerät mit einer früheren
+Zeit auf, rücken die jüngeren um eins weiter. Dagegen hülfe nur ein Zähler in der
+Datenbank — also genau das heisse Dokument aus §5.
+
+### 10.7 Warum keine IP-Adresse
+
+Die IP ist die naheliegende Kennung, und sie ist trotzdem die falsche. Drei Gründe, jeder
+für sich ausreichend:
+
+1. **Sie ist nicht da.** Die App spricht ohne Serverkode direkt mit Firestore (§2). Die
+   Security Rules kennen `request.auth` und `request.time` — die IP des Aufrufers steht
+   ihnen nicht zur Verfügung, und der Browser kann seine eigene öffentliche Adresse nicht
+   ermitteln. Zu holen wäre sie nur über eine zusätzliche Netlify-Funktion, die dem Client
+   sagt, wie sie ihn sieht: eine weitere Runde je Gerät und ein weiterer Ausfallpunkt, für
+   eine Angabe, die niemand braucht.
+2. **Sie würde nichts unterscheiden.** Im Gast-WLAN der Schule teilen sich **alle Geräte
+   eine einzige öffentliche IP** (§5a — genau deshalb greift dort die Anmelde-Drosselung).
+   In der Spalte stünde bei fast allen Zeilen dieselbe Zahl. Sie sähe nach Information aus
+   und wäre keine — schlimmer als ein leeres Feld.
+3. **Sie ist ein Personendatum.** Das Fachkonzept trägt «keine Personendaten, kein
+   Cookie-Banner nötig» ([01 §10](01-fachkonzept.md)). Eine gespeicherte IP kippt das,
+   für nichts.
+
+**Was stattdessen trägt:** die fortlaufende Gerätenummer aus §10.6, dazu die Geräteart
+(`iPhone · Safari`) und die Zahl der Vorgänge. Am Info-Stand ist «das iPhone, das um 08:41
+angefangen hat und sechs Vorgänge gemacht hat» eine Beschreibung, mit der man arbeiten
+kann. `84.75.19.203` ist es nicht.
+
+### 10.8 Was das Protokoll nicht ist
 
 Es enthält **keine Personendaten**: Ein «Client» ist die anonyme Firebase-Geräte-ID, die
 Spalte «Gerät» nennt nur Familie und Browser (`iPhone · Safari`), ohne Versionen, ohne die
@@ -361,6 +400,48 @@ und es wird zusammen mit den Anmeldungen gelöscht (`npm run reset`, «Alles zur
 
 Angeschrieben wird eine Zeile genau einmal: `update` ist in den Security Rules für alle
 gesperrt, auch für die Administration. Aufräumen heisst deshalb löschen, nicht ändern.
+
+## 10a. Die Schattenbuchung der Betreuungspersonen
+
+Der Fall, der ohne Gegenmassnahme garantiert eintritt: Eine Lehrperson meldet sich morgens
+wie jeder Gast an — anonym, ohne Formular. Später meldet sie sich unter `/admin` mit ihrer
+Adresse an. **Firebase ersetzt dabei die anonyme Sitzung.** Ihre Anmeldung liegt danach
+unter einer uid, die niemand mehr besitzt: Sie belegt Plätze, ist in der Übersicht
+sichtbar, und die Person selbst kommt nicht mehr an sie heran. Nur die Administration
+könnte sie noch wegräumen.
+
+**Die Lösung ist eine Verschiebung, keine Reparatur.** Das Gerät merkt sich seine anonyme
+uid in `localStorage` (`src/geraet.ts`). Kommt die angemeldete Person über den Knopf
+**«Hauptseite ↗»** auf die Anmeldung zurück, holt `uebernimmGeraeteAnmeldung` die Buchung
+in ihr Konto: altes Dokument lesen, neues schreiben, altes löschen — in **einer**
+Transaktion. Die Zähler bleiben unberührt, weil sich an der Zahl der belegten Plätze
+nichts ändert; ein Zwischenzustand, in dem die Anmeldung weg und die Plätze noch belegt
+sind, kann gar nicht entstehen.
+
+Drei Feinheiten, die den Unterschied zwischen «funktioniert» und «funktioniert am
+Eventmorgen» ausmachen:
+
+- **Nur wenn nichts kollidiert.** Hat das Konto bereits eine eigene Anmeldung, wird nicht
+  übernommen — sonst verwaisten deren Plätze. Die alte bleibt dann für die Administration
+  stehen.
+- **Gleichzeitige Aufrufe teilen sich einen Lauf.** React ruft Effekte im
+  Entwicklungsmodus doppelt auf, und ein schneller Wechsel zwischen den Bereichen tut das
+  Gleiche. Beide Aufrufe lasen sonst denselben Merker, bevor der erste ihn löschte — und
+  das Protokoll bekäme zwei Übernahmen für einen Vorgang.
+- **Der Merker wird danach gelöscht.** Sonst erbte die nächste Person am selben Gerät
+  (Info-Stand-Tablet!) eine fremde Anmeldung.
+
+Damit die Administration die Anmeldung, die plötzlich ohne Vorgeschichte dasteht,
+einordnen kann, schreibt die Übernahme eine eigene Protokollzeile: **«ins Konto
+übernommen»**. Die Zeilen der alten Kennung bleiben, wo sie sind — sie sind angeschrieben
+und unveränderlich, das ist der Sinn eines Protokolls.
+
+**Security Rules:** Dafür darf `istBetreuung()` neu eine Anmeldung löschen; beim Verschieben
+ist die anonyme Sitzung, der das alte Dokument gehörte, bereits verschwunden. Dasselbe
+Recht schliesst nebenbei eine echte Lücke: Bisher konnte die Betreuung einen eigenen
+Vertipper am Info-Stand nicht selbst korrigieren. Die Massenvorgänge bleiben der
+Administration vorbehalten — «Alles zurücksetzen» fasst `config` und `slots` an, und
+beides darf nur `istAdmin()`.
 
 ## 11. Geprüfte Alternative: Firebase Realtime Database
 

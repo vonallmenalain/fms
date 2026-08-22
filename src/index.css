@@ -521,3 +521,65 @@ table.tabelle th { font-size: 11px; letter-spacing: .1em; text-transform: upperc
   .nicht-drucken { display: none !important; }
   .balkenzeile, .karte, .ticket-karte { break-inside: avoid; }
 }
+
+/* ---------- Protokoll: aufklappbare Zeilen statt breiter Tabelle ----------
+   Die Steuerung wird am Eventmorgen auf dem Handy gelesen. Eine Tabelle mit zwölf
+   Spalten hiesse dort waagrecht schieben — deshalb steht zugeklappt nur, was man zum
+   Wiedererkennen braucht, und alles Übrige erscheint auf Antippen. */
+
+.reiter-zeile { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.reiter-zeile > .reiter { flex: 1 1 auto; }
+
+.protokoll-liste { display: flex; flex-direction: column; gap: 6px; }
+
+.pz { border: 1px solid var(--linie); border-radius: var(--radius); background: var(--flaeche); }
+
+.pz-kopf {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 1px 8px;
+  align-items: baseline;
+  padding: 9px 12px;
+  min-height: 52px;
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pz-kopf:hover { background: var(--flaeche-2); }
+.pz-kopf:focus-visible { outline: 2px solid var(--gruen-dunkel); outline-offset: -2px; }
+
+.pz-pfeil  { grid-column: 1; grid-row: 1 / span 2; align-self: center; color: var(--grau-hell); }
+.pz-titel  { grid-column: 2; grid-row: 1; font-weight: 600; }
+.pz-rechts { grid-column: 3; grid-row: 1; font-size: 13px; color: var(--grau); text-align: right; }
+/* Umbrechen statt die Zeile breiter machen: Auf 390 px ist sonst Schluss. */
+.pz-unter  { grid-column: 2; grid-row: 2; font-size: 13px; color: var(--grau-hell); overflow-wrap: anywhere; }
+.pz-zeit   { grid-column: 3; grid-row: 2; font-size: 13px; color: var(--grau-hell); text-align: right; font-variant-numeric: tabular-nums; }
+
+.pz-marke {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--gruen-hell);
+  color: var(--gruen-tief);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  vertical-align: 1px;
+}
+
+.pz-koerper { padding: 10px 12px 12px; border-top: 1px solid var(--linie); background: var(--flaeche-2); }
+
+.pz-felder { margin: 0; }
+.pz-feld { display: grid; grid-template-columns: minmax(0, 8.5em) minmax(0, 1fr); gap: 2px 10px; padding: 3px 0; font-size: 14.5px; }
+.pz-feld dt { color: var(--grau-hell); font-size: 12.5px; }
+.pz-feld dd { margin: 0; overflow-wrap: anywhere; }
+
+.pz-zwischentitel { margin: 12px 0 4px; }
+.pz-vorgaenge { margin: 0; padding-left: 20px; font-size: 14px; }
+.pz-vorgaenge li { padding: 2px 0; }
+.pz-knoepfe { margin-top: 12px; }

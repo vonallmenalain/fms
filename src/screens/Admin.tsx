@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword,
   signInWithPopup, signOut, type User,
@@ -15,8 +15,8 @@ import { useAlleSlots } from '../hooks/useSlots';
 import { useAppConfig } from '../hooks/useAppConfig';
 import { useBuchungen } from '../hooks/useBuchung';
 import { useProtokoll } from '../hooks/useProtokoll';
-import { erfasseAdminBuchung, type Buchung } from '../buchung';
-import { VORGANG_TEXT } from '../protokoll';
+import { erfasseAdminBuchung, loescheAnmeldung, type Buchung } from '../buchung';
+import { VORGANG_TEXT, type LogEintrag } from '../protokoll';
 import { AusgebuchtFehler } from '../wiederholung';
 import { Kopf, Meldung } from '../ui/Bausteine';
 import {
@@ -36,6 +36,8 @@ type Reiter = 'uebersicht' | 'erfassen' | 'steuerung';
  * Schreibvorgang bestätigt hat — auf dem eigenen Gerät sieht man deshalb kurz nichts.
  */
 function alsDatum(wert: unknown): Date | null {
+  // Millisekunden: So kommen zusammengerechnete Zeiten aus der Geräteliste herein.
+  if (typeof wert === 'number') return wert ? new Date(wert) : null;
   const t = wert as { toDate?: () => Date } | null | undefined;
   return typeof t?.toDate === 'function' ? t.toDate() : null;
 }
@@ -157,10 +159,19 @@ export default function Admin({ onRaus }: { onRaus: () => void }) {
         </div>
       </div>
 
-      <div className="reiter nicht-drucken" role="tablist">
-        {reiterListe.map(([id, text]) => (
-          <button key={id} role="tab" aria-selected={offen === id} onClick={() => setReiter(id)}>{text}</button>
-        ))}
+      {/* «Hauptseite» steht bewusst NEBEN den Reitern und nicht als einer: Es wechselt
+          nicht die Ansicht, es verlässt den Bereich. Wer als Betreuungsperson selbst eine
+          Anmeldung hat, kommt hier zu ihr zurück und kann sie ändern oder freigeben —
+          siehe uebernimmGeraeteAnmeldung in src/buchung.ts. */}
+      <div className="reiter-zeile nicht-drucken">
+        <div className="reiter" role="tablist">
+          {reiterListe.map(([id, text]) => (
+            <button key={id} role="tab" aria-selected={offen === id} onClick={() => setReiter(id)}>{text}</button>
+          ))}
+        </div>
+        <button className="knopf knopf--still knopf--klein" onClick={onRaus}>
+          Hauptseite ↗
+        </button>
       </div>
 
       {offen === 'uebersicht' && <Uebersicht />}
@@ -686,74 +697,69 @@ function Steuerung({ melde, ich }: { melde: (t: string) => void; ich: User }) {
     await updateDoc(doc(db, 'slots', id), { kapazitaet: wert });
   };
 
-  // Formulare bleiben schmal (720 px liest sich besser), das Protokoll bekommt die volle
-  // Breite der Seite: Seine Tabellen haben zwölf Spalten, und eine Log-Ansicht, in der man
-  // waagrecht schieben muss, um die Uhrzeit neben dem Angebot zu sehen, ist keine.
   return (
-    <div className="stapel">
-      <div className="stapel" style={{ maxWidth: 720 }}>
-        <div className="stapel">
-          <h3>Anmeldung</h3>
-          <label className="schieber">
-            <input type="checkbox" checked={config.anmeldungOffen}
-              onChange={(e) => setzen({ anmeldungOffen: e.target.checked })} />
-            Anmeldung ist {config.anmeldungOffen ? 'OFFEN' : 'geschlossen'}
-          </label>
-          <p className="mini">
-            Wirkt sofort auf allen Geräten und auch serverseitig — geschlossen kann niemand buchen.
-          </p>
-        </div>
+    <div className="stapel" style={{ maxWidth: 720 }}>
+      <div className="stapel">
+        <h3>Anmeldung</h3>
+        <label className="schieber">
+          <input type="checkbox" checked={config.anmeldungOffen}
+            onChange={(e) => setzen({ anmeldungOffen: e.target.checked })} />
+          Anmeldung ist {config.anmeldungOffen ? 'OFFEN' : 'geschlossen'}
+        </label>
+        <p className="mini">
+          Wirkt sofort auf allen Geräten und auch serverseitig — geschlossen kann niemand buchen.
+        </p>
+      </div>
 
-        <hr className="trenner" />
+      <hr className="trenner" />
 
-        <div className="stapel">
-          <h3>Meldung an alle Gäste</h3>
-          {config.banner ? (
-            <>
-              <div className="hinweis">
-                <b>Aktive Meldung:</b> {config.banner}
-                <br /><span className="klein">Sie steht auf jedem Gerät zuoberst auf dem Bildschirm.</span>
-              </div>
-              <div className="knopfzeile">
-                <button className="knopf knopf--rand"
-                  onClick={() => setzen({ banner: '' }).then(() => { setBanner(''); melde('Meldung entfernt.'); })}>
-                  Meldung entfernen
-                </button>
-              </div>
-            </>
-          ) : (
-            <p className="mini">Zurzeit ist keine Meldung aktiv.</p>
-          )}
-          <div className="reihe">
-            <div className="feld" style={{ flex: 1 }}>
-              <input value={banner} onChange={(e) => setBanner(e.target.value)}
-                placeholder={config.banner ? 'Neue Meldung — ersetzt die bestehende' : 'z. B. Sport findet in Turnhalle 2 statt'} />
+      <div className="stapel">
+        <h3>Meldung an alle Gäste</h3>
+        {config.banner ? (
+          <>
+            <div className="hinweis">
+              <b>Aktive Meldung:</b> {config.banner}
+              <br /><span className="klein">Sie steht auf jedem Gerät zuoberst auf dem Bildschirm.</span>
             </div>
-            <button className="knopf knopf--rand" style={{ alignSelf: 'end' }} disabled={!banner.trim()}
-              onClick={() => setzen({ banner: banner.trim() }).then(() => melde('Meldung gesetzt.'))}>Senden</button>
+            <div className="knopfzeile">
+              <button className="knopf knopf--rand"
+                onClick={() => setzen({ banner: '' }).then(() => { setBanner(''); melde('Meldung entfernt.'); })}>
+                Meldung entfernen
+              </button>
+            </div>
+          </>
+        ) : (
+          <p className="mini">Zurzeit ist keine Meldung aktiv.</p>
+        )}
+        <div className="reihe">
+          <div className="feld" style={{ flex: 1 }}>
+            <input value={banner} onChange={(e) => setBanner(e.target.value)}
+              placeholder={config.banner ? 'Neue Meldung — ersetzt die bestehende' : 'z. B. Sport findet in Turnhalle 2 statt'} />
           </div>
+          <button className="knopf knopf--rand" style={{ alignSelf: 'end' }} disabled={!banner.trim()}
+            onClick={() => setzen({ banner: banner.trim() }).then(() => melde('Meldung gesetzt.'))}>Senden</button>
         </div>
+      </div>
 
-        <hr className="trenner" />
+      <hr className="trenner" />
 
-        <div className="stapel">
-          <h3>Performance-Schalter</h3>
-          <label className="schieber">
-            <input type="checkbox" checked={config.liveZaehler}
-              onChange={(e) => setzen({ liveZaehler: e.target.checked })} />
-            Live-Zähler {config.liveZaehler ? 'an' : 'aus'}
-          </label>
-          <p className="mini">
-            Ausschalten, falls es spürbar langsam wird: Die Platzzahlen werden dann einmalig
-            geladen statt dauerhaft aktualisiert. Buchen funktioniert unverändert.
-          </p>
-          <div className="feld" style={{ maxWidth: 240 }}>
-            <label htmlFor="maxp">Maximale Gruppengrösse</label>
-            <select id="maxp" value={config.maxPlaetzeProGeraet}
-              onChange={(e) => setzen({ maxPlaetzeProGeraet: Number(e.target.value) })}>
-              {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </div>
+      <div className="stapel">
+        <h3>Performance-Schalter</h3>
+        <label className="schieber">
+          <input type="checkbox" checked={config.liveZaehler}
+            onChange={(e) => setzen({ liveZaehler: e.target.checked })} />
+          Live-Zähler {config.liveZaehler ? 'an' : 'aus'}
+        </label>
+        <p className="mini">
+          Ausschalten, falls es spürbar langsam wird: Die Platzzahlen werden dann einmalig
+          geladen statt dauerhaft aktualisiert. Buchen funktioniert unverändert.
+        </p>
+        <div className="feld" style={{ maxWidth: 240 }}>
+          <label htmlFor="maxp">Maximale Gruppengrösse</label>
+          <select id="maxp" value={config.maxPlaetzeProGeraet}
+            onChange={(e) => setzen({ maxPlaetzeProGeraet: Number(e.target.value) })}>
+            {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
         </div>
       </div>
 
@@ -767,55 +773,53 @@ function Steuerung({ melde, ich }: { melde: (t: string) => void; ich: User }) {
 
       <hr className="trenner" />
 
-      <div className="stapel" style={{ maxWidth: 720 }}>
-        <div className="stapel">
-          <h3>Kapazitäten</h3>
-          <p className="mini">
-            Die Zahl gilt ab sofort. Kleiner als «Belegt» zu setzen nimmt niemandem den Platz weg —
-            es kommt nur nichts mehr dazu.
-          </p>
-          {BLOECKE.map((b) => (
-            <div className="stapel" key={b.id}>
-              <h4 className="blocktitel">{b.label} <span className="zahl">· {zeitraum(b)}</span></h4>
-              <div className="roller">
-                <table className="tabelle">
-                  <thead><tr><th>Angebot</th><th>Belegt</th><th>Kapazität</th></tr></thead>
-                  <tbody>
-                    {angeboteFuer(b.id).map((a) => (
-                      <tr key={a.id}>
-                        <td>{a.fach}{a.klasse ? ` · ${a.klasse}` : ''} <span className="mini">{a.raum}</span></td>
-                        <td className="zahl">{staende[a.id]?.belegt ?? 0}</td>
-                        <td>
-                          <input type="number" min={0} max={99}
-                            defaultValue={staende[a.id]?.kapazitaet ?? a.kapazitaet}
-                            style={{ width: 72, minHeight: 36, padding: '4px 8px' }}
-                            onBlur={(e) => kapazitaetAendern(a.id, Number(e.target.value))} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+      <div className="stapel">
+        <h3>Kapazitäten</h3>
+        <p className="mini">
+          Die Zahl gilt ab sofort. Kleiner als «Belegt» zu setzen nimmt niemandem den Platz weg —
+          es kommt nur nichts mehr dazu.
+        </p>
+        {BLOECKE.map((b) => (
+          <div className="stapel" key={b.id}>
+            <h4 className="blocktitel">{b.label} <span className="zahl">· {zeitraum(b)}</span></h4>
+            <div className="roller">
+              <table className="tabelle">
+                <thead><tr><th>Angebot</th><th>Belegt</th><th>Kapazität</th></tr></thead>
+                <tbody>
+                  {angeboteFuer(b.id).map((a) => (
+                    <tr key={a.id}>
+                      <td>{a.fach}{a.klasse ? ` · ${a.klasse}` : ''} <span className="mini">{a.raum}</span></td>
+                      <td className="zahl">{staende[a.id]?.belegt ?? 0}</td>
+                      <td>
+                        <input type="number" min={0} max={99}
+                          defaultValue={staende[a.id]?.kapazitaet ?? a.kapazitaet}
+                          style={{ width: 72, minHeight: 36, padding: '4px 8px' }}
+                          onBlur={(e) => kapazitaetAendern(a.id, Number(e.target.value))} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
+      </div>
 
-        <hr className="trenner" />
+      <hr className="trenner" />
 
-        <Zugaenge melde={melde} ich={ich} />
+      <Zugaenge melde={melde} ich={ich} />
 
-        <hr className="trenner" />
+      <hr className="trenner" />
 
-        <div className="stapel">
-          <h3>Wartung</h3>
-          <button className="knopf knopf--gefahr" disabled={laeuft} onClick={alleFreigeben}
-            style={{ alignSelf: 'start' }}>
-            Alles zurücksetzen
-          </button>
-          <p className="mini">
-            Löscht alle Anmeldungen, leert das Protokoll und setzt alle Zähler auf 0.
-          </p>
-        </div>
+      <div className="stapel">
+        <h3>Wartung</h3>
+        <button className="knopf knopf--gefahr" disabled={laeuft} onClick={alleFreigeben}
+          style={{ alignSelf: 'start' }}>
+          Alles zurücksetzen
+        </button>
+        <p className="mini">
+          Löscht alle Anmeldungen, leert das Protokoll und setzt alle Zähler auf 0.
+        </p>
       </div>
     </div>
   );
@@ -823,21 +827,95 @@ function Steuerung({ melde, ich }: { melde: (t: string) => void; ich: User }) {
 
 /* ------------------------------------------------------------------ Protokoll */
 
-type ProtokollAnsicht = 'clients' | 'verlauf';
+type ProtokollAnsicht = 'geraete' | 'verlauf';
 
-const ART_TEXT: Record<'gast' | 'admin', string> = {
-  gast: 'Gast · eigenes Gerät',
-  admin: 'Info-Stand · erfasst',
-};
+type Protokollzeile = LogEintrag & { id: string };
+
+/** Eine Zeile der Geräteliste: Anmeldung und Vorgänge desselben Clients zusammengelegt. */
+interface GeraeteZeile {
+  client: string;
+  nummer: number;
+  buchung: (Buchung & { id: string }) | undefined;
+  vorgaenge: Protokollzeile[];
+  geraet: string;
+  vomStand: boolean;
+  zuerst: number;
+  zuletzt: number;
+}
+
+/** Wie viele der vier Slots diese Anmeldung hält. */
+const slotsVon = (b: Buchung): number => BLOCK_IDS.filter((id) => b.wahl?.[id]).length;
 
 /**
- * Protokollbereich der Steuerung: welcher Client wann wie viele Slots gebucht hat.
+ * Fortlaufende Nummer je Client, nach erstem Auftreten.
  *
- * Zwei Sichten auf dasselbe, weil zwei verschiedene Fragen dahinterstehen:
- * «Pro Client» beantwortet «wer ist alles da und was hat er» und kommt vollständig aus
- * den Anmeldungen — dafür wird nichts zusätzlich geschrieben. «Verlauf» beantwortet
- * «was ist um 08:41 passiert» und braucht die Protokollzeilen: Ein Wechsel überschreibt
- * in der Anmeldung die vorherige Wahl, aus ihr allein liesse er sich nie rekonstruieren.
+ * Die Firebase-Kennung («iJovaGD9…») ist eindeutig, aber unlesbar und unsprechbar — am
+ * Info-Stand hilft sie niemandem. «Gerät 12» ist beides. Die echte Kennung steht weiterhin
+ * in der aufgeklappten Zeile, für den Fall, dass jemand in der Datenbank nachsehen muss.
+ *
+ * Nach ERSTEM Auftreten, nicht nach letztem: So behält eine Zeile ihre Nummer für den
+ * ganzen Morgen. Eine Nummerierung, die sich bei jeder fremden Buchung verschiebt, wäre
+ * schlimmer als gar keine. Aus demselben Grund zählt die erste PROTOKOLLZEILE und nicht
+ * die Anmeldung, sobald es beides gibt: Eine gelöschte Anmeldung verschöbe sonst die
+ * Nummern aller Geräte, die kurz danach dazugekommen sind.
+ *
+ * Restrisiko, bewusst in Kauf genommen: Taucht nachträglich ein Gerät mit einer früheren
+ * Zeit auf, rücken die jüngeren um eins weiter. Dagegen hülfe nur ein Zähler in der
+ * Datenbank — also genau das heisse Dokument, das docs/05 §5 vermeidet.
+ */
+function geraeteNummern(clients: { id: string; zeit: number }[]): Map<string, number> {
+  const zuerst = new Map<string, number>();
+  for (const { id, zeit } of clients) {
+    // Ein Zeitstempel, den der Server noch nicht bestätigt hat, ist 0 — er gehört ans
+    // Ende (also an die jüngste Nummer), nicht an den Anfang.
+    const wert = zeit || Number.MAX_SAFE_INTEGER;
+    const bisher = zuerst.get(id);
+    if (bisher === undefined || wert < bisher) zuerst.set(id, wert);
+  }
+  return new Map(
+    [...zuerst.entries()]
+      // Bei gleicher Millisekunde entscheidet die Kennung — sonst hinge die Reihenfolge
+      // davon ab, in welcher Folge Firestore die Dokumente geliefert hat.
+      .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
+      .map(([id], i) => [id, i + 1]),
+  );
+}
+
+/** Was ein Vorgang mit den Angeboten gemacht hat, in einer Zeile. */
+function vorgangText(e: LogEintrag): string {
+  if (e.vorgang === 'gewechselt') return `${angebotKurz(e.vorher)} → ${angebotKurz(e.angebot)}`;
+  if (e.vorgang === 'erfasst') return 'alle Blöcke auf einmal';
+  if (e.vorgang === 'uebernommen') return 'Anmeldung von der eigenen Gast-Kennung';
+  return angebotKurz(e.angebot ?? e.vorher);
+}
+
+/** «1 Vorgang», nicht «1 Vorgänge». */
+const vorgangZahl = (n: number): string => `${n} ${n === 1 ? 'Vorgang' : 'Vorgänge'}`;
+
+/** «1 Platz», nicht «1 Plätze». */
+const platzZahl = (n: number): string => `${n} ${n === 1 ? 'Platz' : 'Plätze'}`;
+
+/** Einzelne Dokumente löschen, in Portionen zu 400 (ein Stapel fasst höchstens 500). */
+async function loescheDokumente(sammlung: string, ids: string[]): Promise<void> {
+  for (let i = 0; i < ids.length; i += 400) {
+    const stapel = writeBatch(db);
+    ids.slice(i, i + 400).forEach((id) => stapel.delete(doc(db, sammlung, id)));
+    await stapel.commit();
+  }
+}
+
+/**
+ * Protokollbereich der Steuerung: welches Gerät wann wie viele Vorgänge ausgelöst hat.
+ *
+ * Zwei Sichten, weil zwei verschiedene Fragen dahinterstehen. «Pro Gerät» beantwortet
+ * «wer ist da und was hat er»; die Anmeldedaten dafür stehen ohnehin schon in `bookings`.
+ * «Verlauf» beantwortet «was ist um 08:41 passiert» und braucht die Protokollzeilen: Ein
+ * Wechsel überschreibt in der Anmeldung die vorherige Wahl, aus ihr allein liesse er sich
+ * nie rekonstruieren.
+ *
+ * Beide Sichten sind Listen aus aufklappbaren Zeilen, keine Tabellen: Die Steuerung wird
+ * am Eventmorgen auf dem Handy gelesen, und eine Tabelle mit zwölf Spalten heisst dort
+ * waagrecht schieben. Zugeklappt stehen drei Angaben, aufgeklappt alles.
  */
 function Protokoll(
   { melde, schreibt, setSchreibt }:
@@ -848,24 +926,22 @@ function Protokoll(
   return (
     <div className="stapel">
       <h3>Protokoll</h3>
-      {/* Fliesstext bleibt auf Lesebreite, auch wenn die Tabellen darunter breit werden. */}
-      <p className="mini" style={{ maxWidth: 720 }}>
-        Wer wann wie viele Slots gebucht hat — je eine Zeile pro Vorgang, dazu eine
-        Übersicht pro Gerät. Namen kommen darin nicht vor: Ein «Client» ist die anonyme
-        Geräte-Kennung, die Firebase beim ersten Buchen vergibt.
+      <p className="mini">
+        Welches Gerät wann wie viele Vorgänge ausgelöst hat. Ein «Gerät» ist die anonyme
+        Kennung, die Firebase beim ersten Buchen vergibt — Namen kommen im Protokoll nicht vor.
       </p>
 
       <label className="schieber">
         <input type="checkbox" checked={schreibt} onChange={(e) => setSchreibt(e.target.checked)} />
         Protokoll wird {schreibt ? 'geschrieben' : 'NICHT geschrieben'}
       </label>
-      <p className="mini" style={{ maxWidth: 720 }}>
+      <p className="mini">
         Bremst den Andrang nicht: Geschrieben wird erst, <b>nachdem</b> die Buchung bestätigt
         ist, und jeder Vorgang bekommt ein eigenes Dokument — es entsteht also kein
         gemeinsamer Engpass, wie ihn ein Zähler hat. Über den ganzen Morgen sind das rund
         700 zusätzliche Schreibvorgänge, gut ein Rappen. Der Schalter ist die Reserve,
-        falls trotzdem etwas klemmt; ausgeschaltet fehlt danach nur der Verlauf, «Pro
-        Client» bleibt vollständig.
+        falls trotzdem etwas klemmt; ausgeschaltet fehlt danach die Zahl der Vorgänge, die
+        Anmeldungen selbst bleiben vollständig.
       </p>
 
       <button className="knopf knopf--rand" style={{ alignSelf: 'start' }}
@@ -886,60 +962,131 @@ function Protokoll(
 function ProtokollListe({ melde }: { melde: (t: string) => void }) {
   const { eintraege, geladen, fehler } = useProtokoll();
   const buchungen = useBuchungen();
-  const [ansicht, setAnsicht] = useState<ProtokollAnsicht>('clients');
+  const [ansicht, setAnsicht] = useState<ProtokollAnsicht>('geraete');
   const [laeuft, setLaeuft] = useState(false);
 
-  // Die Geräteart steht in den Protokollzeilen, nicht in der Anmeldung. `eintraege` kommt
-  // neueste zuerst — die erste Zeile eines Clients ist also seine jüngste Angabe.
-  const geraetVon = new Map<string, string>();
-  for (const e of eintraege) if (!geraetVon.has(e.client)) geraetVon.set(e.client, e.geraet);
+  const nummern = useMemo(() => {
+    const ausProtokoll = new Set(eintraege.map((e) => e.client));
+    return geraeteNummern([
+      ...eintraege.map((e) => ({ id: e.client, zeit: zeitZahl(e.zeitpunkt) })),
+      // Nur Geräte ohne Protokollzeilen brauchen ihre Anmeldung als Anhaltspunkt.
+      ...buchungen.filter((b) => !ausProtokoll.has(b.id))
+        .map((b) => ({ id: b.id, zeit: zeitZahl(b.erstelltAm) })),
+    ]);
+  }, [buchungen, eintraege]);
 
-  const clients = [...buchungen].sort((a, b) => zeitZahl(b.erstelltAm) - zeitZahl(a.erstelltAm));
-  const slotsVon = (b: Buchung) => BLOCK_IDS.filter((id) => b.wahl?.[id]).length;
+  /**
+   * Anmeldungen und Vorgänge desselben Clients zusammenlegen. Bewusst die Vereinigung
+   * beider Seiten: Ein Gerät, das gebucht und alles wieder freigegeben hat, hat keine
+   * Anmeldung mehr — aber es war da, und genau das will die Administration sehen.
+   */
+  const zeilen = useMemo<GeraeteZeile[]>(() => {
+    const nachClient = new Map<string, Protokollzeile[]>();
+    for (const e of eintraege) {
+      const liste = nachClient.get(e.client);
+      if (liste) liste.push(e); else nachClient.set(e.client, [e]);
+    }
+    const clients = new Set([...buchungen.map((b) => b.id), ...nachClient.keys()]);
 
-  const leeren = async () => {
-    if (!confirm(`Wirklich alle ${eintraege.length >= 500 ? '' : eintraege.length + ' '}`
-      + 'Protokollzeilen löschen? Die Anmeldungen selbst bleiben unberührt.')) return;
+    return [...clients].map((client) => {
+      const buchung = buchungen.find((b) => b.id === client);
+      const vorgaenge = nachClient.get(client) ?? [];       // neuste zuerst, wie geladen
+      const zeiten = [
+        ...(buchung ? [zeitZahl(buchung.erstelltAm), zeitZahl(buchung.geaendertAm)] : []),
+        ...vorgaenge.map((v) => zeitZahl(v.zeitpunkt)),
+      ].filter(Boolean);
+      return {
+        client,
+        nummer: nummern.get(client) ?? 0,
+        buchung,
+        vorgaenge,
+        geraet: vorgaenge[0]?.geraet ?? '',
+        vomStand: (buchung?.quelle ?? vorgaenge[0]?.art) === 'admin',
+        zuerst: zeiten.length ? Math.min(...zeiten) : 0,
+        zuletzt: zeiten.length ? Math.max(...zeiten) : 0,
+      };
+    // Neustes Gerät zuoberst; bei gleicher Millisekunde entscheidet die Nummer, damit
+    // Liste und Nummerierung dieselbe Reihenfolge erzählen.
+    }).sort((a, b) => b.zuerst - a.zuerst || b.nummer - a.nummer);
+  }, [buchungen, eintraege, nummern]);
+
+  /** Ein Vorgang, der schiefgehen kann, mit Rückmeldung — für die fünf Löschknöpfe. */
+  const fuehreAus = async (vorgang: () => Promise<string>) => {
     setLaeuft(true);
-    try {
-      const n = await sammlungLeeren('log');
-      melde(`Protokoll geleert — ${n} Zeilen gelöscht.`);
-    } catch {
-      melde('Das Leeren hat nicht geklappt. Bitte nochmals versuchen.');
-    } finally { setLaeuft(false); }
+    try { melde(await vorgang()); }
+    catch { melde('Das hat nicht geklappt. Bitte nochmals versuchen.'); }
+    finally { setLaeuft(false); }
   };
 
-  const csvClients = () => {
-    const zeilen = [['Client', 'Art', 'Geraet', 'Anmeldung', 'Zuletzt', 'Personen', 'Slots',
-      'Plaetze', ...BLOECKE.map((b) => b.label), 'Notiz']];
-    for (const b of clients) {
-      zeilen.push([b.id, ART_TEXT[b.quelle] ?? b.quelle, geraetVon.get(b.id) ?? '',
-        uhrzeit(b.erstelltAm), uhrzeit(b.geaendertAm), String(b.plaetze),
-        String(slotsVon(b)), String(slotsVon(b) * b.plaetze),
-        ...BLOCK_IDS.map((id) => (b.wahl?.[id] ? angebotKurz(b.wahl[id]) : '')),
-        b.notiz ?? '']);
+  const anmeldungLoeschen = (z: GeraeteZeile) => {
+    const b = z.buchung;
+    if (!b) return;
+    const plaetze = slotsVon(b) * b.plaetze;
+    if (!confirm(`Anmeldung von Gerät ${z.nummer} löschen? `
+      + `${platzZahl(plaetze)} ${plaetze === 1 ? 'wird' : 'werden'} dabei wieder frei.`)) return;
+    return fuehreAus(async () => {
+      await loescheAnmeldung(b.id);
+      return `Anmeldung von Gerät ${z.nummer} gelöscht — ${platzZahl(plaetze)} wieder frei.`;
+    });
+  };
+
+  const vorgaengeLoeschen = (z: GeraeteZeile) => {
+    if (!z.vorgaenge.length) return;
+    if (!confirm(`${vorgangZahl(z.vorgaenge.length)} von Gerät ${z.nummer} aus dem Protokoll löschen? `
+      + 'Die Anmeldung selbst bleibt unberührt.')) return;
+    return fuehreAus(async () => {
+      await loescheDokumente('log', z.vorgaenge.map((v) => v.id));
+      return `Protokoll von Gerät ${z.nummer} gelöscht.`;
+    });
+  };
+
+  const zeileLoeschen = (e: Protokollzeile) => {
+    if (!confirm('Diese Protokollzeile löschen?')) return;
+    return fuehreAus(async () => {
+      await loescheDokumente('log', [e.id]);
+      return 'Protokollzeile gelöscht.';
+    });
+  };
+
+  const alleLeeren = () => {
+    if (!confirm('Wirklich alle Protokollzeilen löschen? Die Anmeldungen bleiben unberührt.')) return;
+    return fuehreAus(async () => `Protokoll geleert — ${await sammlungLeeren('log')} Zeilen gelöscht.`);
+  };
+
+  const csvGeraete = () => {
+    const zellen = [['Geraet', 'Kennung', 'Art', 'Geraeteart', 'Vorgaenge', 'Erster Vorgang',
+      'Letzter Vorgang', 'Personen', 'Slots', 'Plaetze', ...BLOECKE.map((b) => b.label), 'Notiz']];
+    for (const z of zeilen) {
+      const b = z.buchung;
+      zellen.push([`Gerät ${z.nummer}`, z.client, z.vomStand ? 'Info-Stand' : 'Gast',
+        z.geraet, String(z.vorgaenge.length), uhrzeit(z.zuerst), uhrzeit(z.zuletzt),
+        b ? String(b.plaetze) : '', b ? String(slotsVon(b)) : '',
+        b ? String(slotsVon(b) * b.plaetze) : '',
+        ...BLOCK_IDS.map((id) => (b?.wahl?.[id] ? angebotKurz(b.wahl[id]) : '')),
+        b?.notiz ?? '']);
     }
-    csvLaden('besuchsmorgen-clients.csv', zeilen);
+    csvLaden('besuchsmorgen-geraete.csv', zellen);
   };
 
   const csvVerlauf = () => {
-    const zeilen = [['Uhrzeit', 'Client', 'Art', 'Geraet', 'Vorgang', 'Block', 'Angebot',
-      'Vorher', 'Personen', 'Slots danach']];
+    const zellen = [['Uhrzeit', 'Geraet', 'Kennung', 'Art', 'Geraeteart', 'Vorgang', 'Block',
+      'Angebot', 'Vorher', 'Personen', 'Slots danach']];
     // Im Export chronologisch von vorne — so liest sich der Morgen wie ein Ablauf.
     for (const e of [...eintraege].reverse()) {
-      zeilen.push([uhrzeit(e.zeitpunkt), e.client, ART_TEXT[e.art] ?? e.art, e.geraet,
+      zellen.push([uhrzeit(e.zeitpunkt), `Gerät ${nummern.get(e.client) ?? '?'}`, e.client,
+        e.art === 'admin' ? 'Info-Stand' : 'Gast', e.geraet,
         VORGANG_TEXT[e.vorgang] ?? e.vorgang, e.block ? block(e.block).label : '',
         angebotKurz(e.angebot), angebotKurz(e.vorher), String(e.plaetze), String(e.slots)]);
     }
-    csvLaden('besuchsmorgen-protokoll.csv', zeilen);
+    csvLaden('besuchsmorgen-protokoll.csv', zellen);
   };
 
   if (fehler) {
     return (
       <div className="hinweis hinweis--warnung">
         <b>Das Protokoll liess sich nicht laden.</b> Meist heisst das, dass die Security
-        Rules noch nicht deployt sind — der Bereich `log` in <code>firestore.rules</code>
-        gehört dazu.
+        Rules noch nicht deployt sind — der Bereich <code>log</code> in{' '}
+        <code>firestore.rules</code> gehört dazu.
       </div>
     );
   }
@@ -947,7 +1094,7 @@ function ProtokollListe({ melde }: { melde: (t: string) => void }) {
   return (
     <div className="stapel">
       <dl className="kennzahlen">
-        <div className="kennzahl"><dt>Clients</dt><dd>{clients.length}</dd></div>
+        <div className="kennzahl"><dt>Geräte</dt><dd>{zeilen.length}</dd></div>
         <div className="kennzahl"><dt>Vorgänge</dt><dd>{eintraege.length}</dd></div>
         <div className="kennzahl">
           <dt>davon Wechsel</dt>
@@ -960,117 +1107,206 @@ function ProtokollListe({ melde }: { melde: (t: string) => void }) {
       </dl>
 
       <div className="reiter" role="tablist">
-        {([['clients', 'Pro Client'], ['verlauf', 'Verlauf']] as [ProtokollAnsicht, string][])
+        {([['geraete', 'Pro Gerät'], ['verlauf', 'Verlauf']] as [ProtokollAnsicht, string][])
           .map(([id, text]) => (
             <button key={id} role="tab" aria-selected={ansicht === id}
               onClick={() => setAnsicht(id)}>{text}</button>
           ))}
       </div>
 
-      {ansicht === 'clients' ? (
+      {ansicht === 'geraete' ? (
         <>
-          <p className="mini" style={{ maxWidth: 720 }}>
-            Eine Zeile je Gerät, neuste Anmeldung zuoberst. Diese Sicht stammt vollständig
-            aus den Anmeldungen und ist auch dann vollständig, wenn oben nichts
-            mitgeschrieben wird — einzig die Spalte «Gerät» bliebe dann leer.
+          <p className="mini">
+            Eine Zeile je Gerät, neustes zuoberst. Antippen öffnet die Einzelheiten.
+            «Vorgänge» zählt jede Serveränderung: Vier Angebote buchen sind vier; alles
+            freigeben und neu buchen kommt dazu.
           </p>
-          <div className="roller">
-            <table className="tabelle">
-              <thead>
-                <tr>
-                  <th>Client</th><th>Art</th><th>Gerät</th>
-                  <th>Anmeldung</th><th>zuletzt</th>
-                  <th>Pers.</th><th>Slots</th><th>Plätze</th>
-                  {BLOECKE.map((b) => <th key={b.id}>{b.label}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {clients.length === 0 && (
-                  <tr><td colSpan={12} className="mini">Noch keine Anmeldungen.</td></tr>
-                )}
-                {clients.map((b) => (
-                  <tr key={b.id}>
-                    <td>
-                      <span className="zahl" title={b.id}>{b.id.slice(0, 8)}</span>
-                      {b.notiz && <><br /><span className="mini">{b.notiz}</span></>}
-                    </td>
-                    <td className="mini">{ART_TEXT[b.quelle] ?? b.quelle}</td>
-                    <td className="mini">{geraetVon.get(b.id) ?? '—'}</td>
-                    <td className="zahl">{uhrzeit(b.erstelltAm)}</td>
-                    <td className="zahl">{uhrzeit(b.geaendertAm)}</td>
-                    <td className="zahl">{b.plaetze}</td>
-                    <td className="zahl">{slotsVon(b)}</td>
-                    <td className="zahl">{slotsVon(b) * b.plaetze}</td>
-                    {BLOCK_IDS.map((id) => (
-                      <td key={id} className="mini">{angebotKurz(b.wahl?.[id])}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {!geladen && <p className="mini">Protokoll wird geladen …</p>}
+          {geladen && zeilen.length === 0 && <p className="mini">Noch keine Anmeldungen.</p>}
+          <div className="protokoll-liste">
+            {zeilen.map((z) => (
+              <GeraeteEintrag
+                key={z.client} zeile={z} laeuft={laeuft}
+                onAnmeldungLoeschen={() => anmeldungLoeschen(z)}
+                onVorgaengeLoeschen={() => vorgaengeLoeschen(z)}
+              />
+            ))}
           </div>
         </>
       ) : (
         <>
-          <p className="mini" style={{ maxWidth: 720 }}>
+          <p className="mini">
             Jeder einzelne Vorgang, neuster zuoberst — auch Wechsel und Freigaben, die in
-            der Anmeldung selbst überschrieben wurden. «Slots» ist der Stand dieses Clients
-            unmittelbar nach dem Vorgang.
+            der Anmeldung selbst überschrieben wurden.
           </p>
-          <div className="roller">
-            <table className="tabelle">
-              <thead>
-                <tr>
-                  <th>Uhrzeit</th><th>Client</th><th>Art</th><th>Gerät</th>
-                  <th>Vorgang</th><th>Block</th><th>Angebot</th>
-                  <th>Pers.</th><th>Slots</th>
-                </tr>
-              </thead>
-              <tbody>
-                {!geladen && (
-                  <tr><td colSpan={9} className="mini">Protokoll wird geladen …</td></tr>
-                )}
-                {geladen && eintraege.length === 0 && (
-                  <tr><td colSpan={9} className="mini">Noch keine Vorgänge protokolliert.</td></tr>
-                )}
-                {eintraege.map((e) => (
-                  <tr key={e.id}>
-                    <td className="zahl">{uhrzeit(e.zeitpunkt)}</td>
-                    <td><span className="zahl" title={e.client}>{e.client.slice(0, 8)}</span></td>
-                    <td className="mini">{ART_TEXT[e.art] ?? e.art}</td>
-                    <td className="mini">{e.geraet}</td>
-                    <td>{VORGANG_TEXT[e.vorgang] ?? e.vorgang}</td>
-                    <td className="mini">{e.block ? block(e.block).label : '—'}</td>
-                    <td className="mini">
-                      {/* Beim Wechsel zählt beides: was weg ist und was dafür kam. */}
-                      {e.vorgang === 'gewechselt'
-                        ? `${angebotKurz(e.vorher)} → ${angebotKurz(e.angebot)}`
-                        : angebotKurz(e.angebot ?? e.vorher)}
-                    </td>
-                    <td className="zahl">{e.plaetze}</td>
-                    <td className="zahl">{e.slots}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {!geladen && <p className="mini">Protokoll wird geladen …</p>}
+          {geladen && eintraege.length === 0 && (
+            <p className="mini">Noch keine Vorgänge protokolliert.</p>
+          )}
+          <div className="protokoll-liste">
+            {eintraege.map((e) => (
+              <VerlaufEintrag key={e.id} eintrag={e} nummer={nummern.get(e.client) ?? 0}
+                laeuft={laeuft} onLoeschen={() => zeileLoeschen(e)} />
+            ))}
           </div>
           {eintraege.length >= 500 && (
             <p className="mini">
               Angezeigt sind die 500 neusten Zeilen. Ältere stehen weiterhin in der
-              Datenbank — der CSV-Export unten enthält ebenfalls diese 500.
+              Datenbank; der CSV-Export enthält ebenfalls diese 500.
             </p>
           )}
         </>
       )}
 
       <div className="knopfzeile">
-        <button className="knopf knopf--rand" onClick={ansicht === 'clients' ? csvClients : csvVerlauf}>
+        <button className="knopf knopf--rand" onClick={ansicht === 'geraete' ? csvGeraete : csvVerlauf}>
           CSV herunterladen
         </button>
-        <button className="knopf knopf--still" disabled={laeuft} onClick={leeren}>
+        <button className="knopf knopf--still" disabled={laeuft} onClick={alleLeeren}>
           Protokoll leeren
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Zeile der Geräteliste — zugeklappt vier Angaben, aufgeklappt alles. */
+function GeraeteEintrag(
+  { zeile, laeuft, onAnmeldungLoeschen, onVorgaengeLoeschen }:
+  {
+    zeile: GeraeteZeile; laeuft: boolean;
+    onAnmeldungLoeschen: () => void; onVorgaengeLoeschen: () => void;
+  },
+) {
+  const [auf, setAuf] = useState(false);
+  const b = zeile.buchung;
+
+  return (
+    <div className="pz">
+      <button type="button" className="pz-kopf" aria-expanded={auf} onClick={() => setAuf((o) => !o)}>
+        <span className="pz-pfeil" aria-hidden="true">{auf ? '▾' : '▸'}</span>
+        <span className="pz-titel">
+          Gerät {zeile.nummer}
+          {zeile.vomStand && <>{' '}<span className="pz-marke">Info-Stand</span></>}
+        </span>
+        <span className="pz-rechts">
+          {zeile.vorgaenge.length ? vorgangZahl(zeile.vorgaenge.length) : 'nicht protokolliert'}
+        </span>
+        <span className="pz-unter">{zeile.geraet || 'Geräteart unbekannt'}</span>
+        <span className="pz-zeit">{uhrzeit(zeile.zuerst)}</span>
+      </button>
+
+      {auf && (
+        <div className="pz-koerper">
+          <dl className="pz-felder">
+            <Feld name="Kennung"><span className="zahl">{zeile.client}</span></Feld>
+            <Feld name="Erster Vorgang">{uhrzeit(zeile.zuerst)}</Feld>
+            <Feld name="Letzter Vorgang">{uhrzeit(zeile.zuletzt)}</Feld>
+            {b && <Feld name="Personen">{b.plaetze}</Feld>}
+            {b && (
+              <Feld name="Belegt">
+                {slotsVon(b)} von 4 Slots · {slotsVon(b) * b.plaetze} Plätze
+              </Feld>
+            )}
+            {b && BLOECKE.map((blk) => (
+              <Feld key={blk.id} name={blk.label}>{angebotKurz(b.wahl?.[blk.id])}</Feld>
+            ))}
+            {b?.notiz && <Feld name="Notiz">{b.notiz}</Feld>}
+          </dl>
+
+          {!b && (
+            <p className="mini">
+              Unter dieser Kennung steht keine Anmeldung mehr: Entweder wurde alles wieder
+              freigegeben, oder sie ist in ein Konto übernommen worden.
+            </p>
+          )}
+
+          {zeile.vorgaenge.length > 0 && (
+            <>
+              <p className="mini pz-zwischentitel">Vorgänge, neuster zuoberst</p>
+              <ol className="pz-vorgaenge">
+                {zeile.vorgaenge.map((v) => (
+                  <li key={v.id}>
+                    <span className="zahl">{uhrzeit(v.zeitpunkt)}</span>
+                    {' '}{VORGANG_TEXT[v.vorgang] ?? v.vorgang}
+                    <span className="mini"> · {vorgangText(v)}</span>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+
+          <div className="knopfzeile pz-knoepfe">
+            {b && (
+              <button className="knopf knopf--gefahr knopf--klein" disabled={laeuft}
+                onClick={onAnmeldungLoeschen}>
+                Anmeldung löschen
+              </button>
+            )}
+            {zeile.vorgaenge.length > 0 && (
+              <button className="knopf knopf--still knopf--klein" disabled={laeuft}
+                onClick={onVorgaengeLoeschen}>
+                Protokoll dieses Geräts löschen
+              </button>
+            )}
+          </div>
+          {b && (
+            <p className="mini">
+              Löschen gibt {platzZahl(slotsVon(b) * b.plaetze)} wieder frei.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Zeile des Verlaufs — zugeklappt Gerät, Uhrzeit und Vorgang. */
+function VerlaufEintrag(
+  { eintrag, nummer, laeuft, onLoeschen }:
+  { eintrag: Protokollzeile; nummer: number; laeuft: boolean; onLoeschen: () => void },
+) {
+  const [auf, setAuf] = useState(false);
+
+  return (
+    <div className="pz">
+      <button type="button" className="pz-kopf" aria-expanded={auf} onClick={() => setAuf((o) => !o)}>
+        <span className="pz-pfeil" aria-hidden="true">{auf ? '▾' : '▸'}</span>
+        <span className="pz-titel">
+          Gerät {nummer}
+          {eintrag.art === 'admin' && <>{' '}<span className="pz-marke">Info-Stand</span></>}
+        </span>
+        <span className="pz-rechts">{VORGANG_TEXT[eintrag.vorgang] ?? eintrag.vorgang}</span>
+        <span className="pz-unter">{vorgangText(eintrag)}</span>
+        <span className="pz-zeit">{uhrzeit(eintrag.zeitpunkt)}</span>
+      </button>
+
+      {auf && (
+        <div className="pz-koerper">
+          <dl className="pz-felder">
+            <Feld name="Kennung"><span className="zahl">{eintrag.client}</span></Feld>
+            <Feld name="Geräteart">{eintrag.geraet || '—'}</Feld>
+            <Feld name="Block">{eintrag.block ? block(eintrag.block).label : '—'}</Feld>
+            <Feld name="Angebot">{vorgangText(eintrag)}</Feld>
+            <Feld name="Personen">{eintrag.plaetze}</Feld>
+            <Feld name="Slots danach">{eintrag.slots} von 4</Feld>
+          </dl>
+          <div className="knopfzeile pz-knoepfe">
+            <button className="knopf knopf--still knopf--klein" disabled={laeuft} onClick={onLoeschen}>
+              Diese Zeile löschen
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Feld({ name, children }: { name: string; children: ReactNode }) {
+  return (
+    <div className="pz-feld">
+      <dt>{name}</dt>
+      <dd>{children}</dd>
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { BLOCK_IDS, programm, type BlockId } from './programm';
 import { useAppConfig } from './hooks/useAppConfig';
 import { useBuchung } from './hooks/useBuchung';
 import { useSlots } from './hooks/useSlots';
-import { setzePlaetze, waehle } from './buchung';
+import { setzePlaetze, uebernimmGeraeteAnmeldung, waehle } from './buchung';
 import { AusgebuchtFehler, RechteFehler } from './wiederholung';
 import { angebot } from './programm';
 import { Banner, Laden, Meldung } from './ui/Bausteine';
@@ -52,7 +52,15 @@ function GastApp() {
   // keine Neuanmeldung. Angemeldet wird erst beim ersten Buchen (siehe firebase.ts).
   useEffect(() => {
     bestehenderBenutzer()
-      .then((u) => {
+      .then(async (u) => {
+        // Eine angemeldete Betreuungsperson bringt womöglich ihre eigene Anmeldung von
+        // vorhin mit — erstellt als Gast, bevor sie sich anmeldete. Sie wird HIER, vor
+        // dem ersten Zeichnen, in ihr Konto geholt: Sonst stünde auf dem Schirm «noch
+        // keine Anmeldung», während ihre Plätze belegt sind und niemand mehr an sie
+        // herankommt. Für gewöhnliche Gäste kostet die Zeile nichts — sie sind anonym.
+        if (u && !u.isAnonymous && (await uebernimmGeraeteAnmeldung(u.uid).catch(() => false))) {
+          setMeldung('Deine Anmeldung von diesem Gerät gehört jetzt zu deinem Konto.');
+        }
         setBenutzer(u);
         // Gab es beim Laden keine Sitzung, ist dies ein neues Gerät: dann darf die
         // Ticket-Wiederherstellung unten später nicht mehr auslösen, sonst springt sie
