@@ -39,7 +39,7 @@ ohne Handy selbst eintragen.
 | **[docs/03-umsetzungsplan.md](docs/03-umsetzungsplan.md)** | 8 Phasen mit konkreten Befehlen und Abnahmekriterien, **Terminplan bis zum 28.10.**, Aufwand pro Phase, Risikoliste |
 | **[docs/04-eventtag-runbook.md](docs/04-eventtag-runbook.md)** | Ablauf des Morgens, Text der QR-Folie, die 5 häufigsten Supportfälle, Eskalationsstufen, **Papier-Fallback** |
 | **[docs/05-last-und-performance.md](docs/05-last-und-performance.md)** | Warum kein Cloud-Functions-Backend, warum Blaze, wie «wirklich live» entsteht, der Engpass bei 200 Geräten, **Lasttest mit Abnahmekriterien**, Leistungsbudget |
-| **[data/programm.json](data/programm.json)** | Das vollständige Programm: 14 Atelier- und 24 Lektionsangebote mit Fach, Klasse, Zimmer, Lehrperson, Kapazität — aus der Programm-PPT übernommen |
+| **[data/programm.json](data/programm.json)** | Der Startwert fürs Programm: 14 Atelier- und 24 Lektionsangebote mit Fach, Klasse, Zimmer, Lehrperson, Kapazität — aus der Programm-PPT übernommen. Datum, Bereiche und Angebote sind zur Laufzeit in der Steuerung änderbar |
 | **[docs/06-stand-der-umsetzung.md](docs/06-stand-der-umsetzung.md)** | **Was gebaut ist**, lokal starten, Skripte, GitHub-Actions, bewusste Abweichungen vom Konzept, Messwerte |
 | **[docs/07-pruefbericht.md](docs/07-pruefbericht.md)** | **Prüfbericht vor der ersten Vorführung:** Stresstest mit 150 Geräten, Browsertest, gefundene Schwachstellen, **ToDo-Listen** und ein Drehbuch für die Vorführung |
 | **[docs/08-bestaetigungsmail.md](docs/08-bestaetigungsmail.md)** | **Eigene Mails statt derer von Firebase:** Bestätigungsmail, Anmeldelink und Passwort-Zurücksetzen, wer eine Mail auslösen darf, Einrichtung in Resend/Netlify Schritt für Schritt, Vorschau, Testversand und Fehlersuche |
@@ -101,16 +101,34 @@ ganze App ein `noindex`.
 
 ### Programm von Hand anpassen
 
-**Steuerung → Programm & Kapazitäten** ändert Titel, Klasse, Zimmer, Lehrpersonen-Kürzel
-und Kapazität eines Angebots im laufenden Betrieb — die Änderung ist auf allen Geräten
-sofort sichtbar, auch bei Gästen, die gerade auswählen.
+**Steuerung → Programm & Kapazitäten** ändert das ganze Programm im laufenden Betrieb —
+jede Änderung ist auf allen Geräten sofort sichtbar, auch bei Gästen, die gerade
+auswählen:
+
+- **Datum des Anlasses.** Der Wochentag wird daraus gerechnet. Für den nächsten
+  Besuchsmorgen genügt es also, hier den neuen Tag zu setzen; dieselbe App lässt sich
+  ohne Deploy wiederverwenden.
+- **Bereiche** (Atelier 1, Unterrichtsbesuch 1 …): Titel und Zeiten ändern, neue anlegen,
+  bestehende entfernen. Die Bereiche werden nach Anfangszeit sortiert — die früheste
+  zuerst —, und diese Reihenfolge ist zugleich der Weg durch die App und die Reihenfolge
+  auf dem Ticket.
+- **Angebote** je Bereich: Titel, Klasse, Zimmer, Lehrpersonen-Kürzel und Kapazität
+  ändern, neue Ateliers bzw. Lektionen anlegen, bestehende entfernen.
 
 Grundlage bleibt `data/programm.json`. In Firestore (`config/programm`) steht nur, was
 davon abweicht; darum wirkt eine spätere Korrektur in der Datei weiterhin überall dort,
 wo niemand von Hand eingegriffen hat. «Auf Programmdatei zurücksetzen» räumt eine
-einzelne Abweichung wieder weg. Angebote **anlegen oder streichen** geht weiterhin nur
-über die Datei und einen Deploy — sonst gäbe es Anmeldungen auf Angebote, die niemand
-mehr kennt.
+einzelne Abweichung wieder weg.
+
+Zwei Grenzen sind bewusst gesetzt:
+
+- **Belegtes lässt sich nicht entfernen.** Erst müssen die Plätze frei sein — sonst
+  hielte jemand ein Ticket auf ein Angebot, das es nicht mehr gibt.
+- **Entfernen heisst ausblenden**, solange es aus der Programmdatei stammt: Unter
+  «Ausgeblendet» steht alles Weggenommene und ist mit einem Tipp wieder da.
+- Zusätzlich zu den vier Bereichen der Programmdatei sind **acht weitere** möglich. Die
+  Security Rules prüfen jeden Blockschlüssel einzeln, und die Regelsprache kennt keine
+  Schleifen — darum ein fester Vorrat statt eines freien Feldes.
 
 Erster Zugang: **«Mit Google anmelden»** — die Adresse in `firestore.rules`
 (`bootstrapMail`) trägt sich beim ersten Anmelden selbst als Administration ein. Das ist

@@ -437,7 +437,9 @@ button.ticket-karte:disabled { cursor: default; }
 
 .raster { display: grid; gap: 16px; grid-template-columns: 1fr; }
 @media (min-width: 780px) { .raster { grid-template-columns: repeat(2, 1fr); } }
-@media (min-width: 1080px) { .raster--vier { grid-template-columns: repeat(4, 1fr); } }
+/* Eine Spalte je Bereich, solange sie breit genug bleibt. Feste vier Spalten gingen
+   nicht mehr: Wie viele Bereiche es gibt, entscheidet die Steuerung. */
+@media (min-width: 1080px) { .raster--bloecke { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); } }
 
 .saeule { display: flex; flex-direction: column; gap: 6px; }
 .saeule > h3 { margin-bottom: 2px; }
@@ -533,6 +535,20 @@ table.tabelle th { font-size: 11px; letter-spacing: .1em; text-transform: upperc
 /* Enger als im Gastformular: Hier stehen fünf Felder nebeneinander, keine Einzelfrage. */
 .angebot .feld input { min-height: 42px; padding: 8px 10px; font-size: 15.5px; }
 .angebot .feld label { font-size: 12.5px; }
+
+/* Ein Bereich (Atelier- bzw. Lektionsblock) mit seinen Angeboten darin. Die Angebote
+   sitzen sichtbar IM Bereich — sonst sähe man einer langen Liste nicht mehr an, was
+   noch zu «Atelier 1» gehört und wo «Atelier 2» beginnt. */
+.bereich {
+  border: 1px solid var(--linie-stark); border-radius: var(--radius);
+  background: var(--flaeche-2); padding: 12px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.bereich-felder { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px 10px; }
+.bereich-titel { grid-column: 1 / -1; }
+.bereich .feld input, .bereich .feld select { min-height: 42px; padding: 8px 10px; font-size: 15.5px; }
+.bereich .feld label { font-size: 12.5px; }
+.bereich-angebote { display: flex; flex-direction: column; gap: 8px; }
 
 /* ---------- Protokoll: aufklappbare Zeilen statt breiter Tabelle ----------
    Die Steuerung wird am Eventmorgen auf dem Handy gelesen. Eine Tabelle mit zwölf

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { BLOCK_IDS, type BlockId } from '../programm';
+import { blockIds, type BlockId } from '../programm';
 
 export function Kopf({ klein, claim, onHome }: { klein?: boolean; claim?: boolean; onHome?: () => void }) {
   const bild = (
@@ -32,14 +32,15 @@ export function Kopf({ klein, claim, onHome }: { klein?: boolean; claim?: boolea
 }
 
 export function Fortschritt({ aktuell, entschieden }: { aktuell: BlockId; entschieden: Set<BlockId> }) {
-  const nr = BLOCK_IDS.indexOf(aktuell) + 1;
+  const ids = blockIds();
+  const nr = ids.indexOf(aktuell) + 1;
   return (
     <div className="fortschritt">
       <div className="fortschritt-zeile">
-        <h3>Schritt {nr} von {BLOCK_IDS.length}</h3>
+        <h3>Schritt {nr} von {ids.length}</h3>
       </div>
       <div className="fortschritt-balken" aria-hidden="true">
-        {BLOCK_IDS.map((b) => (
+        {ids.map((b) => (
           <i key={b} data-an={b === aktuell ? 'teil' : entschieden.has(b) ? '1' : '0'} />
         ))}
       </div>

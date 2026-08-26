@@ -1,4 +1,4 @@
-import { BLOECKE, alleAngebote, angeboteFuer, metaZeile, zeitraum } from '../programm';
+import { alleBloecke, alleAngebote, angeboteFuer, metaZeile, zeitraum } from '../programm';
 import { useAlleSlots } from '../hooks/useSlots';
 import type { Buchung } from '../buchung';
 
@@ -43,8 +43,8 @@ export function Uebersicht({ buchungen }: { buchungen: (Buchung & { id: string }
           : <div className="kennzahl"><dt>ausgebuchte Angebote</dt><dd>{ausgebucht} von {angebote.length}</dd></div>}
       </dl>
 
-      <div className="raster raster--vier">
-        {BLOECKE.map((b) => (
+      <div className="raster raster--bloecke">
+        {alleBloecke().map((b) => (
           <div className="saeule" key={b.id}>
             <h3>{b.label} <span className="zahl" style={{ fontWeight: 500 }}>· {zeitraum(b)}</span></h3>
             {[...angeboteFuer(b.id)]

@@ -147,11 +147,19 @@ Gleicher 4-Schritt-Flow wie für Gäste, aber:
 **7.3 Notbremse & Steuerung** — nur für die Rolle `admin`
 - `Anmeldung offen / geschlossen` (Schalter) — z. B. erst ab 08:40 öffnen
 - Freitext-Banner für alle Gäste (z. B. «Sport findet in TH 2 statt»)
-- **Programm & Kapazitäten**: Titel, Klasse, Zimmer, Lehrpersonen-Kürzel und Kapazität
-  eines einzelnen Angebots ad hoc ändern (z. B. 20 → 24, oder ein kurzfristig verlegtes
-  Zimmer). Wirkt sofort auf allen Geräten. Grundlage bleibt `data/programm.json`;
-  gespeichert wird nur die Abweichung, und «Auf Programmdatei zurücksetzen» räumt sie
-  wieder weg. Angebote anlegen oder streichen geht weiterhin nur über die Datei.
+- **Programm & Kapazitäten**: das ganze Programm ad hoc ändern — Wirkt sofort auf allen
+  Geräten. Grundlage bleibt `data/programm.json`; gespeichert wird nur die Abweichung,
+  und «Auf Programmdatei zurücksetzen» räumt sie wieder weg.
+  - **Datum des Anlasses** (der Wochentag wird daraus gerechnet) — damit ist dieselbe
+    App ohne Deploy für den nächsten Besuchsmorgen zu haben.
+  - **Bereiche**: Titel und Zeiten ändern, neue anlegen, bestehende entfernen. Sortiert
+    wird nach Anfangszeit; diese Reihenfolge ist zugleich der Weg durch die App.
+  - **Angebote**: Titel, Klasse, Zimmer, Lehrpersonen-Kürzel und Kapazität ändern
+    (z. B. 20 → 24, oder ein kurzfristig verlegtes Zimmer), neue anlegen, bestehende
+    entfernen.
+  - Belegtes lässt sich nicht entfernen — erst müssen die Plätze frei sein. Was aus der
+    Programmdatei stammt, wird beim Entfernen nur ausgeblendet und steht unter
+    «Ausgeblendet» zum Zurückholen bereit.
 - **Link für die Lehrpersonen** zum Kopieren — siehe §7.5
 
 **7.4 Protokoll** (Steuerung → Protokoll, nur `admin`)
@@ -297,7 +305,7 @@ Alle am 19.08.2026 durch die Schule entschieden — damit ist die Fachseite voll
 | # | Frage | **Entscheid** | Auswirkung |
 |---|---|---|---|
 | **D1** | Was gilt bei Lektionen als «schon gewählt»? | **nur dasselbe Fach** — nicht die Klasse | Wer 28Fb Pädagogik in Block 1 wählt, sieht 28Fa Pädagogik in Block 2 gesperrt. Verschiedene Klassen mit verschiedenen Fächern bleiben frei wählbar. |
-| **D2** | Atelier Physik **und** Lektion Physik? | **erlaubt** (vorerst) | Die Sperre wirkt nur *innerhalb* der Ateliers und *innerhalb* der Lektionen, nie quer darüber. Umstellbar über `dedupeGruppen` in `data/programm.json`, ohne Kodeänderung. |
+| **D2** | Atelier Physik **und** Lektion Physik? | **erlaubt** (vorerst) | Die Sperre wirkt nur *innerhalb* der Ateliers und *innerhalb* der Lektionen, nie quer darüber. Massgebend ist die **Art** des Bereichs (`atelier` / `lektion`) — ein in der Steuerung neu angelegter Bereich fällt damit von selbst in die richtige Gruppe. |
 | **D3** | Max. Personen pro Gerät | **4**, einstellbar 1–4 | `config/app.maxPlaetzeProGeraet` ist zur Laufzeit änderbar (Admin-Ansicht), die Security Rules erzwingen 4 als harte Decke. |
 | **D4** | Freigabe der Anmeldung | **manueller Schalter** | Kein Zeitplan, keine Automatik: Die Organisation schaltet frei, wenn die QR-Folie erscheint — und kann jederzeit wieder schliessen. |
 
@@ -309,5 +317,6 @@ Alle am 19.08.2026 durch die Schule entschieden — damit ist die Fachseite voll
 | `TH 1` | **Turnhalle 1**, kein Weghinweis nötig | `l2-27fd` → `"raum": "Turnhalle 1"`, `"raumKurz": "TH 1"` |
 | Lehrpersonen-Kürzel | **nicht anzeigen** | `anzeige.lehrpersonKuerzel: false`; Daten bleiben für interne Listen erhalten |
 
-> Wird die Sperre bei D2 später doch gewünscht, ist es ein Eintrag in `dedupeGruppen`:
-> beide Blockpaare in **eine** Gruppe legen. Keine Kodeänderung, ein Commit.
+> Wird die Sperre bei D2 später doch gewünscht, ist es eine Zeile in `dedupeGruppe()`
+> (`src/programm.ts`): statt nach Art zu gruppieren, alle Bereiche in **eine** Gruppe
+> legen.

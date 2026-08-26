@@ -4,13 +4,15 @@ import {
   signInWithPopup, signOut, type User,
 } from 'firebase/auth';
 import {
-  collection, deleteField, doc, getDocs, setDoc, writeBatch, onSnapshot,
+  collection, deleteDoc, deleteField, doc, getDocs, setDoc, writeBatch, onSnapshot,
 } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import {
-  BLOCK_IDS, BLOECKE, alleAngebote, angebot, angeboteFuer, anpassungFuer, anzahlAnpassungen,
-  basisAngebot, block, zeitraum,
-  type Angebot, type Anpassung, type BlockId,
+  ART_TEXT, alleAngebote, alleBloecke, angebot, angeboteFuer, anpassungFuer, anzahlAnpassungen,
+  basisAngebot, basisBlock, block, blockAnpassungFuer, blockIds, datumAngepasst, datumIso,
+  datumLang, entfernteAngebote, entfernteBloecke, freierBlockSchluessel, neueAngebotId,
+  basisDatumIso, schluessel, zeitraum, NEUE_BLOCK_IDS,
+  type Angebot, type Anpassung, type Block, type BlockAnpassung, type BlockArt, type BlockId,
 } from '../programm';
 import { useAlleSlots, type Staende } from '../hooks/useSlots';
 import { useAppConfig } from '../hooks/useAppConfig';
@@ -563,7 +565,7 @@ function Erfassen({ melde }: { melde: (t: string) => void }) {
         </select>
       </div>
 
-      {BLOECKE.map((b) => (
+      {alleBloecke().map((b) => (
         <div className="feld" key={b.id}>
           <label htmlFor={`w-${b.id}`}>{b.label} <span className="zahl">({zeitraum(b)})</span></label>
           <select
@@ -621,15 +623,22 @@ function Steuerung({ melde, ich }: { melde: (t: string) => void; ich: User }) {
       // gibt, sind nach einer Proberunde bloss noch Verwirrung.
       const anzahlBuchungen = await sammlungLeeren('bookings');
       const anzahlProtokoll = await sammlungLeeren('log');
-      const stapel = writeBatch(db);              // 38 Angebote, ein einziger Stapel reicht
+      const stapel = writeBatch(db);              // ein paar Dutzend Angebote, ein Stapel reicht
       // Zurückgesetzt wird der ZÄHLER, nicht das Programm: Eine von Hand erhöhte
       // Kapazität bleibt stehen. Sie wieder auf den Stand der Programmdatei zu bringen
       // ist eine eigene Entscheidung — dafür gibt es oben «zurücksetzen» je Angebot.
-      alleAngebote().forEach((a) =>
+      const angebote = alleAngebote();
+      angebote.forEach((a) =>
         stapel.set(
           doc(db, 'slots', a.id),
           { belegt: 0, kapazitaet: staende[a.id]?.kapazitaet ?? a.kapazitaet, block: a.blockId },
         ));
+      // Und jeder übrige Zähler: Ein Angebot, das inzwischen aus dem Programm genommen
+      // wurde, kann noch ein Dokument haben. Bliebe dessen Stand stehen, stimmte die
+      // Summe der Zähler nicht mehr mit der Summe der gebuchten Plätze überein.
+      const bekannt = new Set(angebote.map((a) => a.id));
+      Object.keys(staende).filter((id) => !bekannt.has(id))
+        .forEach((id) => stapel.update(doc(db, 'slots', id), { belegt: 0 }));
       await stapel.commit();
       melde(`Alles zurückgesetzt — ${anzahlBuchungen} Anmeldungen gelöscht, `
         + `${anzahlProtokoll} Protokollzeilen geleert.`);
@@ -797,35 +806,99 @@ function LehrpersonenLink() {
 
 /* ------------------------------------------- Programm & Kapazitäten */
 
-/** Anpassung eines Angebots ablegen — oder entfernen, wenn wieder die Programmdatei gilt. */
+const programmRef = () => doc(db, 'config', 'programm');
+
+/**
+ * Anpassung eines Angebots ablegen — oder entfernen, wenn wieder die Programmdatei gilt.
+ *
+ * `deleteField()` in einem setDoc mit merge legt das Dokument nötigenfalls an und
+ * entfernt genau diesen einen Eintrag — ein updateDoc scheiterte am fehlenden Dokument.
+ * Alles andere wird VERSCHMOLZEN: Wer nur `{ entfernt: true }` schreibt, behält damit
+ * die von Hand gesetzten Titel und Zimmer für den Fall, dass er es sich anders überlegt.
+ */
 async function anpassungSpeichern(id: string, wert: Anpassung | null): Promise<void> {
-  const ref = doc(db, 'config', 'programm');
-  // `deleteField()` in einem setDoc mit merge legt das Dokument nötigenfalls an und
-  // entfernt genau diesen einen Eintrag — ein updateDoc scheiterte am fehlenden Dokument.
-  await setDoc(ref, { angebote: { [id]: wert ?? deleteField() } }, { merge: true });
+  await setDoc(programmRef(), { angebote: { [id]: wert ?? deleteField() } }, { merge: true });
+}
+
+/** Dasselbe für einen Bereich: Titel, Zeiten — oder ein Bereich, den es nur hier gibt. */
+async function blockSpeichern(id: BlockId, wert: BlockAnpassung | null): Promise<void> {
+  await setDoc(programmRef(), { bloecke: { [id]: wert ?? deleteField() } }, { merge: true });
+}
+
+/** Ein ausgeblendetes Angebot bzw. einen ausgeblendeten Bereich wieder hervorholen. */
+async function wiederEinblenden(feld: 'angebote' | 'bloecke', id: string): Promise<void> {
+  await setDoc(programmRef(), { [feld]: { [id]: { entfernt: deleteField() } } }, { merge: true });
+}
+
+/**
+ * Das Datum des Anlasses. `null` heisst: Es gilt wieder das Datum aus der Programmdatei.
+ *
+ * Gespeichert wird nur der Tag — der Wochentag wird daraus gerechnet (siehe datumLang),
+ * damit nach dem Umstellen nie ein Wochentag dasteht, der nicht zum Datum passt.
+ */
+async function datumSpeichern(iso: string | null): Promise<void> {
+  await setDoc(programmRef(), { event: { datum: iso ?? deleteField() } }, { merge: true });
 }
 
 /**
  * Kapazität schreiben. Sie steht im Zählerdokument und nicht bei den Anpassungen: Die
  * Buchungstransaktion prüft dort gegen Überbuchung — beide Zahlen an zwei Orten zu haben
  * hiesse, dass eine davon irgendwann die falsche ist.
+ *
+ * `belegt` wird nur beim Anlegen mitgegeben; bei einer blossen Kapazitätsänderung bleibt
+ * der Zählerstand unangetastet.
  */
-async function kapazitaetSpeichern(id: string, blockId: BlockId, wert: number): Promise<void> {
-  await setDoc(doc(db, 'slots', id), { kapazitaet: wert, block: blockId }, { merge: true });
+async function kapazitaetSpeichern(
+  id: string, blockId: BlockId, wert: number, belegt?: number,
+): Promise<void> {
+  await setDoc(
+    doc(db, 'slots', id),
+    { kapazitaet: wert, block: blockId, ...(belegt === undefined ? {} : { belegt }) },
+    { merge: true },
+  );
 }
+
+/** Der Zähler eines selbst angelegten Angebots — er verschwindet mit ihm. */
+const zaehlerEntfernen = (id: string): Promise<void> => deleteDoc(doc(db, 'slots', id));
+
+/** Wie viele Plätze in diesem Bereich zurzeit belegt sind. */
+const belegtImBlock = (blockId: BlockId, staende: Staende): number =>
+  angeboteFuer(blockId).reduce((n, a) => n + (staende[a.id]?.belegt ?? 0), 0);
+
+/** Wie viele Schlüssel aus dem Vorrat noch frei sind — siehe NEUE_BLOCK_IDS. */
+const offeneSchluessel = (): number => NEUE_BLOCK_IDS.filter((id) => !blockAnpassungFuer(id)).length;
+
+const bereichZahl = (n: number): string => `${n} ${n === 1 ? 'Bereich' : 'Bereiche'}`;
 
 function ProgrammBearbeiten(
   { melde, staende }: { melde: (t: string) => void; staende: Staende },
 ) {
   const [laeuft, setLaeuft] = useState(false);
+  const [legtAn, setLegtAn] = useState(false);
   const angepasst = anzahlAnpassungen();
+  const bloecke = alleBloecke();
+  const frei = freierBlockSchluessel();
 
   const allesZuruecksetzen = async () => {
-    if (!confirm('Alle von Hand geänderten Titel, Klassen, Zimmer und Lehrpersonen '
-      + 'verwerfen? Danach gilt wieder die Programmdatei. Die Kapazitäten bleiben, wie sie sind.')) return;
+    // Selbst angelegte Angebote verschwinden hier restlos — samt ihren Zählern. Sind
+    // darauf Plätze gebucht, zeigten die Anmeldungen danach ins Leere und die Summe der
+    // Zähler stimmte nicht mehr mit der Summe der gebuchten Plätze überein.
+    const selbstAngelegt = alleAngebote().filter((a) => anpassungFuer(a.id)?.neu);
+    const nochBelegt = selbstAngelegt.reduce((n, a) => n + (staende[a.id]?.belegt ?? 0), 0);
+    if (nochBelegt > 0) {
+      melde(`Auf selbst angelegten Angeboten sind noch ${platzZahl(nochBelegt)} gebucht. `
+        + 'Diese Anmeldungen zuerst freigeben.');
+      return;
+    }
+    if (!confirm('Alle von Hand geänderten Bereiche, Angebote und das Datum verwerfen? '
+      + 'Danach gilt wieder die Programmdatei — selbst angelegte Bereiche und Angebote '
+      + 'verschwinden dabei. Die Kapazitäten bleiben, wie sie sind.')) return;
     setLaeuft(true);
     try {
-      await setDoc(doc(db, 'config', 'programm'), { angebote: {} });
+      await setDoc(programmRef(), { event: {}, bloecke: {}, angebote: {} });
+      // Die Zähler erst danach: Solange das Angebot noch im Programm steht, soll auch
+      // sein Zähler stehen — sonst tippt jemand im selben Moment auf eine leere Karte.
+      await Promise.all(selbstAngelegt.map((a) => zaehlerEntfernen(a.id)));
       melde('Alle Programmanpassungen verworfen.');
     } catch {
       melde('Das hat nicht geklappt. Bitte nochmals versuchen.');
@@ -836,21 +909,23 @@ function ProgrammBearbeiten(
     <div className="stapel">
       <h3>Programm &amp; Kapazitäten</h3>
       <p className="mini">
-        Titel, Klasse, Zimmer, Lehrperson und Kapazität je Angebot. Jede Änderung gilt ab
-        sofort auf allen Geräten — auch bei Gästen, die gerade auswählen. Die Kapazität
-        kleiner als «Belegt» zu setzen nimmt niemandem den Platz weg, es kommt nur nichts
-        mehr dazu.
+        Datum, Bereiche und Angebote — Titel, Zeiten, Klasse, Zimmer, Lehrperson und
+        Kapazität. Jede Änderung gilt ab sofort auf allen Geräten, auch bei Gästen, die
+        gerade auswählen. Die Kapazität kleiner als «Belegt» zu setzen nimmt niemandem den
+        Platz weg, es kommt nur nichts mehr dazu.
       </p>
       <p className="mini">
         Grundlage bleibt <code>data/programm.json</code>; hier steht nur, was davon
-        abweicht. Neue Angebote anlegen oder streichen geht weiterhin nur dort — sonst
-        gäbe es Anmeldungen auf Angebote, die niemand mehr kennt.
+        abweicht. Entfernen heisst deshalb ausblenden: Ein Bereich oder Angebot aus der
+        Datei lässt sich weiter unten jederzeit wieder hervorholen. Belegte Plätze lassen
+        sich nicht entfernen — sonst hielte jemand ein Ticket auf etwas, das es nicht
+        mehr gibt.
       </p>
 
       {angepasst > 0 && (
         <div className="reihe">
           <span className="mini">
-            {angepasst === 1 ? '1 Angebot ist' : `${angepasst} Angebote sind`} von Hand angepasst.
+            {angepasst === 1 ? '1 Eintrag ist' : `${angepasst} Einträge sind`} von Hand angepasst.
           </span>
           <button className="knopf knopf--still knopf--klein" disabled={laeuft}
             onClick={allesZuruecksetzen}>
@@ -859,23 +934,507 @@ function ProgrammBearbeiten(
         </div>
       )}
 
-      {BLOECKE.map((b) => (
-        <div className="stapel" key={b.id}>
-          <h4 className="blocktitel">{b.label} <span className="zahl">· {zeitraum(b)}</span></h4>
-          {angeboteFuer(b.id).map((a) => (
-            <AngebotBearbeiten
-              key={a.id}
-              a={a}
-              belegt={staende[a.id]?.belegt ?? 0}
-              kapazitaet={staende[a.id]?.kapazitaet ?? a.kapazitaet}
-              melde={melde}
-            />
-          ))}
-        </div>
+      <DatumBearbeiten melde={melde} />
+
+      <hr className="trenner" />
+
+      {bloecke.map((b) => (
+        <BereichBearbeiten key={b.id} b={b} staende={staende} melde={melde} />
       ))}
+
+      {bloecke.length === 0 && (
+        <p className="mini">Zurzeit gibt es keinen einzigen Bereich — die Gäste können nichts wählen.</p>
+      )}
+
+      {legtAn ? (
+        <BereichAnlegen melde={melde} onFertig={() => setLegtAn(false)} />
+      ) : (
+        <div className="reihe">
+          <button className="knopf knopf--rand knopf--klein" disabled={!frei}
+            onClick={() => setLegtAn(true)}>
+            + Bereich hinzufügen
+          </button>
+          <span className="mini">
+            {frei ? `Noch ${bereichZahl(offeneSchluessel())} möglich.`
+              : 'Es sind alle zusätzlichen Bereiche vergeben. Zuerst einen entfernen.'}
+          </span>
+        </div>
+      )}
+
+      <Ausgeblendet melde={melde} />
     </div>
   );
 }
+
+/* ------------------------------------------------------- Datum des Anlasses */
+
+function DatumBearbeiten({ melde }: { melde: (t: string) => void }) {
+  const gilt = datumIso();
+  const [iso, setIso] = useState(gilt);
+  const [laeuft, setLaeuft] = useState(false);
+
+  // Stellt jemand anderes das Datum um, zieht die Maske nach.
+  useEffect(() => { setIso(gilt); }, [gilt]);
+
+  const gueltig = /^\d{4}-\d{2}-\d{2}$/.test(iso) && !Number.isNaN(Date.parse(iso));
+
+  const speichern = async () => {
+    if (!gueltig) { melde('Bitte ein gültiges Datum wählen.'); return; }
+    setLaeuft(true);
+    try {
+      // Genau der Stand der Programmdatei? Dann braucht es gar keine Anpassung — so
+      // wirkt eine spätere Korrektur in der Datei wieder von selbst.
+      await datumSpeichern(iso === basisDatumIso() ? null : iso);
+      melde(`Der Besuchsmorgen steht neu auf ${datumLang(iso)}.`);
+    } catch {
+      melde('Das Speichern hat nicht geklappt. Bitte nochmals versuchen.');
+    } finally { setLaeuft(false); }
+  };
+
+  const zuruecksetzen = async () => {
+    setLaeuft(true);
+    try {
+      await datumSpeichern(null);
+      melde(`Das Datum steht wieder auf ${datumLang(basisDatumIso())}.`);
+    } catch {
+      melde('Das hat nicht geklappt. Bitte nochmals versuchen.');
+    } finally { setLaeuft(false); }
+  };
+
+  return (
+    <div className="stapel">
+      <h4 className="blocktitel">Datum des Besuchsmorgens</h4>
+      <p className="mini">
+        Steht auf der Startseite, auf jedem Ticket und in der Übersicht. Der Wochentag
+        wird aus dem Datum gerechnet — für den nächsten Besuchsmorgen genügt es also,
+        hier den neuen Tag zu setzen.
+      </p>
+      <div className="reihe">
+        <div className="feld" style={{ maxWidth: 200 }}>
+          <label htmlFor="event-datum">Datum</label>
+          <input id="event-datum" type="date" value={iso}
+            onChange={(e) => setIso(e.target.value)} />
+        </div>
+        <button className="knopf knopf--rand knopf--klein" style={{ alignSelf: 'end' }}
+          disabled={laeuft || iso === gilt} onClick={speichern}>
+          Speichern
+        </button>
+        {datumAngepasst() && (
+          <button className="knopf knopf--still knopf--klein" style={{ alignSelf: 'end' }}
+            disabled={laeuft} onClick={zuruecksetzen}>
+            Auf Programmdatei zurücksetzen
+          </button>
+        )}
+      </div>
+      <p className="mini">Zurzeit gilt: <b>{datumLang()}</b></p>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------------- Ein Bereich */
+
+/**
+ * Einen Bereich bearbeiten: Titel, Beginn, Ende — und seine Angebote.
+ *
+ * Die Zeiten sind mehr als Anzeige: Die Bereiche werden danach sortiert, und diese
+ * Reihenfolge ist zugleich der Weg durch die App. Wer hier eine Zeit ändert, verschiebt
+ * den Bereich also auch im Ablauf — er springt nach dem Speichern an seinen neuen Platz.
+ */
+function BereichBearbeiten(
+  { b, staende, melde }: { b: Block; staende: Staende; melde: (t: string) => void },
+) {
+  const basis = basisBlock(b.id);
+  const istNeu = basis === undefined;
+  const [label, setLabel] = useState(b.label);
+  const [von, setVon] = useState(b.von);
+  const [bis, setBis] = useState(b.bis);
+  const [laeuft, setLaeuft] = useState(false);
+  const [legtAn, setLegtAn] = useState(false);
+
+  // Wie bei den Angeboten: abhängig von den WERTEN, nicht vom Objekt — sonst würde die
+  // Maske bei jeder fremden Buchung zurückgesetzt.
+  useEffect(() => { setLabel(b.label); setVon(b.von); setBis(b.bis); }, [b.label, b.von, b.bis]);
+
+  const angebote = angeboteFuer(b.id);
+  const belegt = belegtImBlock(b.id, staende);
+  const angepasst = blockAnpassungFuer(b.id) !== undefined;
+  const geaendert = label.trim() !== b.label || von !== b.von || bis !== b.bis;
+
+  const speichern = async () => {
+    if (!label.trim()) { melde('Ohne Titel wüsste niemand, worum es hier geht.'); return; }
+    if (!von || !bis) { melde('Beginn und Ende gehören beide gesetzt — danach werden die Bereiche sortiert.'); return; }
+    if (von >= bis) { melde('Das Ende muss nach dem Beginn liegen.'); return; }
+    setLaeuft(true);
+    try {
+      const neu: BlockAnpassung = { label: label.trim(), von, bis };
+      // Wer von Hand wieder genau den Stand der Programmdatei eintippt, soll auch keine
+      // Anpassung mehr haben — sonst überdeckte sie später eine Korrektur in der Datei.
+      const wieBasis = !!basis && neu.label === basis.label && neu.von === basis.von && neu.bis === basis.bis;
+      await blockSpeichern(b.id, wieBasis ? null : neu);
+      melde(`${neu.label} gespeichert.`);
+    } catch {
+      melde('Das Speichern hat nicht geklappt. Bitte nochmals versuchen.');
+    } finally { setLaeuft(false); }
+  };
+
+  const zuruecksetzen = async () => {
+    setLaeuft(true);
+    try {
+      await blockSpeichern(b.id, null);
+      melde(`${basis?.label ?? b.label} steht wieder wie in der Programmdatei.`);
+    } catch {
+      melde('Das hat nicht geklappt. Bitte nochmals versuchen.');
+    } finally { setLaeuft(false); }
+  };
+
+  const entfernen = async () => {
+    if (belegt > 0) {
+      melde(`«${b.label}» hält ${platzZahl(belegt)}. Diese Anmeldungen zuerst freigeben — `
+        + 'sonst zeigt ihr Ticket auf etwas, das es nicht mehr gibt.');
+      return;
+    }
+    const was = istNeu
+      ? `«${b.label}» und seine ${angebote.length} Angebote endgültig löschen?`
+      : `«${b.label}» und seine ${angebote.length} Angebote ausblenden? Sie lassen sich `
+        + 'weiter unten jederzeit wieder hervorholen.';
+    if (!confirm(was)) return;
+    setLaeuft(true);
+    try {
+      if (istNeu) {
+        // Selbst angelegt: restlos weg — erst aus dem Programm, dann die Zähler.
+        for (const a of angebote) await anpassungSpeichern(a.id, null);
+        await blockSpeichern(b.id, null);
+        await Promise.all(angebote.map((a) => zaehlerEntfernen(a.id)));
+      } else {
+        await blockSpeichern(b.id, { entfernt: true });
+      }
+      melde(`«${b.label}» ist weg.`);
+    } catch {
+      melde('Das hat nicht geklappt. Bitte nochmals versuchen.');
+    } finally { setLaeuft(false); }
+  };
+
+  const feldId = (name: string) => `${name}-block-${b.id}`;
+  const art = ART_TEXT[b.art];
+
+  return (
+    <div className="bereich">
+      <div className="angebot-kopf">
+        <span className="pz-marke">{art.einzahl}</span>
+        <span className="mini zahl">{b.id}</span>
+        {istNeu
+          ? <span className="pz-marke">selbst angelegt</span>
+          : angepasst && <span className="pz-marke">angepasst</span>}
+        <span className="angebot-belegt mini">
+          {angebote.length} {angebote.length === 1 ? 'Angebot' : 'Angebote'} · {belegt} belegt
+        </span>
+      </div>
+
+      <div className="bereich-felder">
+        <div className="feld bereich-titel">
+          <label htmlFor={feldId('label')}>Titel des Bereichs</label>
+          <input id={feldId('label')} value={label} maxLength={40}
+            onChange={(e) => setLabel(e.target.value)} />
+        </div>
+        <div className="feld">
+          <label htmlFor={feldId('von')}>Beginn</label>
+          <input id={feldId('von')} type="time" value={von}
+            onChange={(e) => setVon(e.target.value)} />
+        </div>
+        <div className="feld">
+          <label htmlFor={feldId('bis')}>Ende</label>
+          <input id={feldId('bis')} type="time" value={bis}
+            onChange={(e) => setBis(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="knopfzeile">
+        <button className="knopf knopf--rand knopf--klein" disabled={!geaendert || laeuft}
+          onClick={speichern}>
+          Speichern
+        </button>
+        {angepasst && !istNeu && (
+          <button className="knopf knopf--still knopf--klein" disabled={laeuft}
+            onClick={zuruecksetzen}>
+            Auf Programmdatei zurücksetzen
+          </button>
+        )}
+        <button className="knopf knopf--still knopf--klein" disabled={laeuft} onClick={entfernen}>
+          Bereich entfernen
+        </button>
+      </div>
+
+      <div className="bereich-angebote">
+        {angebote.map((a) => (
+          <AngebotBearbeiten
+            key={a.id}
+            a={a}
+            belegt={staende[a.id]?.belegt ?? 0}
+            kapazitaet={staende[a.id]?.kapazitaet ?? a.kapazitaet}
+            melde={melde}
+          />
+        ))}
+        {angebote.length === 0 && (
+          <p className="mini">In diesem Bereich steht noch nichts zur Auswahl.</p>
+        )}
+      </div>
+
+      {legtAn ? (
+        <AngebotAnlegen b={b} melde={melde} onFertig={() => setLegtAn(false)} />
+      ) : (
+        <button className="knopf knopf--rand knopf--klein" style={{ alignSelf: 'start' }}
+          onClick={() => setLegtAn(true)}>
+          + {art.einzahl} hinzufügen
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------- Neuer Bereich anlegen */
+
+function BereichAnlegen(
+  { melde, onFertig }: { melde: (t: string) => void; onFertig: () => void },
+) {
+  const [art, setArt] = useState<BlockArt>('atelier');
+  const [label, setLabel] = useState('');
+  const [von, setVon] = useState('');
+  const [bis, setBis] = useState('');
+  // Vorgabe aus dem bestehenden Programm: Ein weiteres Atelier fasst normalerweise so
+  // viele Leute wie die anderen Ateliers auch.
+  const vorgabe = alleBloecke().find((b) => b.art === art)?.kapazitaet ?? 20;
+  const [kap, setKap] = useState(String(vorgabe));
+  const [laeuft, setLaeuft] = useState(false);
+
+  useEffect(() => { setKap(String(vorgabe)); }, [vorgabe]);
+
+  const zahl = Number(kap);
+  const kapGueltig = kap.trim() !== '' && Number.isInteger(zahl) && zahl >= 0 && zahl <= 99;
+
+  const anlegen = async () => {
+    const id = freierBlockSchluessel();
+    if (!id) { melde('Es sind schon alle zusätzlichen Bereiche vergeben.'); return; }
+    if (!label.trim()) { melde('Ohne Titel wüsste niemand, worum es hier geht.'); return; }
+    if (!von || !bis) { melde('Beginn und Ende gehören beide gesetzt.'); return; }
+    if (von >= bis) { melde('Das Ende muss nach dem Beginn liegen.'); return; }
+    if (!kapGueltig) { melde('Die Kapazität muss eine ganze Zahl zwischen 0 und 99 sein.'); return; }
+    setLaeuft(true);
+    try {
+      await blockSpeichern(id, {
+        neu: true, art, label: label.trim(), von, bis, kapazitaet: zahl,
+      });
+      melde(`«${label.trim()}» angelegt — jetzt noch die ${ART_TEXT[art].mehrzahl} eintragen.`);
+      onFertig();
+    } catch {
+      melde('Das Anlegen hat nicht geklappt. Bitte nochmals versuchen.');
+    } finally { setLaeuft(false); }
+  };
+
+  return (
+    <div className="bereich">
+      <h4 className="blocktitel">Neuer Bereich</h4>
+      <p className="mini">
+        Ein Bereich ist ein Zeitfenster, in dem sich die Gäste für genau ein Angebot
+        entscheiden. Die Doppelwahlsperre gilt jeweils unter Bereichen derselben Art:
+        Dasselbe Fach lässt sich nicht in zwei {ART_TEXT[art].mehrzahl} wählen.
+      </p>
+      <div className="bereich-felder">
+        <div className="feld">
+          <label htmlFor="neu-art">Art</label>
+          <select id="neu-art" value={art} onChange={(e) => setArt(e.target.value as BlockArt)}>
+            <option value="atelier">{ART_TEXT.atelier.einzahl}</option>
+            <option value="lektion">{ART_TEXT.lektion.einzahl}</option>
+          </select>
+        </div>
+        <div className="feld bereich-titel">
+          <label htmlFor="neu-label">Titel</label>
+          <input id="neu-label" value={label} maxLength={40}
+            placeholder={`z. B. ${ART_TEXT[art].einzahl} 3`}
+            onChange={(e) => setLabel(e.target.value)} />
+        </div>
+        <div className="feld">
+          <label htmlFor="neu-von">Beginn</label>
+          <input id="neu-von" type="time" value={von} onChange={(e) => setVon(e.target.value)} />
+        </div>
+        <div className="feld">
+          <label htmlFor="neu-bis">Ende</label>
+          <input id="neu-bis" type="time" value={bis} onChange={(e) => setBis(e.target.value)} />
+        </div>
+        <div className="feld">
+          <label htmlFor="neu-kap">Plätze je Angebot</label>
+          <input id="neu-kap" type="number" min={0} max={99} value={kap}
+            onChange={(e) => setKap(e.target.value)} />
+        </div>
+      </div>
+      <div className="knopfzeile">
+        <button className="knopf knopf--rand knopf--klein" disabled={laeuft} onClick={anlegen}>
+          Bereich anlegen
+        </button>
+        <button className="knopf knopf--still knopf--klein" disabled={laeuft} onClick={onFertig}>
+          Abbrechen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------ Neues Angebot anlegen */
+
+function AngebotAnlegen(
+  { b, melde, onFertig }: { b: Block; melde: (t: string) => void; onFertig: () => void },
+) {
+  const [fach, setFach] = useState('');
+  const [klasse, setKlasse] = useState('');
+  const [raum, setRaum] = useState('');
+  const [lehrperson, setLehrperson] = useState('');
+  const [kap, setKap] = useState(String(b.kapazitaet));
+  const [laeuft, setLaeuft] = useState(false);
+
+  const zahl = Number(kap);
+  const kapGueltig = kap.trim() !== '' && Number.isInteger(zahl) && zahl >= 0 && zahl <= 99;
+  // Je Bereich eigene Feld-IDs: Es können mehrere Masken gleichzeitig offen sein, und
+  // zweimal dieselbe ID hiesse, dass die Beschriftung aufs falsche Feld zeigt.
+  const feldId = (name: string) => `neu-${name}-${b.id}`;
+
+  const anlegen = async () => {
+    const titel = fach.trim();
+    if (!titel) { melde('Ohne Titel wäre das Angebot auf der Karte eine leere Zeile.'); return; }
+    if (!kapGueltig) { melde('Die Kapazität muss eine ganze Zahl zwischen 0 und 99 sein.'); return; }
+    setLaeuft(true);
+    try {
+      const id = neueAngebotId(b.id, titel);
+      // Erst der Zähler, dann das Angebot: Andernfalls stünde es einen Wimpernschlag
+      // lang auf allen Geräten, ohne dass es einen Platzstand dazu gäbe — und der erste
+      // Tipp liefe ins Leere.
+      await kapazitaetSpeichern(id, b.id, zahl, 0);
+      await anpassungSpeichern(id, {
+        neu: true,
+        blockId: b.id,
+        // Der Fachschlüssel entscheidet über die Doppelwahlsperre und steht ab jetzt
+        // fest: «Chemie» hier und «Chemie» im anderen Atelier gelten als dasselbe Fach.
+        fachKey: schluessel(titel),
+        fach: titel,
+        klasse: klasse.trim(),
+        raum: raum.trim(),
+        lehrperson: lehrperson.trim().toUpperCase(),
+      });
+      melde(`${titel} in «${b.label}» angelegt.`);
+      onFertig();
+    } catch {
+      melde('Das Anlegen hat nicht geklappt. Bitte nochmals versuchen.');
+    } finally { setLaeuft(false); }
+  };
+
+  return (
+    <div className="angebot">
+      <div className="angebot-kopf">
+        <span className="mini zahl">Neues Angebot in «{b.label}»</span>
+      </div>
+      <div className="angebot-felder">
+        <div className="feld angebot-breit">
+          <label htmlFor={feldId('fach')}>Titel</label>
+          <input id={feldId('fach')} value={fach} maxLength={60}
+            placeholder="z. B. Chemie" onChange={(e) => setFach(e.target.value)} />
+        </div>
+        <div className="feld">
+          <label htmlFor={feldId('klasse')}>Klasse</label>
+          <input id={feldId('klasse')} value={klasse} maxLength={12} placeholder="–"
+            onChange={(e) => setKlasse(e.target.value)} />
+        </div>
+        <div className="feld">
+          <label htmlFor={feldId('raum')}>Zimmer</label>
+          <input id={feldId('raum')} value={raum} maxLength={24} placeholder="z. B. GN 1.52"
+            onChange={(e) => setRaum(e.target.value)} />
+        </div>
+        <div className="feld">
+          <label htmlFor={feldId('lp')}>Lehrperson</label>
+          <input id={feldId('lp')} value={lehrperson} maxLength={3} placeholder="ABC"
+            style={{ textTransform: 'uppercase' }}
+            onChange={(e) => setLehrperson(e.target.value)} />
+        </div>
+        <div className="feld">
+          <label htmlFor={feldId('kap')}>Kapazität</label>
+          <input id={feldId('kap')} type="number" min={0} max={99} value={kap}
+            onChange={(e) => setKap(e.target.value)} />
+        </div>
+      </div>
+      <div className="knopfzeile">
+        <button className="knopf knopf--rand knopf--klein" disabled={laeuft} onClick={anlegen}>
+          Angebot anlegen
+        </button>
+        <button className="knopf knopf--still knopf--klein" disabled={laeuft} onClick={onFertig}>
+          Abbrechen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------- Ausgeblendetes zurückholen */
+
+/**
+ * Was aus der Programmdatei zwar da wäre, hier aber entfernt wurde.
+ *
+ * Ohne diese Liste gäbe es nur einen Weg zurück: alle Anpassungen verwerfen. Ein
+ * versehentlich ausgeblendetes Atelier kostete damit auch jede sorgfältig getippte
+ * Zimmernummer.
+ */
+function Ausgeblendet({ melde }: { melde: (t: string) => void }) {
+  const [laeuft, setLaeuft] = useState(false);
+  const bloecke = entfernteBloecke();
+  // Angebote eines ausgeblendeten Bereichs bleiben aussen vor: Sie wieder einzublenden
+  // änderte gar nichts, solange ihr Bereich fehlt.
+  const angebote = entfernteAngebote().filter((a) => block(a.blockId));
+
+  if (bloecke.length === 0 && angebote.length === 0) return null;
+
+  const holen = async (feld: 'bloecke' | 'angebote', id: string, name: string) => {
+    setLaeuft(true);
+    try {
+      await wiederEinblenden(feld, id);
+      melde(`${name} ist wieder da.`);
+    } catch {
+      melde('Das hat nicht geklappt. Bitte nochmals versuchen.');
+    } finally { setLaeuft(false); }
+  };
+
+  return (
+    <>
+      <hr className="trenner" />
+      <div className="stapel">
+        <h4 className="blocktitel">Ausgeblendet</h4>
+        <p className="mini">
+          Steht in der Programmdatei, ist hier aber entfernt. Ein Tipp genügt, und es ist
+          wieder im Programm.
+        </p>
+        {bloecke.map((b) => (
+          <div className="reihe" key={b.id}>
+            <span className="mini">
+              <b>{b.label}</b> <span className="zahl">· {zeitraum(b)}</span>
+            </span>
+            <button className="knopf knopf--still knopf--klein" disabled={laeuft}
+              onClick={() => holen('bloecke', b.id, b.label)}>
+              Wieder einblenden
+            </button>
+          </div>
+        ))}
+        {angebote.map((a) => (
+          <div className="reihe" key={a.id}>
+            <span className="mini">
+              <b>{a.fach}</b> <span className="zahl">· {block(a.blockId)?.label}</span>
+            </span>
+            <button className="knopf knopf--still knopf--klein" disabled={laeuft}
+              onClick={() => holen('angebote', a.id, a.fach)}>
+              Wieder einblenden
+            </button>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/* ---------------------------------------------------------- Ein Angebot */
 
 /**
  * Ein Angebot bearbeiten.
@@ -888,7 +1447,8 @@ function AngebotBearbeiten(
   { a, belegt, kapazitaet, melde }:
   { a: Angebot; belegt: number; kapazitaet: number; melde: (t: string) => void },
 ) {
-  const basis = basisAngebot(a.id) ?? a;
+  const basis = basisAngebot(a.id);
+  const istNeu = basis === undefined;
   const [fach, setFach] = useState(a.fach);
   const [klasse, setKlasse] = useState(a.klasse ?? '');
   const [raum, setRaum] = useState(a.raum);
@@ -912,7 +1472,7 @@ function AngebotBearbeiten(
   const kuerzel = lehrperson.trim().toUpperCase();
 
   const angepasst = anpassungFuer(a.id) !== undefined;
-  const kapAngepasst = kapazitaet !== basis.kapazitaet;
+  const kapAngepasst = !istNeu && kapazitaet !== basis.kapazitaet;
   const geaendert = fach.trim() !== a.fach
     || klasse.trim() !== (a.klasse ?? '')
     || raum.trim() !== a.raum
@@ -925,15 +1485,17 @@ function AngebotBearbeiten(
     try {
       const neu: Anpassung = {
         // Ein Angebot ohne Titel wäre auf der Karte eine leere Zeile — dann lieber der
-        // Titel aus der Programmdatei.
-        fach: fach.trim() || basis.fach,
+        // bisherige Titel.
+        fach: fach.trim() || a.fach,
         klasse: klasse.trim(),
         raum: raum.trim(),
         lehrperson: kuerzel,
       };
       // Wer von Hand wieder genau den Stand der Programmdatei eintippt, soll auch keine
       // Anpassung mehr haben — sonst überdeckte sie später eine Korrektur in der Datei.
-      const wieBasis = neu.fach === basis.fach && neu.klasse === (basis.klasse ?? '')
+      // Bei selbst angelegten Angeboten gibt es diesen Stand nicht: Sie ganz zu löschen,
+      // bloss weil nichts geändert wurde, nähme dem Programm ein ganzes Angebot.
+      const wieBasis = !istNeu && neu.fach === basis.fach && neu.klasse === (basis.klasse ?? '')
         && neu.raum === basis.raum && neu.lehrperson === (basis.lehrperson ?? '');
       await anpassungSpeichern(a.id, wieBasis ? null : neu);
       if (zahl !== kapazitaet) await kapazitaetSpeichern(a.id, a.blockId, zahl);
@@ -944,11 +1506,35 @@ function AngebotBearbeiten(
   };
 
   const zuruecksetzen = async () => {
+    if (!basis) return;
     setLaeuft(true);
     try {
       await anpassungSpeichern(a.id, null);
       if (kapAngepasst) await kapazitaetSpeichern(a.id, a.blockId, basis.kapazitaet);
       melde(`${basis.fach} steht wieder wie in der Programmdatei.`);
+    } catch {
+      melde('Das hat nicht geklappt. Bitte nochmals versuchen.');
+    } finally { setLaeuft(false); }
+  };
+
+  const entfernen = async () => {
+    if (belegt > 0) {
+      melde(`${a.fach} hält ${platzZahl(belegt)}. Diese Anmeldungen zuerst freigeben — `
+        + 'sonst zeigt ihr Ticket auf etwas, das es nicht mehr gibt.');
+      return;
+    }
+    if (!confirm(istNeu
+      ? `${a.fach} endgültig löschen?`
+      : `${a.fach} ausblenden? Es lässt sich weiter unten jederzeit wieder hervorholen.`)) return;
+    setLaeuft(true);
+    try {
+      if (istNeu) {
+        await anpassungSpeichern(a.id, null);
+        await zaehlerEntfernen(a.id);
+      } else {
+        await anpassungSpeichern(a.id, { entfernt: true });
+      }
+      melde(`${a.fach} ist weg.`);
     } catch {
       melde('Das hat nicht geklappt. Bitte nochmals versuchen.');
     } finally { setLaeuft(false); }
@@ -960,7 +1546,9 @@ function AngebotBearbeiten(
     <div className="angebot" data-angepasst={angepasst || kapAngepasst ? '1' : '0'}>
       <div className="angebot-kopf">
         <span className="mini zahl">{a.id}</span>
-        {(angepasst || kapAngepasst) && <span className="pz-marke">angepasst</span>}
+        {istNeu
+          ? <span className="pz-marke">selbst angelegt</span>
+          : (angepasst || kapAngepasst) && <span className="pz-marke">angepasst</span>}
         <span className="angebot-belegt mini">{belegt} belegt</span>
       </div>
 
@@ -999,12 +1587,15 @@ function AngebotBearbeiten(
           onClick={speichern}>
           Speichern
         </button>
-        {(angepasst || kapAngepasst) && (
+        {!istNeu && (angepasst || kapAngepasst) && (
           <button className="knopf knopf--still knopf--klein" disabled={laeuft}
             onClick={zuruecksetzen}>
             Auf Programmdatei zurücksetzen
           </button>
         )}
+        <button className="knopf knopf--still knopf--klein" disabled={laeuft} onClick={entfernen}>
+          Entfernen
+        </button>
       </div>
     </div>
   );
@@ -1028,8 +1619,8 @@ interface GeraeteZeile {
   zuletzt: number;
 }
 
-/** Wie viele der vier Slots diese Anmeldung hält. */
-const slotsVon = (b: Buchung): number => BLOCK_IDS.filter((id) => b.wahl?.[id]).length;
+/** Wie viele Slots diese Anmeldung hält — einen je Bereich. */
+const slotsVon = (b: Buchung): number => blockIds().filter((id) => b.wahl?.[id]).length;
 
 /**
  * Fortlaufende Nummer je Client, nach erstem Auftreten.
@@ -1358,10 +1949,10 @@ function GeraeteEintrag(
             {b && <Feld name="Personen">{b.plaetze}</Feld>}
             {b && (
               <Feld name="Belegt">
-                {slotsVon(b)} von 4 Slots · {slotsVon(b) * b.plaetze} Plätze
+                {slotsVon(b)} von {blockIds().length} Slots · {slotsVon(b) * b.plaetze} Plätze
               </Feld>
             )}
-            {b && BLOECKE.map((blk) => (
+            {b && alleBloecke().map((blk) => (
               <Feld key={blk.id} name={blk.label}>{angebotKurz(b.wahl?.[blk.id])}</Feld>
             ))}
             {b?.notiz && <Feld name="Notiz">{b.notiz}</Feld>}
@@ -1439,10 +2030,12 @@ function VerlaufEintrag(
           <dl className="pz-felder">
             <Feld name="Kennung"><span className="zahl">{eintrag.client}</span></Feld>
             <Feld name="Geräteart">{eintrag.geraet || '—'}</Feld>
-            <Feld name="Block">{eintrag.block ? block(eintrag.block).label : '—'}</Feld>
+            {/* Der Bereich kann inzwischen entfernt worden sein — dann steht hier sein
+                Schlüssel statt einer leeren Zeile. Das Protokoll bleibt so lesbar. */}
+            <Feld name="Block">{eintrag.block ? block(eintrag.block)?.label ?? eintrag.block : '—'}</Feld>
             <Feld name="Angebot">{vorgangText(eintrag)}</Feld>
             <Feld name="Personen">{eintrag.plaetze}</Feld>
-            <Feld name="Slots danach">{eintrag.slots} von 4</Feld>
+            <Feld name="Slots danach">{eintrag.slots} von {blockIds().length}</Feld>
           </dl>
           <div className="knopfzeile pz-knoepfe">
             <button className="knopf knopf--still knopf--klein" disabled={laeuft} onClick={onLoeschen}>

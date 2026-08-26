@@ -1,17 +1,17 @@
 import { Fortschritt } from '../ui/Bausteine';
 import { AngebotsKarte } from '../ui/AngebotsKarte';
 import {
-  BLOCK_IDS, angebot, angeboteFuer, block, schonGewaehltesFach, zeitraum,
-  type BlockId, type Wahl,
+  angebot, angeboteFuer, block, blockIds, schonGewaehltesFach, zeitraum,
+  type Block, type BlockId, type Wahl,
 } from '../programm';
 import type { Staende } from '../hooks/useSlots';
 import type { Buchung } from '../buchung';
 
 export function Auswahl({
-  blockId, staende, geladen, buchung, plaetze, laeuftFuer,
+  b, staende, geladen, buchung, plaetze, laeuftFuer,
   onWahl, onWeiter, onZurueck, onAbschliessen,
 }: {
-  blockId: BlockId;
+  b: Block;
   staende: Staende;
   geladen: boolean;
   buchung: Buchung | null;
@@ -22,11 +22,12 @@ export function Auswahl({
   onZurueck: () => void;
   onAbschliessen: () => void;
 }) {
-  const b = block(blockId);
+  const blockId = b.id;
+  const ids = blockIds();
   const angebote = angeboteFuer(blockId);
   const wahl: Wahl = buchung?.wahl ?? {};
   const gewaehlt = wahl[blockId] ?? null;
-  const letzterBlock = BLOCK_IDS.indexOf(blockId) === BLOCK_IDS.length - 1;
+  const letzterBlock = ids.indexOf(blockId) === ids.length - 1;
   const entschieden = new Set(
     (Object.keys(wahl) as BlockId[]).filter((k) => wahl[k] !== null && wahl[k] !== undefined),
   );
@@ -34,8 +35,8 @@ export function Auswahl({
   // Merkzettel über der Liste: alles, was auf diesem Gerät schon gewählt ist — der
   // aktuelle Block eingeschlossen. Genau dort will man ja nachsehen, ob die eben
   // getippte Wahl auch wirklich sitzt.
-  const uebersicht = BLOCK_IDS
-    .map((id) => ({ blk: block(id), a: angebot(wahl[id]) }))
+  const uebersicht = ids
+    .map((id) => ({ blk: block(id)!, a: angebot(wahl[id]) }))
     .filter(({ blk, a }) => !!a || blk.id === blockId);
 
   return (
@@ -56,6 +57,12 @@ export function Auswahl({
       </div>
 
       {!geladen && <p className="mini">Freie Plätze werden geladen …</p>}
+
+      {angebote.length === 0 && (
+        <div className="hinweis hinweis--warnung">
+          <b>Hier steht noch nichts zur Auswahl.</b> Bitte am Info-Stand melden.
+        </div>
+      )}
 
       <div className="liste">
         {angebote.map((a) => (

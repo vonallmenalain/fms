@@ -58,6 +58,16 @@ await pruefe('Gast darf NICHT', () => assertFails(setDoc(doc(gast, 'config/app')
 await pruefe('alle dürfen config lesen', () => assertSucceeds(getDoc(doc(gast, 'config/app'))));
 await pruefe('Admin darf Programmanpassungen speichern', () => assertSucceeds(
   setDoc(doc(admin, 'config/programm'), { angebote: { 'a1-x': { fach: 'Chemie', raum: 'GN 9.99', lehrperson: 'HET', klasse: '' } } }, { merge: true })));
+await pruefe('Admin darf einen Bereich anlegen', () => assertSucceeds(
+  setDoc(doc(admin, 'config/programm'), { bloecke: { z1: { neu: true, art: 'atelier', label: 'Atelier 3', von: '11:45', bis: '12:05', kapazitaet: 35 } } }, { merge: true })));
+await pruefe('Admin darf Titel und Zeiten eines Bereichs ändern', () => assertSucceeds(
+  setDoc(doc(admin, 'config/programm'), { bloecke: { a1: { label: 'Werkstatt 1', von: '08:45', bis: '09:05' } } }, { merge: true })));
+await pruefe('Admin darf das Datum umstellen', () => assertSucceeds(
+  setDoc(doc(admin, 'config/programm'), { event: { datum: '2027-10-27' } }, { merge: true })));
+await pruefe('Betreuung darf die Bereiche NICHT ändern', () => assertFails(
+  setDoc(doc(betreuung, 'config/programm'), { bloecke: { a1: { label: 'Turnen' } } }, { merge: true })));
+await pruefe('Gast darf das Datum NICHT umstellen', () => assertFails(
+  setDoc(doc(gast, 'config/programm'), { event: { datum: '2030-01-01' } }, { merge: true })));
 await pruefe('Betreuung darf das Programm NICHT ändern', () => assertFails(
   setDoc(doc(betreuung, 'config/programm'), { angebote: { 'a1-x': { fach: 'Turnen' } } }, { merge: true })));
 await pruefe('Gast darf das Programm NICHT ändern', () => assertFails(
@@ -74,6 +84,29 @@ await pruefe('sieht die Anmeldungen NICHT', () => assertFails(getDocs(collection
 await pruefe('sieht das Protokoll NICHT', () => assertFails(getDocs(collection(ohneAnmeldung, 'log'))));
 await pruefe('schreibt nichts — auch keinen Zähler', () => assertFails(updateDoc(doc(ohneAnmeldung, 'slots/a1-x'), { belegt: 1 })));
 await pruefe('und schon gar keine Steuerung', () => assertFails(setDoc(doc(ohneAnmeldung, 'config/app'), { anmeldungOffen: true }, { merge: true })));
+
+console.log('\nZähler selbst angelegter Angebote');
+await pruefe('Admin legt den Zähler eines neuen Angebots an', () => assertSucceeds(
+  setDoc(doc(admin, 'slots/z1-chemie-ab12'), { belegt: 0, kapazitaet: 35, block: 'z1' })));
+await pruefe('Gast bucht darauf', () => assertSucceeds(
+  updateDoc(doc(gast, 'slots/z1-chemie-ab12'), { belegt: 2 })));
+await pruefe('Admin darf den Zähler wieder löschen', () => assertSucceeds(
+  deleteDoc(doc(admin, 'slots/z1-chemie-ab12'))));
+await pruefe('Gast darf keinen Zähler löschen', () => assertFails(
+  deleteDoc(doc(gast, 'slots/a1-x'))));
+// Selbstheilung: fehlt ein Zähler, darf ihn ein Gast anlegen — aber nur mit der
+// Kapazität, die zum Block gehört. Sonst verpasste ein manipulierter Client einem
+// 20er-Zimmer 35 Plätze, indem er den fehlenden Zähler selbst schreibt.
+await pruefe('Selbstheilung mit der richtigen Kapazität geht', () => assertSucceeds(
+  setDoc(doc(gast, 'slots/l1-neu'), { belegt: 1, kapazitaet: 20, block: 'l1' })));
+await pruefe('Selbstheilung mit erfundener Kapazität wird abgewiesen', () => assertFails(
+  setDoc(doc(gast, 'slots/l2-neu'), { belegt: 1, kapazitaet: 99, block: 'l2' })));
+await pruefe('… im selbst angelegten Bereich gilt eine Obergrenze', () => assertFails(
+  setDoc(doc(gast, 'slots/z2-neu'), { belegt: 1, kapazitaet: 99, block: 'z2' })));
+await pruefe('… darunter geht sie durch', () => assertSucceeds(
+  setDoc(doc(gast, 'slots/z2-neu2'), { belegt: 1, kapazitaet: 30, block: 'z2' })));
+await pruefe('erfundener Blockschlüssel wird abgewiesen', () => assertFails(
+  setDoc(doc(gast, 'slots/q9-neu'), { belegt: 1, kapazitaet: 20, block: 'q9' })));
 
 console.log('\nKapazitäten (slots) — nur Administration');
 await pruefe('Admin darf Kapazität ändern', () => assertSucceeds(updateDoc(doc(admin, 'slots/a1-x'), { kapazitaet: 30 })));
@@ -147,6 +180,21 @@ await pruefe('Angebot aus dem falschen Block wird abgewiesen', () => assertFails
   buchung({ wahl: { ...wahlLeer, a1: 'l1-27fd' } }))));
 await pruefe('fremder Blockschlüssel wird abgewiesen', () => assertFails(setDoc(doc(gast, 'bookings/gast1'),
   buchung({ wahl: { ...wahlLeer, a3: 'a3-irgendwas' } }))));
+await pruefe('ein selbst angelegter Bereich geht durch', () => assertSucceeds(setDoc(doc(gast, 'bookings/gast1'),
+  buchung({ wahl: { ...wahlLeer, z1: 'z1-chemie-ab12' } }))));
+await pruefe('… aber nicht mit einem Angebot aus einem anderen Bereich', () => assertFails(setDoc(doc(gast, 'bookings/gast1'),
+  buchung({ wahl: { ...wahlLeer, z1: 'a1-psychologie' } }))));
+// Für die beiden folgenden Fragen zählt der Ausgangspunkt: Die Prüfungen darüber haben
+// `gast1` etwas gebucht, und dann ist die Gruppengrösse schon von daher gesperrt.
+await env.withSecurityRulesDisabled(async (c) => {
+  await setDoc(doc(c.firestore(), 'bookings/gast1'), { plaetze: 1, wahl: wahlLeer, quelle: 'gast', notiz: null });
+});
+await pruefe('Gruppengrösse bleibt änderbar, solange nichts gewählt ist', () => assertSucceeds(setDoc(doc(gast, 'bookings/gast1'),
+  buchung({ plaetze: 3 }))));
+await pruefe('… und ist gesperrt, sobald in einem neuen Bereich gebucht ist', async () => {
+  await assertSucceeds(setDoc(doc(gast, 'bookings/gast1'), buchung({ plaetze: 3, wahl: { ...wahlLeer, z1: 'z1-chemie-ab12' } })));
+  await assertFails(setDoc(doc(gast, 'bookings/gast1'), buchung({ plaetze: 1, wahl: { ...wahlLeer, z1: 'z1-chemie-ab12' } })));
+});
 await pruefe('übergrosse Notiz wird abgewiesen', () => assertFails(setDoc(doc(gast, 'bookings/gast1'),
   buchung({ notiz: 'x'.repeat(5000) }))));
 await pruefe('normale Notiz der Betreuung geht durch', () => assertSucceeds(setDoc(doc(betreuung, 'bookings/vomstand2'),
@@ -181,7 +229,11 @@ await pruefe('zusätzliches Feld wird abgewiesen',
 await pruefe('übergrosse Geräteangabe wird abgewiesen',
   () => assertFails(addDoc(collection(gast, 'log'), logZeile({ geraet: 'x'.repeat(500) }))));
 await pruefe('mehr Slots als Blöcke wird abgewiesen',
-  () => assertFails(addDoc(collection(gast, 'log'), logZeile({ slots: 9 }))));
+  () => assertFails(addDoc(collection(gast, 'log'), logZeile({ slots: 13 }))));
+await pruefe('ein selbst angelegter Bereich steht im Protokoll',
+  () => assertSucceeds(addDoc(collection(gast, 'log'), logZeile({ block: 'z1', angebot: 'z1-chemie-ab12' }))));
+await pruefe('ein erfundener Blockschlüssel nicht',
+  () => assertFails(addDoc(collection(gast, 'log'), logZeile({ block: 'q9', angebot: 'q9-x' }))));
 await pruefe('Betreuung protokolliert eine Erfassung',
   () => assertSucceeds(addDoc(collection(betreuung, 'log'), logZeile({
     client: 'vomstand2', art: 'admin', vorgang: 'erfasst', block: null, angebot: null,

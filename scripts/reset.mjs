@@ -42,12 +42,29 @@ const buchungen = await loesche('bookings');
 // Protokollzeilen zu Anmeldungen, die es nicht mehr gibt, sind nur noch Verwirrung.
 const protokoll = await loesche('log');
 
+// Erst die Zähler aus der Programmdatei — sie bekommen dabei auch wieder ihre Kapazität.
 const b = db.batch();
 for (const a of programm.offerings) {
   b.set(db.collection('slots').doc(a.id), { belegt: 0, kapazitaet: a.kapazitaet, block: a.blockId });
 }
+
+/**
+ * Und dann alle übrigen: Seit die Steuerung eigene Angebote anlegen darf, steht nicht
+ * mehr jeder Zähler in der Programmdatei. Ohne diese Schleife bliebe ihr Stand nach dem
+ * Zurücksetzen stehen, während die zugehörige Anmeldung gelöscht ist — genau die
+ * Invariante L1 aus docs/05 («Summe der Zähler = Summe der gebuchten Plätze») wäre
+ * gebrochen, und `npm run pruefe` fiele durch. Die Kapazität bleibt dabei unangetastet;
+ * sie steht nirgends sonst.
+ */
+const alleZaehler = await db.collection('slots').get();
+const ausDatei = new Set(programm.offerings.map((a) => a.id));
+const weitere = alleZaehler.docs.filter((d) => !ausDatei.has(d.id));
+weitere.forEach((d) => b.update(d.ref, { belegt: 0 }));
+
 b.set(db.doc('config/app'), { anmeldungOffen: false, banner: '' }, { merge: true });
 await b.commit();
 
 console.log(`${buchungen} Anmeldungen gelöscht, ${protokoll} Protokollzeilen geleert, `
-  + `${programm.offerings.length} Zähler auf 0, Anmeldung geschlossen.`);
+  + `${programm.offerings.length + weitere.length} Zähler auf 0`
+  + `${weitere.length ? ` (davon ${weitere.length} in der Steuerung angelegt)` : ''}, `
+  + 'Anmeldung geschlossen.');

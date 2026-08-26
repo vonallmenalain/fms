@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Kopf } from '../ui/Bausteine';
-import { BLOECKE, angebot, programm, zeitraum, metaZeile, datumLang, type BlockId } from '../programm';
+import { alleBloecke, angebot, programm, zeitraum, metaZeile, datumLang, type BlockId } from '../programm';
 import type { Buchung } from '../buchung';
 
 export function Ticket({
@@ -56,7 +56,7 @@ export function Ticket({
           </div>
         )}
 
-        {BLOECKE.map((b) => {
+        {alleBloecke().map((b) => {
           const a = angebot(buchung.wahl[b.id]);
           return (
             <button

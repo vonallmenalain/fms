@@ -31,10 +31,15 @@ Vorteile — und alle drei sind hier wichtig:
 
 **Nachtrag August 2026 — die Ausnahme am Eventmorgen.** Punkt 1 gilt bis zum Vorabend; um
 08:47 hilft er nicht mehr, wenn ein Zimmer kurzfristig wechselt. Darum kann die
-Administration Titel, Klasse, Zimmer und Lehrpersonen-Kürzel eines Angebots in der
-Steuerung ändern; gespeichert wird das als **Abweichung** in `config/programm` (§3).
-Die Programmdatei bleibt die Quelle der Wahrheit — sie wird überlagert, nicht ersetzt,
-und die Punkte 2 und 3 bleiben unberührt: ein zusätzliches Dokument, das meist leer ist.
+Administration das Programm in der Steuerung ändern: das **Datum** des Anlasses, Titel
+und **Zeiten der Bereiche**, Titel, Klasse, Zimmer, Lehrpersonen-Kürzel und Kapazität der
+**Angebote** — und beides lässt sich auch anlegen und entfernen. Gespeichert wird das als
+**Abweichung** in `config/programm` (§3). Die Programmdatei bleibt die Quelle der
+Wahrheit — sie wird überlagert, nicht ersetzt, und die Punkte 2 und 3 bleiben unberührt:
+ein zusätzliches Dokument, das meist leer ist.
+
+Damit ist die App auch für den **nächsten** Besuchsmorgen zu haben, ohne dass jemand die
+Datei anfassen muss: neues Datum setzen, Bereiche und Angebote nachführen, fertig.
 
 ## 2. Technologie-Wahl
 
@@ -110,14 +115,37 @@ Vier Collections plus ein Konfigdokument. Alles bewusst flach.
 ### `config/programm` — Anpassungen von Hand (1 Dokument, meist leer)
 ```jsonc
 {
+  // Fehlt das Feld, gilt das Datum aus data/programm.json. Der Wochentag wird gerechnet.
+  "event": { "datum": "2027-11-03" },
+
+  // Nur die Bereiche, die angefasst wurden. `neu` heisst: gibt es nur hier;
+  // `entfernt` heisst: steht in der Datei, wird aber ausgeblendet.
+  "bloecke": {
+    "a1": { "label": "Werkstatt 1", "von": "08:45", "bis": "09:05" },
+    "l1": { "entfernt": true },
+    "z1": { "neu": true, "art": "lektion", "label": "Unterrichtsbesuch 3",
+            "von": "09:00", "bis": "09:15", "kapazitaet": 20 }
+  },
+
   // Nur die Angebote, die in der Steuerung angefasst wurden — alle anderen gelten
   // unverändert aus data/programm.json. Die Kapazität steht NICHT hier, sondern im
   // Zähler: Dort prüft die Buchungstransaktion gegen Überbuchung.
   "angebote": {
-    "l1-28fb": { "fach": "Pädagogik", "klasse": "28Fb", "raum": "GN 2.53", "lehrperson": "KLN" }
+    "l1-28fb": { "fach": "Pädagogik", "klasse": "28Fb", "raum": "GN 2.53", "lehrperson": "KLN" },
+    "a2-chemie": { "entfernt": true },
+    "z1-bildnerisches-gestalten-ytyi": {
+      "neu": true, "blockId": "z1", "fachKey": "bildnerisches-gestalten",
+      "fach": "Bildnerisches Gestalten", "klasse": "29Fa", "raum": "GN 0.11", "lehrperson": "ABC"
+    }
   }
 }
 ```
+
+Die Blockschlüssel `z1`–`z8` sind ein **fester Vorrat** für selbst angelegte Bereiche:
+Die Security Rules prüfen für jeden Schlüssel einzeln, dass die gewählte Angebots-ID zu
+ihm gehört (`gueltigerSlot`), und die Regelsprache kennt keine Schleifen. Zwölf Bereiche
+sind für einen Vormittag reichlich; die Liste steht in `firestore.rules` und in
+`src/programm.ts` (`NEUE_BLOCK_IDS`) und muss dort zusammenpassen.
 
 Ein Dokument, ein Listener, auf jedem Gerät — auch beim Gast: Korrigiert die
 Administration um 08:47 ein Zimmer, muss die Änderung dort ankommen, wo gewählt wird.

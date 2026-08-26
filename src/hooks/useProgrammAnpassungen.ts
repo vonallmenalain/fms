@@ -1,11 +1,12 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
-import { abonniereProgramm, programmStand, setzeAnpassungen, type Anpassungen } from '../programm';
+import { abonniereProgramm, programmStand, setzeAnpassungen, type ProgrammAnpassungen } from '../programm';
 
 /**
- * Die von Hand gepflegten Programmanpassungen (Titel, Klasse, Zimmer, Lehrperson),
- * live aus `config/programm`.
+ * Das von Hand gepflegte Programm, live aus `config/programm`: das Datum des Anlasses,
+ * Titel und Zeiten der Bereiche, dazu Titel, Klasse, Zimmer und Lehrperson je Angebot —
+ * samt dem, was neu angelegt oder ausgeblendet wurde.
  *
  * Ein Dokument, ein Listener — und zwar auf JEDEM Gerät, auch beim Gast: Korrigiert die
  * Administration am Morgen ein Zimmer, muss die Änderung dort ankommen, wo gewählt wird.
@@ -17,9 +18,9 @@ import { abonniereProgramm, programmStand, setzeAnpassungen, type Anpassungen } 
 export function useProgrammAnpassungen(): number {
   useEffect(() => onSnapshot(
     doc(db, 'config', 'programm'),
-    (s) => setzeAnpassungen((s.data()?.angebote ?? {}) as Anpassungen),
+    (s) => setzeAnpassungen((s.data() ?? {}) as ProgrammAnpassungen),
     // Rechte- oder Netzfehler: Es gilt weiterhin die Programmdatei aus dem Bündel.
-    () => setzeAnpassungen({}),
+    () => setzeAnpassungen(null),
   ), []);
 
   // Der Zählerstand ist bloss der Auslöser: Ändert er sich, zeichnet React neu — und
