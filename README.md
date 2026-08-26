@@ -80,12 +80,37 @@ npm run mailtest                               # der ganze Ablauf gegen die Emul
 |---|---|
 | `/` | Anmeldung für die Besuchenden |
 | `/admin` | Bereich für die Betreuungspersonen |
+| `/uebersicht` | Live-Übersicht für die Lehrpersonen — ohne Login, **nur zum Ansehen**, nirgends verlinkt |
 
 ### Zugänge
 
 Zwei Rollen: **Betreuung** sieht die Übersicht und erfasst Anmeldungen für Gäste ohne
 Handy; **Administration** darf zusätzlich steuern — Freigabeschalter, Meldung an alle,
-Kapazitäten, Protokoll, Zurücksetzen und Zugänge vergeben.
+Programm und Kapazitäten, Protokoll, Zurücksetzen und Zugänge vergeben.
+
+### Übersicht für die Lehrpersonen
+
+`/uebersicht` zeigt dieselbe Live-Übersicht wie der Betreuungsbereich, aber **ohne
+Anmeldung und ohne einen einzigen Knopf, der etwas verändert**: keine Erfassung, keine
+Kapazitäten, keine Zugänge. Sie liest ausschliesslich die Zähler und das
+Steuerungsdokument, und beides ist laut `firestore.rules` ohnehin für alle lesbar.
+
+Die Adresse steht in **Steuerung → Link für die Lehrpersonen** zum Kopieren bereit. Auf
+der Anmeldeseite der Gäste ist sie bewusst nirgends verlinkt; die Seite trägt wie die
+ganze App ein `noindex`.
+
+### Programm von Hand anpassen
+
+**Steuerung → Programm & Kapazitäten** ändert Titel, Klasse, Zimmer, Lehrpersonen-Kürzel
+und Kapazität eines Angebots im laufenden Betrieb — die Änderung ist auf allen Geräten
+sofort sichtbar, auch bei Gästen, die gerade auswählen.
+
+Grundlage bleibt `data/programm.json`. In Firestore (`config/programm`) steht nur, was
+davon abweicht; darum wirkt eine spätere Korrektur in der Datei weiterhin überall dort,
+wo niemand von Hand eingegriffen hat. «Auf Programmdatei zurücksetzen» räumt eine
+einzelne Abweichung wieder weg. Angebote **anlegen oder streichen** geht weiterhin nur
+über die Datei und einen Deploy — sonst gäbe es Anmeldungen auf Angebote, die niemand
+mehr kennt.
 
 Erster Zugang: **«Mit Google anmelden»** — die Adresse in `firestore.rules`
 (`bootstrapMail`) trägt sich beim ersten Anmelden selbst als Administration ein. Das ist
@@ -157,7 +182,7 @@ Die drei Prioritäten — sauber und flüssig, wirklich live, kein Limit — sin
 |---|---|
 | Anmeldung für mehrere Personen auf einem Gerät? | **Ja** — Gruppengrösse 1–4 auf der Startseite, die Gruppe belegt entsprechend viele Plätze |
 | 3–4 Lehrpersonen als Admin, die Gäste eintragen? | **Ja** — eigener Admin-Bereich mit Login, «+ Anmeldung erfassen» |
-| Lehrpersonen sehen live, wer wohin kommt? | **Ja** — Live-Dashboard, Druckansicht und CSV-Export. Kostet fast nichts extra |
+| Lehrpersonen sehen live, wer wohin kommt? | **Ja** — Live-Dashboard im Betreuungsbereich und ein öffentlicher Nur-Lese-Link (`/uebersicht`) für alle Lehrpersonen. Kostet fast nichts extra |
 | Nachvollziehen, welches Gerät wann wie viel gebucht hat? | **Ja** — Protokoll in der Steuerung, pro Gerät und als Verlauf, mit Zahl der Vorgänge. Bremst den Andrang nicht ([Rechnung](docs/05-last-und-performance.md#10-das-protokoll-was-kostet-es-jeden-vorgang-mitzuschreiben)) |
 | Was, wenn eine Lehrperson selbst bucht und sich dann anmeldet? | Ihre Anmeldung **wandert ins eigene Konto**, statt als Schattenbuchung liegen zu bleiben ([05 §10a](docs/05-last-und-performance.md)) |
 | Slots wieder freigeben und neu buchen? | **Ja** — beim Wechsel wird der alte Platz in derselben Transaktion frei |

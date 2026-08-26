@@ -14,17 +14,33 @@ import { Auswahl } from './screens/Auswahl';
 import { Ticket } from './screens/Ticket';
 import { useRoute } from './hooks/useRoute';
 import { useVerlauf } from './hooks/useVerlauf';
+import { useProgrammAnpassungen } from './hooks/useProgrammAnpassungen';
 
 const Admin = lazy(() => import('./screens/Admin'));
+// Die Übersicht für die Lehrpersonen liegt im selben Nachlade-Bündel wie der
+// Admin-Bereich — Gäste laden davon nichts.
+const OeffentlicheUebersicht = lazy(() => import('./screens/OeffentlicheUebersicht'));
 
 type Schritt = 'start' | BlockId | 'ticket';
 
 export default function App() {
   const [pfad, gehe] = useRoute();
+  // Von Hand angepasste Titel, Zimmer und Lehrpersonen gelten auf allen drei Wegen —
+  // beim Gast so gut wie in der Betreuung und in der öffentlichen Übersicht.
+  useProgrammAnpassungen();
+
   if (pfad.startsWith('/admin')) {
     return (
       <Suspense fallback={<Laden text="Admin-Bereich wird geladen …" />}>
         <Admin onRaus={() => gehe('/')} />
+      </Suspense>
+    );
+  }
+  // Nur-Lese-Ansicht ohne Anmeldung, nirgends verlinkt — siehe OeffentlicheUebersicht.
+  if (pfad.startsWith('/uebersicht')) {
+    return (
+      <Suspense fallback={<Laden text="Übersicht wird geladen …" />}>
+        <OeffentlicheUebersicht />
       </Suspense>
     );
   }
@@ -258,7 +274,7 @@ function GastApp() {
 
       {/* Zwei Zeilen, und jede Wortgruppe bleibt zusammen: «WebApp von» darf nicht auf der
           einen und «Alä» auf der nächsten Zeile stehen. */}
-      <footer className="fusszeile mini nicht-drucken">
+      <footer className="fusszeile mini">
         <p>
           <a className="zusammen" href="/admin">Login Betreuungspersonen</a>
           {/* Geschütztes Leerzeichen vor dem Punkt: So kann höchstens NACH dem Trenner

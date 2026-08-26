@@ -264,21 +264,17 @@ p { margin: 0; }
    Beschriftung einzeilig und beide Knöpfe sind gleich gross zu treffen. */
 .knopfzeile--gestapelt { flex-direction: column; align-items: stretch; }
 
-/* ---------- Navigationszeile (oben, bleibt beim Scrollen stehen) ---------- */
+/* ---------- Navigationszeile (unter der Angebotsliste) ---------- */
 
 .navzeile {
-  position: sticky;
-  top: 0;
-  z-index: 20;
   display: flex;
   align-items: center;
   gap: 8px;
-  /* Über die Seitenpolsterung hinaus, damit beim Scrollen nichts seitlich
-     darunter durchschimmert. */
-  margin: 0 -16px;
-  padding: 8px 16px;
+  /* Über die Seitenpolsterung hinaus, damit die Linie die ganze Breite trennt. */
+  margin: 4px -16px 0;
+  padding: 14px 16px 0;
   background: var(--papier);
-  border-bottom: 1px solid var(--linie);
+  border-top: 1px solid var(--linie);
 }
 .navzeile-luecke { flex: 1; }
 /* Die Beschriftungen bleiben einzeilig — umgebrochen wird der Knopf doppelt so hoch
@@ -516,11 +512,27 @@ table.tabelle th { font-size: 11px; letter-spacing: .1em; text-transform: upperc
   }
 }
 
-@media print {
-  body { background: #fff; }
-  .nicht-drucken { display: none !important; }
-  .balkenzeile, .karte, .ticket-karte { break-inside: avoid; }
+/* ---------- Programm bearbeiten (Steuerung) ----------
+   Eine Karte je Angebot statt einer Tabelle mit fünf Eingabespalten: Die Steuerung wird
+   auch auf dem Handy bedient, und dort hiesse eine solche Tabelle waagrecht schieben. */
+
+.angebot {
+  border: 1px solid var(--linie); border-radius: var(--radius);
+  background: var(--flaeche); padding: 10px 12px 12px;
+  display: flex; flex-direction: column; gap: 10px;
 }
+/* Von Hand angepasst: eine Kante an der Seite, damit man die Ausnahmen in einer langen
+   Liste auf einen Blick findet. */
+.angebot[data-angepasst="1"] { border-left: 3px solid var(--gruen-dunkel); }
+
+.angebot-kopf { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.angebot-belegt { margin-left: auto; }
+
+.angebot-felder { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px 10px; }
+.angebot-breit { grid-column: 1 / -1; }
+/* Enger als im Gastformular: Hier stehen fünf Felder nebeneinander, keine Einzelfrage. */
+.angebot .feld input { min-height: 42px; padding: 8px 10px; font-size: 15.5px; }
+.angebot .feld label { font-size: 12.5px; }
 
 /* ---------- Protokoll: aufklappbare Zeilen statt breiter Tabelle ----------
    Die Steuerung wird am Eventmorgen auf dem Handy gelesen. Eine Tabelle mit zwölf

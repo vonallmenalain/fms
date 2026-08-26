@@ -56,6 +56,24 @@ await pruefe('Admin darf den Freigabeschalter setzen', () => assertSucceeds(setD
 await pruefe('Betreuung darf NICHT', () => assertFails(setDoc(doc(betreuung, 'config/app'), { anmeldungOffen: false }, { merge: true })));
 await pruefe('Gast darf NICHT', () => assertFails(setDoc(doc(gast, 'config/app'), { banner: 'hallo' }, { merge: true })));
 await pruefe('alle dürfen config lesen', () => assertSucceeds(getDoc(doc(gast, 'config/app'))));
+await pruefe('Admin darf Programmanpassungen speichern', () => assertSucceeds(
+  setDoc(doc(admin, 'config/programm'), { angebote: { 'a1-x': { fach: 'Chemie', raum: 'GN 9.99', lehrperson: 'HET', klasse: '' } } }, { merge: true })));
+await pruefe('Betreuung darf das Programm NICHT ändern', () => assertFails(
+  setDoc(doc(betreuung, 'config/programm'), { angebote: { 'a1-x': { fach: 'Turnen' } } }, { merge: true })));
+await pruefe('Gast darf das Programm NICHT ändern', () => assertFails(
+  setDoc(doc(gast, 'config/programm'), { angebote: { 'a1-x': { fach: 'Turnen' } } }, { merge: true })));
+
+// Die öffentliche Übersicht (/uebersicht) läuft ganz ohne Anmeldung. Sie darf genau das
+// sehen, was auch auf den Karten der Gäste steht — und keine einzige Anmeldung.
+console.log('\nÖffentliche Übersicht — ohne jede Anmeldung');
+const ohneAnmeldung = env.unauthenticatedContext().firestore();
+await pruefe('liest die Steuerung', () => assertSucceeds(getDoc(doc(ohneAnmeldung, 'config/app'))));
+await pruefe('liest die Programmanpassungen', () => assertSucceeds(getDoc(doc(ohneAnmeldung, 'config/programm'))));
+await pruefe('liest alle Zähler', () => assertSucceeds(getDocs(collection(ohneAnmeldung, 'slots'))));
+await pruefe('sieht die Anmeldungen NICHT', () => assertFails(getDocs(collection(ohneAnmeldung, 'bookings'))));
+await pruefe('sieht das Protokoll NICHT', () => assertFails(getDocs(collection(ohneAnmeldung, 'log'))));
+await pruefe('schreibt nichts — auch keinen Zähler', () => assertFails(updateDoc(doc(ohneAnmeldung, 'slots/a1-x'), { belegt: 1 })));
+await pruefe('und schon gar keine Steuerung', () => assertFails(setDoc(doc(ohneAnmeldung, 'config/app'), { anmeldungOffen: true }, { merge: true })));
 
 console.log('\nKapazitäten (slots) — nur Administration');
 await pruefe('Admin darf Kapazität ändern', () => assertSucceeds(updateDoc(doc(admin, 'slots/a1-x'), { kapazitaet: 30 })));

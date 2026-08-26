@@ -4,14 +4,15 @@ import {
   signInWithPopup, signOut, type User,
 } from 'firebase/auth';
 import {
-  collection, doc, getDocs, setDoc, updateDoc, writeBatch, onSnapshot,
+  collection, deleteField, doc, getDocs, setDoc, writeBatch, onSnapshot,
 } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import {
-  ANGEBOTE, BLOCK_IDS, BLOECKE, angebot, angeboteFuer, block, metaZeile, zeitraum,
-  type BlockId,
+  BLOCK_IDS, BLOECKE, alleAngebote, angebot, angeboteFuer, anpassungFuer, anzahlAnpassungen,
+  basisAngebot, block, zeitraum,
+  type Angebot, type Anpassung, type BlockId,
 } from '../programm';
-import { useAlleSlots } from '../hooks/useSlots';
+import { useAlleSlots, type Staende } from '../hooks/useSlots';
 import { useAppConfig } from '../hooks/useAppConfig';
 import { useBuchungen } from '../hooks/useBuchung';
 import { useProtokoll } from '../hooks/useProtokoll';
@@ -19,6 +20,7 @@ import { erfasseAdminBuchung, loescheAnmeldung, type Buchung } from '../buchung'
 import { VORGANG_TEXT, type LogEintrag } from '../protokoll';
 import { AusgebuchtFehler } from '../wiederholung';
 import { Kopf, Meldung } from '../ui/Bausteine';
+import { Uebersicht } from './Uebersicht';
 import {
   ROLLEN_TEXT, anmeldelinkSenden, bestaetigungPruefen, bestaetigungSenden, gemerkteMail,
   kontoEntfernen, kontoErstellen, kontoRolleSetzen, linkAnmeldung, mailSchluessel,
@@ -55,18 +57,6 @@ const angebotKurz = (id: string | null | undefined): string => {
   const a = angebot(id);
   return a ? `${a.fach}${a.klasse ? ` · ${a.klasse}` : ''}` : id;
 };
-
-/**
- * Zeilen als CSV herunterladen — mit Semikolon und BOM, damit Excel unter Windows die
- * Umlaute und die Spalten auf Anhieb richtig hat.
- */
-function csvLaden(dateiname: string, zeilen: string[][]): void {
-  const text = zeilen.map((z) => z.map((f) => `"${f.replace(/"/g, '""')}"`).join(';')).join('\r\n');
-  const url = URL.createObjectURL(new Blob(['\ufeff' + text], { type: 'text/csv;charset=utf-8' }));
-  const a = document.createElement('a');
-  a.href = url; a.download = dateiname; a.click();
-  URL.revokeObjectURL(url);
-}
 
 /**
  * Eine ganze Sammlung löschen, in Portionen.
@@ -148,7 +138,7 @@ export default function Admin({ onRaus }: { onRaus: () => void }) {
 
   return (
     <div className="seite seite--weit">
-      <div className="admin-kopf nicht-drucken">
+      <div className="admin-kopf">
         <div className="reihe">
           <img src="/fms-neufeld.png" alt="fms Neufeld" style={{ width: 110, height: 'auto' }} />
           <strong>Betreuung</strong>
@@ -163,7 +153,7 @@ export default function Admin({ onRaus }: { onRaus: () => void }) {
           nicht die Ansicht, es verlässt den Bereich. Wer als Betreuungsperson selbst eine
           Anmeldung hat, kommt hier zu ihr zurück und kann sie ändern oder freigeben —
           siehe uebernimmGeraeteAnmeldung in src/buchung.ts. */}
-      <div className="reiter-zeile nicht-drucken">
+      <div className="reiter-zeile">
         <div className="reiter" role="tablist">
           {reiterListe.map(([id, text]) => (
             <button key={id} role="tab" aria-selected={offen === id} onClick={() => setReiter(id)}>{text}</button>
@@ -174,7 +164,7 @@ export default function Admin({ onRaus }: { onRaus: () => void }) {
         </button>
       </div>
 
-      {offen === 'uebersicht' && <Uebersicht />}
+      {offen === 'uebersicht' && <AdminUebersicht />}
       {offen === 'erfassen' && <Erfassen melde={setMeldung} />}
       {offen === 'steuerung' && istAdmin && <Steuerung melde={setMeldung} ich={benutzer} />}
 
@@ -520,64 +510,13 @@ function mailStandText(adresse: string, post: MailErgebnis): string {
 
 /* ------------------------------------------------------------------ Übersicht */
 
-function Uebersicht() {
-  const staende = useAlleSlots();
+/**
+ * Dieselbe Live-Übersicht, die auch unter `/uebersicht` ohne Anmeldung steht — hier
+ * zusätzlich mit den Kennzahlen aus den Anmeldungen, die nur die Betreuung lesen darf.
+ */
+function AdminUebersicht() {
   const buchungen = useBuchungen();
-
-  const personen = buchungen.reduce((n, b) => n + (b.plaetze || 0), 0);
-  const plaetzeGebucht = Object.values(staende).reduce((n, s) => n + s.belegt, 0);
-  const ohneHandy = buchungen.filter((b) => b.quelle === 'admin').reduce((n, b) => n + b.plaetze, 0);
-
-  const csv = () => {
-    const zeilen = [['Block', 'Zeit', 'Fach', 'Klasse', 'Zimmer', 'Lehrperson', 'Belegt', 'Kapazitaet']];
-    for (const b of BLOECKE) {
-      for (const a of angeboteFuer(b.id)) {
-        const s = staende[a.id];
-        zeilen.push([b.label, zeitraum(b), a.fach, a.klasse ?? '', a.raum, a.lehrperson ?? '',
-          String(s?.belegt ?? 0), String(a.kapazitaet)]);
-      }
-    }
-    csvLaden('besuchsmorgen-belegung.csv', zeilen);
-  };
-
-  return (
-    <div className="stapel">
-      <dl className="kennzahlen">
-        <div className="kennzahl"><dt>Anmeldungen</dt><dd>{buchungen.length}</dd></div>
-        <div className="kennzahl"><dt>Personen</dt><dd>{personen}</dd></div>
-        <div className="kennzahl"><dt>belegte Plätze</dt><dd>{plaetzeGebucht}</dd></div>
-        <div className="kennzahl"><dt>davon ohne Handy</dt><dd>{ohneHandy}</dd></div>
-      </dl>
-
-      <div className="knopfzeile nicht-drucken">
-        <button className="knopf knopf--rand" onClick={() => window.print()}>Drucken</button>
-        <button className="knopf knopf--rand" onClick={csv}>CSV herunterladen</button>
-      </div>
-
-      <div className="raster raster--vier">
-        {BLOECKE.map((b) => (
-          <div className="saeule" key={b.id}>
-            <h3>{b.label} <span className="zahl" style={{ fontWeight: 500 }}>· {zeitraum(b)}</span></h3>
-            {[...angeboteFuer(b.id)]
-              .sort((x, y) => (staende[y.id]?.belegt ?? 0) - (staende[x.id]?.belegt ?? 0))
-              .map((a) => {
-                const s = staende[a.id];
-                const belegt = s?.belegt ?? 0;
-                const kap = s?.kapazitaet ?? a.kapazitaet;
-                return (
-                  <div className="balkenzeile" key={a.id} data-voll={belegt >= kap ? '1' : '0'}>
-                    <span className="bz-fach">{a.fach}</span>
-                    <span className="bz-meta">{metaZeile(a)}{a.lehrperson ? ` · ${a.lehrperson}` : ''}</span>
-                    <span className="bz-zahl">{belegt}/{kap}</span>
-                    <span className="bz-balken"><i style={{ width: `${Math.min(100, (belegt / kap) * 100)}%` }} /></span>
-                  </div>
-                );
-              })}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  return <Uebersicht buchungen={buchungen} />;
 }
 
 /* ------------------------------------------------------------------ Erfassen */
@@ -683,18 +622,20 @@ function Steuerung({ melde, ich }: { melde: (t: string) => void; ich: User }) {
       const anzahlBuchungen = await sammlungLeeren('bookings');
       const anzahlProtokoll = await sammlungLeeren('log');
       const stapel = writeBatch(db);              // 38 Angebote, ein einziger Stapel reicht
-      ANGEBOTE.forEach((a) =>
-        stapel.set(doc(db, 'slots', a.id), { belegt: 0, kapazitaet: a.kapazitaet, block: a.blockId }));
+      // Zurückgesetzt wird der ZÄHLER, nicht das Programm: Eine von Hand erhöhte
+      // Kapazität bleibt stehen. Sie wieder auf den Stand der Programmdatei zu bringen
+      // ist eine eigene Entscheidung — dafür gibt es oben «zurücksetzen» je Angebot.
+      alleAngebote().forEach((a) =>
+        stapel.set(
+          doc(db, 'slots', a.id),
+          { belegt: 0, kapazitaet: staende[a.id]?.kapazitaet ?? a.kapazitaet, block: a.blockId },
+        ));
       await stapel.commit();
       melde(`Alles zurückgesetzt — ${anzahlBuchungen} Anmeldungen gelöscht, `
         + `${anzahlProtokoll} Protokollzeilen geleert.`);
     } catch {
       melde('Das Zurücksetzen hat nicht geklappt. Bitte nochmals versuchen.');
     } finally { setLaeuft(false); }
-  };
-
-  const kapazitaetAendern = async (id: string, wert: number) => {
-    await updateDoc(doc(db, 'slots', id), { kapazitaet: wert });
   };
 
   return (
@@ -743,6 +684,10 @@ function Steuerung({ melde, ich }: { melde: (t: string) => void; ich: User }) {
 
       <hr className="trenner" />
 
+      <LehrpersonenLink />
+
+      <hr className="trenner" />
+
       <div className="stapel">
         <h3>Performance-Schalter</h3>
         <label className="schieber">
@@ -773,37 +718,7 @@ function Steuerung({ melde, ich }: { melde: (t: string) => void; ich: User }) {
 
       <hr className="trenner" />
 
-      <div className="stapel">
-        <h3>Kapazitäten</h3>
-        <p className="mini">
-          Die Zahl gilt ab sofort. Kleiner als «Belegt» zu setzen nimmt niemandem den Platz weg —
-          es kommt nur nichts mehr dazu.
-        </p>
-        {BLOECKE.map((b) => (
-          <div className="stapel" key={b.id}>
-            <h4 className="blocktitel">{b.label} <span className="zahl">· {zeitraum(b)}</span></h4>
-            <div className="roller">
-              <table className="tabelle">
-                <thead><tr><th>Angebot</th><th>Belegt</th><th>Kapazität</th></tr></thead>
-                <tbody>
-                  {angeboteFuer(b.id).map((a) => (
-                    <tr key={a.id}>
-                      <td>{a.fach}{a.klasse ? ` · ${a.klasse}` : ''} <span className="mini">{a.raum}</span></td>
-                      <td className="zahl">{staende[a.id]?.belegt ?? 0}</td>
-                      <td>
-                        <input type="number" min={0} max={99}
-                          defaultValue={staende[a.id]?.kapazitaet ?? a.kapazitaet}
-                          style={{ width: 72, minHeight: 36, padding: '4px 8px' }}
-                          onBlur={(e) => kapazitaetAendern(a.id, Number(e.target.value))} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ))}
-      </div>
+      <ProgrammBearbeiten melde={melde} staende={staende} />
 
       <hr className="trenner" />
 
@@ -820,6 +735,276 @@ function Steuerung({ melde, ich }: { melde: (t: string) => void; ich: User }) {
         <p className="mini">
           Löscht alle Anmeldungen, leert das Protokoll und setzt alle Zähler auf 0.
         </p>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------- Link für die Lehrpersonen */
+
+/** Die öffentliche Übersicht liegt immer unter demselben Pfad — siehe src/App.tsx. */
+const UEBERSICHT_PFAD = '/uebersicht';
+
+/**
+ * Der Link, den die Lehrpersonen bekommen.
+ *
+ * Er führt auf die Live-Übersicht und sonst nirgendwohin: kein Login, kein Erfassen,
+ * kein Ändern. Absichtlich nur hier zu finden — auf der Anmeldeseite der Gäste ist er
+ * nicht verlinkt, damit er nicht in jeder Klasse herumgereicht wird.
+ */
+function LehrpersonenLink() {
+  const [kopiert, setKopiert] = useState(false);
+  const adresse = `${location.origin}${UEBERSICHT_PFAD}`;
+
+  const kopieren = async () => {
+    try {
+      await navigator.clipboard.writeText(adresse);
+      setKopiert(true);
+      setTimeout(() => setKopiert(false), 2500);
+    } catch {
+      // Ohne Zwischenablage (älterer Browser, Seite nicht über HTTPS): Adresse markieren,
+      // damit sie sich wenigstens von Hand kopieren lässt.
+      const feld = document.getElementById('lp-link');
+      if (feld instanceof HTMLInputElement) { feld.focus(); feld.select(); }
+    }
+  };
+
+  return (
+    <div className="stapel">
+      <h3>Link für die Lehrpersonen</h3>
+      <p className="mini">
+        Zeigt dieselbe Übersicht wie oben — <b>nur zum Ansehen</b>. Kein Login nötig, keine
+        Möglichkeit, etwas zu ändern oder Anmeldungen zu erfassen. Auf der Anmeldeseite der
+        Gäste ist er nirgends verlinkt.
+      </p>
+      <div className="reihe">
+        <div className="feld" style={{ flex: 1, minWidth: 220 }}>
+          <label htmlFor="lp-link">Adresse</label>
+          <input id="lp-link" readOnly value={adresse}
+            onFocus={(e) => e.currentTarget.select()}
+            onClick={(e) => e.currentTarget.select()} />
+        </div>
+        <button className="knopf knopf--rand" style={{ alignSelf: 'end' }} onClick={kopieren}>
+          {kopiert ? 'Kopiert ✓' : 'Kopieren'}
+        </button>
+      </div>
+      <p className="mini">
+        <a href={UEBERSICHT_PFAD} target="_blank" rel="noopener noreferrer">Übersicht öffnen ↗</a>
+      </p>
+    </div>
+  );
+}
+
+/* ------------------------------------------- Programm & Kapazitäten */
+
+/** Anpassung eines Angebots ablegen — oder entfernen, wenn wieder die Programmdatei gilt. */
+async function anpassungSpeichern(id: string, wert: Anpassung | null): Promise<void> {
+  const ref = doc(db, 'config', 'programm');
+  // `deleteField()` in einem setDoc mit merge legt das Dokument nötigenfalls an und
+  // entfernt genau diesen einen Eintrag — ein updateDoc scheiterte am fehlenden Dokument.
+  await setDoc(ref, { angebote: { [id]: wert ?? deleteField() } }, { merge: true });
+}
+
+/**
+ * Kapazität schreiben. Sie steht im Zählerdokument und nicht bei den Anpassungen: Die
+ * Buchungstransaktion prüft dort gegen Überbuchung — beide Zahlen an zwei Orten zu haben
+ * hiesse, dass eine davon irgendwann die falsche ist.
+ */
+async function kapazitaetSpeichern(id: string, blockId: BlockId, wert: number): Promise<void> {
+  await setDoc(doc(db, 'slots', id), { kapazitaet: wert, block: blockId }, { merge: true });
+}
+
+function ProgrammBearbeiten(
+  { melde, staende }: { melde: (t: string) => void; staende: Staende },
+) {
+  const [laeuft, setLaeuft] = useState(false);
+  const angepasst = anzahlAnpassungen();
+
+  const allesZuruecksetzen = async () => {
+    if (!confirm('Alle von Hand geänderten Titel, Klassen, Zimmer und Lehrpersonen '
+      + 'verwerfen? Danach gilt wieder die Programmdatei. Die Kapazitäten bleiben, wie sie sind.')) return;
+    setLaeuft(true);
+    try {
+      await setDoc(doc(db, 'config', 'programm'), { angebote: {} });
+      melde('Alle Programmanpassungen verworfen.');
+    } catch {
+      melde('Das hat nicht geklappt. Bitte nochmals versuchen.');
+    } finally { setLaeuft(false); }
+  };
+
+  return (
+    <div className="stapel">
+      <h3>Programm &amp; Kapazitäten</h3>
+      <p className="mini">
+        Titel, Klasse, Zimmer, Lehrperson und Kapazität je Angebot. Jede Änderung gilt ab
+        sofort auf allen Geräten — auch bei Gästen, die gerade auswählen. Die Kapazität
+        kleiner als «Belegt» zu setzen nimmt niemandem den Platz weg, es kommt nur nichts
+        mehr dazu.
+      </p>
+      <p className="mini">
+        Grundlage bleibt <code>data/programm.json</code>; hier steht nur, was davon
+        abweicht. Neue Angebote anlegen oder streichen geht weiterhin nur dort — sonst
+        gäbe es Anmeldungen auf Angebote, die niemand mehr kennt.
+      </p>
+
+      {angepasst > 0 && (
+        <div className="reihe">
+          <span className="mini">
+            {angepasst === 1 ? '1 Angebot ist' : `${angepasst} Angebote sind`} von Hand angepasst.
+          </span>
+          <button className="knopf knopf--still knopf--klein" disabled={laeuft}
+            onClick={allesZuruecksetzen}>
+            Alle Anpassungen verwerfen
+          </button>
+        </div>
+      )}
+
+      {BLOECKE.map((b) => (
+        <div className="stapel" key={b.id}>
+          <h4 className="blocktitel">{b.label} <span className="zahl">· {zeitraum(b)}</span></h4>
+          {angeboteFuer(b.id).map((a) => (
+            <AngebotBearbeiten
+              key={a.id}
+              a={a}
+              belegt={staende[a.id]?.belegt ?? 0}
+              kapazitaet={staende[a.id]?.kapazitaet ?? a.kapazitaet}
+              melde={melde}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Ein Angebot bearbeiten.
+ *
+ * Die Felder gehören der Maske und werden erst auf «Speichern» geschrieben: Bei fünf
+ * Feldern nebeneinander würde ein Speichern bei jedem Verlassen eines Feldes fünf
+ * Schreibvorgänge auslösen — und ein halb getippter Titel stünde kurz auf 150 Geräten.
+ */
+function AngebotBearbeiten(
+  { a, belegt, kapazitaet, melde }:
+  { a: Angebot; belegt: number; kapazitaet: number; melde: (t: string) => void },
+) {
+  const basis = basisAngebot(a.id) ?? a;
+  const [fach, setFach] = useState(a.fach);
+  const [klasse, setKlasse] = useState(a.klasse ?? '');
+  const [raum, setRaum] = useState(a.raum);
+  const [lehrperson, setLehrperson] = useState(a.lehrperson ?? '');
+  const [kap, setKap] = useState(String(kapazitaet));
+  const [laeuft, setLaeuft] = useState(false);
+
+  // Ändert jemand anderes dasselbe Angebot, zieht die Maske nach. Abhängig von den
+  // WERTEN, nicht vom Objekt: Sonst würde die Maske bei jeder fremden Buchung
+  // zurückgesetzt, weil die Angebote dann ohnehin neu zusammengesetzt werden.
+  useEffect(() => {
+    setFach(a.fach);
+    setKlasse(a.klasse ?? '');
+    setRaum(a.raum);
+    setLehrperson(a.lehrperson ?? '');
+  }, [a.fach, a.klasse, a.raum, a.lehrperson]);
+  useEffect(() => { setKap(String(kapazitaet)); }, [kapazitaet]);
+
+  const zahl = Number(kap);
+  const kapGueltig = kap.trim() !== '' && Number.isInteger(zahl) && zahl >= 0 && zahl <= 99;
+  const kuerzel = lehrperson.trim().toUpperCase();
+
+  const angepasst = anpassungFuer(a.id) !== undefined;
+  const kapAngepasst = kapazitaet !== basis.kapazitaet;
+  const geaendert = fach.trim() !== a.fach
+    || klasse.trim() !== (a.klasse ?? '')
+    || raum.trim() !== a.raum
+    || kuerzel !== (a.lehrperson ?? '')
+    || (kapGueltig && zahl !== kapazitaet);
+
+  const speichern = async () => {
+    if (!kapGueltig) { melde('Die Kapazität muss eine ganze Zahl zwischen 0 und 99 sein.'); return; }
+    setLaeuft(true);
+    try {
+      const neu: Anpassung = {
+        // Ein Angebot ohne Titel wäre auf der Karte eine leere Zeile — dann lieber der
+        // Titel aus der Programmdatei.
+        fach: fach.trim() || basis.fach,
+        klasse: klasse.trim(),
+        raum: raum.trim(),
+        lehrperson: kuerzel,
+      };
+      // Wer von Hand wieder genau den Stand der Programmdatei eintippt, soll auch keine
+      // Anpassung mehr haben — sonst überdeckte sie später eine Korrektur in der Datei.
+      const wieBasis = neu.fach === basis.fach && neu.klasse === (basis.klasse ?? '')
+        && neu.raum === basis.raum && neu.lehrperson === (basis.lehrperson ?? '');
+      await anpassungSpeichern(a.id, wieBasis ? null : neu);
+      if (zahl !== kapazitaet) await kapazitaetSpeichern(a.id, a.blockId, zahl);
+      melde(`${neu.fach} gespeichert.`);
+    } catch {
+      melde('Das Speichern hat nicht geklappt. Bitte nochmals versuchen.');
+    } finally { setLaeuft(false); }
+  };
+
+  const zuruecksetzen = async () => {
+    setLaeuft(true);
+    try {
+      await anpassungSpeichern(a.id, null);
+      if (kapAngepasst) await kapazitaetSpeichern(a.id, a.blockId, basis.kapazitaet);
+      melde(`${basis.fach} steht wieder wie in der Programmdatei.`);
+    } catch {
+      melde('Das hat nicht geklappt. Bitte nochmals versuchen.');
+    } finally { setLaeuft(false); }
+  };
+
+  const feldId = (name: string) => `${name}-${a.id}`;
+
+  return (
+    <div className="angebot" data-angepasst={angepasst || kapAngepasst ? '1' : '0'}>
+      <div className="angebot-kopf">
+        <span className="mini zahl">{a.id}</span>
+        {(angepasst || kapAngepasst) && <span className="pz-marke">angepasst</span>}
+        <span className="angebot-belegt mini">{belegt} belegt</span>
+      </div>
+
+      <div className="angebot-felder">
+        <div className="feld angebot-breit">
+          <label htmlFor={feldId('fach')}>Titel</label>
+          <input id={feldId('fach')} value={fach} maxLength={60}
+            onChange={(e) => setFach(e.target.value)} />
+        </div>
+        <div className="feld">
+          <label htmlFor={feldId('klasse')}>Klasse</label>
+          <input id={feldId('klasse')} value={klasse} maxLength={12}
+            placeholder="–" onChange={(e) => setKlasse(e.target.value)} />
+        </div>
+        <div className="feld">
+          <label htmlFor={feldId('raum')}>Zimmer</label>
+          <input id={feldId('raum')} value={raum} maxLength={24}
+            onChange={(e) => setRaum(e.target.value)} />
+        </div>
+        <div className="feld">
+          <label htmlFor={feldId('lp')}>Lehrperson</label>
+          {/* Drei Buchstaben, wie im Stundenplan der Schule — z. B. HET oder MOS. */}
+          <input id={feldId('lp')} value={lehrperson} maxLength={3} placeholder="ABC"
+            style={{ textTransform: 'uppercase' }}
+            onChange={(e) => setLehrperson(e.target.value)} />
+        </div>
+        <div className="feld">
+          <label htmlFor={feldId('kap')}>Kapazität</label>
+          <input id={feldId('kap')} type="number" min={0} max={99} value={kap}
+            onChange={(e) => setKap(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="knopfzeile">
+        <button className="knopf knopf--rand knopf--klein" disabled={!geaendert || laeuft}
+          onClick={speichern}>
+          Speichern
+        </button>
+        {(angepasst || kapAngepasst) && (
+          <button className="knopf knopf--still knopf--klein" disabled={laeuft}
+            onClick={zuruecksetzen}>
+            Auf Programmdatei zurücksetzen
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1053,34 +1238,6 @@ function ProtokollListe({ melde }: { melde: (t: string) => void }) {
     return fuehreAus(async () => `Protokoll geleert — ${await sammlungLeeren('log')} Zeilen gelöscht.`);
   };
 
-  const csvGeraete = () => {
-    const zellen = [['Geraet', 'Kennung', 'Art', 'Geraeteart', 'Vorgaenge', 'Erster Vorgang',
-      'Letzter Vorgang', 'Personen', 'Slots', 'Plaetze', ...BLOECKE.map((b) => b.label), 'Notiz']];
-    for (const z of zeilen) {
-      const b = z.buchung;
-      zellen.push([`Gerät ${z.nummer}`, z.client, z.vomStand ? 'Info-Stand' : 'Gast',
-        z.geraet, String(z.vorgaenge.length), uhrzeit(z.zuerst), uhrzeit(z.zuletzt),
-        b ? String(b.plaetze) : '', b ? String(slotsVon(b)) : '',
-        b ? String(slotsVon(b) * b.plaetze) : '',
-        ...BLOCK_IDS.map((id) => (b?.wahl?.[id] ? angebotKurz(b.wahl[id]) : '')),
-        b?.notiz ?? '']);
-    }
-    csvLaden('besuchsmorgen-geraete.csv', zellen);
-  };
-
-  const csvVerlauf = () => {
-    const zellen = [['Uhrzeit', 'Geraet', 'Kennung', 'Art', 'Geraeteart', 'Vorgang', 'Block',
-      'Angebot', 'Vorher', 'Personen', 'Slots danach']];
-    // Im Export chronologisch von vorne — so liest sich der Morgen wie ein Ablauf.
-    for (const e of [...eintraege].reverse()) {
-      zellen.push([uhrzeit(e.zeitpunkt), `Gerät ${nummern.get(e.client) ?? '?'}`, e.client,
-        e.art === 'admin' ? 'Info-Stand' : 'Gast', e.geraet,
-        VORGANG_TEXT[e.vorgang] ?? e.vorgang, e.block ? block(e.block).label : '',
-        angebotKurz(e.angebot), angebotKurz(e.vorher), String(e.plaetze), String(e.slots)]);
-    }
-    csvLaden('besuchsmorgen-protokoll.csv', zellen);
-  };
-
   if (fehler) {
     return (
       <div className="hinweis hinweis--warnung">
@@ -1151,17 +1308,13 @@ function ProtokollListe({ melde }: { melde: (t: string) => void }) {
           </div>
           {eintraege.length >= 500 && (
             <p className="mini">
-              Angezeigt sind die 500 neusten Zeilen. Ältere stehen weiterhin in der
-              Datenbank; der CSV-Export enthält ebenfalls diese 500.
+              Angezeigt sind die 500 neusten Zeilen. Ältere stehen weiterhin in der Datenbank.
             </p>
           )}
         </>
       )}
 
       <div className="knopfzeile">
-        <button className="knopf knopf--rand" onClick={ansicht === 'geraete' ? csvGeraete : csvVerlauf}>
-          CSV herunterladen
-        </button>
         <button className="knopf knopf--still" disabled={laeuft} onClick={alleLeeren}>
           Protokoll leeren
         </button>

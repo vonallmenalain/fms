@@ -152,6 +152,18 @@ service cloud.firestore {
 
     // ------------------------------------------------------ config: Steuerung
 
+    /**
+     * Zwei Dokumente: `app` (Freigabeschalter, Banner, Reserveschalter) und `programm`
+     * (die von Hand geänderten Titel, Klassen, Zimmer und Lehrpersonen-Kürzel).
+     *
+     * Für alle lesbar, und zwar bewusst: Ohne Anmeldung muss ein Gerät wissen, ob die
+     * Anmeldung offen ist und wie die Angebote gerade heissen. Zusammen mit `slots`
+     * (ebenfalls offen lesbar) ist das die ganze Grundlage der Nur-Lese-Übersicht unter
+     * `/uebersicht`, die die Schule an alle Lehrpersonen weitergibt. Die Anmeldungen
+     * selbst bleiben davon unberührt — `bookings` darf nur die Betreuung auflisten.
+     *
+     * Geschrieben wird ausschliesslich von der Administration.
+     */
     match /config/{dok} {
       allow read: if true;                             // jedes Gerät liest den Zustand
       allow write: if istAdmin();

@@ -76,10 +76,10 @@ QR-Code (Folie in der Aula, 08:15–08:40)
 
 1. **Ein Schritt pro Bildschirm.** Kein Scrollen durch 38 Angebote, keine Mehrfachauswahl-Logik.
    Ein Tipp auf eine Karte = gebucht; ein zweiter Tipp auf dieselbe Karte gibt den Platz
-   wieder frei. Weitergeblättert wird über die Navigationszeile zuoberst
-   («Zurück · Weiter · Abschliessen»), die beim Scrollen stehen bleibt. Im letzten
-   Schritt steht dort nur «Zurück · Abschliessen» — «Weiter» führte an derselben Stelle
-   ins selbe Ziel und war damit bloss eine überflüssige Frage.
+   wieder frei. Weitergeblättert wird über die Navigationszeile **unter der Liste**
+   («Zurück · Weiter · Abschliessen») — dort, wo man nach dem letzten Angebot ohnehin
+   steht. Im letzten Schritt steht dort nur «Zurück · Abschliessen» — «Weiter» führte an
+   derselben Stelle ins selbe Ziel und war damit bloss eine überflüssige Frage.
 2. **Sofort buchen, nicht am Schluss.** Jede Wahl wird einzeln in die Datenbank geschrieben.
    Wer bei Schritt 3 abbricht, hat trotzdem seine 2 Ateliers. Kein «Warenkorb», der verfällt.
 3. **Überspringen ist erlaubt.** Wer nichts wählt und «Weiter» tippt, überspringt den Block —
@@ -142,13 +142,17 @@ Aktualisiert sich in Echtzeit, ohne Neuladen. Genau das, was im Word-Doc als «L
 Gleicher 4-Schritt-Flow wie für Gäste, aber:
 - Startet über den Button **«+ Anmeldung erfassen»**
 - Freies Notizfeld statt Name (z. B. `Gruppe Frau Meier`, `3 SuS ohne Handy`) — kein Klarname nötig
-- Am Schluss: Auswahl als **grosse Druckansicht** → abfotografieren lassen oder vorlesen
+- Am Schluss: Auswahl den Gästen zeigen oder vorlesen
 
 **7.3 Notbremse & Steuerung** — nur für die Rolle `admin`
 - `Anmeldung offen / geschlossen` (Schalter) — z. B. erst ab 08:40 öffnen
 - Freitext-Banner für alle Gäste (z. B. «Sport findet in TH 2 statt»)
-- Kapazität eines einzelnen Angebots ad hoc erhöhen (z. B. 20 → 24)
-- **Druckansicht** aller Angebote mit Belegung → für den Info-Stand auf Papier
+- **Programm & Kapazitäten**: Titel, Klasse, Zimmer, Lehrpersonen-Kürzel und Kapazität
+  eines einzelnen Angebots ad hoc ändern (z. B. 20 → 24, oder ein kurzfristig verlegtes
+  Zimmer). Wirkt sofort auf allen Geräten. Grundlage bleibt `data/programm.json`;
+  gespeichert wird nur die Abweichung, und «Auf Programmdatei zurücksetzen» räumt sie
+  wieder weg. Angebote anlegen oder streichen geht weiterhin nur über die Datei.
+- **Link für die Lehrpersonen** zum Kopieren — siehe §7.5
 
 **7.4 Protokoll** (Steuerung → Protokoll, nur `admin`)
 Zwei Sichten auf denselben Morgen, beide als Liste aus **aufklappbaren Zeilen** — die
@@ -171,8 +175,7 @@ Datenbank beschäftigt hat.
 werden dabei in derselben Transaktion wieder frei — sowie einzelne Protokollzeilen, das
 Protokoll eines Geräts oder das ganze Protokoll.
 
-Beide Sichten lassen sich als CSV herunterladen. Ein «Gerät» ist die anonyme Kennung,
-kein Name — siehe §10.
+Ein «Gerät» ist die anonyme Kennung, kein Name — siehe §10.
 
 **Keine IP-Adressen.** Sie wären hier die naheliegende Kennung, kommen aber nicht in
 Frage: Die App spricht ohne Serverkode direkt mit Firestore, die Security Rules kennen
@@ -181,9 +184,18 @@ Geräte eine einzige öffentliche IP** ([05 §5a](05-last-und-performance.md)). 
 also nichts unterscheiden, wäre aber ein Personendatum. Ausführlich:
 [05 §10.7](05-last-und-performance.md).
 
-**7.5 Export**
-Ein Klick → CSV mit `Block, Fach, Klasse, Zimmer, Lehrperson, Belegt, Kapazität`.
-Für die Nachbesprechung und als Papier-Backup um 08:45.
+**7.5 Übersicht für alle Lehrpersonen** (`fms.alae.app/uebersicht`)
+Dieselbe Live-Übersicht wie §7.1, aber **ohne Login und ohne Schreibrechte**: keine
+Erfassung, keine Kapazitäten, keine Zugänge — es gibt auf dieser Seite keinen einzigen
+Knopf, der etwas verändert. Gedacht für die Lehrpersonen, die am Morgen Unterricht
+zeigen und bloss wissen wollen, wie viele kommen; sie brauchen dafür kein Konto.
+
+Die Adresse gibt die Administration weiter (Steuerung → «Link für die Lehrpersonen»).
+Auf der Anmeldeseite der Gäste ist sie **nicht verlinkt**, und die Seite trägt wie die
+ganze App ein `noindex`. Technisch möglich ist sie, weil Zähler und Steuerungsdokument
+laut `firestore.rules` ohnehin für alle lesbar sind — die Anmeldungen selbst
+(`bookings`) bleiben der Betreuung vorbehalten, die öffentliche Seite zeigt deshalb
+Belegung und freie Plätze, aber keine Gerätezahlen.
 
 **7.6 Wenn eine Betreuungsperson selbst mitmacht**
 Der Fall kommt garantiert vor: Eine Lehrperson meldet sich morgens wie jeder Gast selbst

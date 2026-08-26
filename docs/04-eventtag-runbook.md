@@ -11,10 +11,10 @@ Eine Seite, die man ausdruckt und den 3–4 Lehrpersonen am Info-Stand in die Ha
 | 08:15 | Begrüssung in der Aula durch die Schulleitung | Schulleitung |
 | **08:35** | **QR-Folie einblenden** + Admin schaltet `Anmeldung offen` ein (manueller Schalter, D4) | Organisation |
 | 08:35–08:50 | Anmeldephase, 3–4 Lehrpersonen im Saal und am Info-Stand | Betreuung |
-| 08:45 | Admin druckt/exportiert die Belegungsliste (Papier-Backup) | Betreuung |
+| 08:45 | Belegung kurz durchsehen; die Lehrpersonen haben sie unter `/uebersicht` selbst live | Betreuung |
 | 08:50 | Atelier 1 startet | — |
 | 09:15 | Support-Fenster endet, Technik bleibt per Telefon erreichbar | Technik |
-| 11:35 | Ende, Admin exportiert CSV für die Auswertung | Betreuung |
+| 11:35 | Ende; Belegung für die Auswertung notieren, bevor zurückgesetzt wird | Betreuung |
 
 ## 2. Was auf der QR-Folie steht
 
@@ -82,12 +82,13 @@ Ja — vorbereiten. Er kostet fast nichts und nimmt allen Beteiligten die Nervos
 - 38 Bündel mit Gummiband, beschriftet, in 4 Kisten (A1 · A2 · L1 · L2)
 - Wer einen Zettel nimmt, hat den Platz. Ist ein Bündel leer, ist das Angebot ausgebucht.
   **Exakt dieselbe Logik wie die App** — das macht den Umstieg trivial.
-- Zusätzlich: **die Belegungsliste von 08:45 ausgedruckt** — damit lässt sich der Papierbetrieb
-  auch mitten im Morgen auf dem aktuellen Stand fortsetzen.
+- Zusätzlich: **die Belegung von 08:45 abgeschrieben oder abfotografiert** (`/uebersicht`
+  auf einem zweiten Gerät) — damit lässt sich der Papierbetrieb auch mitten im Morgen auf
+  dem aktuellen Stand fortsetzen.
 
 ## 6. Nach dem Event
 
-- [ ] CSV-Export sichern (Belegung pro Angebot) — Grundlage für die Planung 2027
+- [ ] Belegung pro Angebot sichern (Bildschirmfoto der Übersicht) — Grundlage für die Planung 2027
 - [ ] Kurzes Feedback der 4 Lehrpersonen einholen: Was wurde am Info-Stand gefragt?
 - [ ] `anmeldungOffen: false`, Banner «Der Besuchsmorgen ist vorbei. Danke fürs Kommen!»
 - [ ] Bis 04.11.: `node scripts/reset.mjs --project fms-besuchstag-prod` → alle Buchungen gelöscht
