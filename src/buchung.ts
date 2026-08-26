@@ -2,7 +2,7 @@ import {
   collection, doc, runTransaction, serverTimestamp, type Transaction, type DocumentReference,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { angebot, block, type BlockId, type Wahl, BLOCK_IDS } from './programm';
+import { angebot, blockIds, type BlockId, type Wahl } from './programm';
 import { AusgebuchtFehler, RechteFehler, mitWiederholung, nacheinander } from './wiederholung';
 import { protokolliere, type Vorgangsnotiz } from './protokoll';
 import { gemerktesGeraet, vergissGeraet } from './geraet';
@@ -17,7 +17,7 @@ export interface Buchung {
 }
 
 export const leereWahl = (): Record<BlockId, string | null> =>
-  Object.fromEntries(BLOCK_IDS.map((b) => [b, null])) as Record<BlockId, string | null>;
+  Object.fromEntries(blockIds().map((b) => [b, null])) as Record<BlockId, string | null>;
 
 export const neueBuchung = (plaetze: number, quelle: 'gast' | 'admin' = 'gast'): Buchung => ({
   plaetze,
@@ -37,7 +37,9 @@ async function leseSlot(tx: Transaction, ref: DocumentReference, angebotId: stri
     const d = snap.data() as { belegt: number; kapazitaet: number };
     return { belegt: d.belegt ?? 0, kapazitaet: d.kapazitaet ?? a?.kapazitaet ?? 0, neu: false };
   }
-  return { belegt: 0, kapazitaet: a?.kapazitaet ?? block(a!.blockId).kapazitaet, neu: true };
+  // Kein Angebot bedeutet: Es gibt hier nichts mehr zu buchen — Kapazität 0 statt einer
+  // erfundenen Zahl. Die Prüfung weiter unten weist den Versuch dann als ausgebucht ab.
+  return { belegt: 0, kapazitaet: a?.kapazitaet ?? 0, neu: true };
 }
 
 /**
@@ -53,11 +55,11 @@ function schreibeSlot(
   stand: { neu: boolean; kapazitaet: number },
   belegt: number,
 ) {
-  if (stand.neu) {
-    tx.set(ref, { belegt, kapazitaet: stand.kapazitaet, block: angebot(angebotId)!.blockId });
-  } else {
-    tx.update(ref, { belegt });
-  }
+  if (!stand.neu) { tx.update(ref, { belegt }); return; }
+  // Fehlt der Zähler UND kennt das Programm das Angebot nicht mehr (Bereich entfernt),
+  // gibt es nichts anzulegen: Ein Zähler ohne Angebot wäre bloss eine erfundene Zahl.
+  const blockId = angebot(angebotId)?.blockId;
+  if (blockId) tx.set(ref, { belegt, kapazitaet: stand.kapazitaet, block: blockId });
 }
 
 /**
@@ -180,7 +182,7 @@ export function setzePlaetze(buchungId: string, plaetze: number): Promise<void> 
 
 /** Alle Wahlen freigeben und die Buchung löschen — «von vorne beginnen». */
 export async function alleFreigeben(buchungId: string, wahl: Wahl): Promise<void> {
-  for (const b of BLOCK_IDS) {
+  for (const b of blockIds()) {
     if (wahl[b]) await waehle(buchungId, b, null, 1);
   }
 }
@@ -199,7 +201,7 @@ export async function erfasseAdminBuchung(
 
   await mitWiederholung(async () => {
     await runTransaction(db, async (tx) => {
-      const ids = BLOCK_IDS.map((b) => auswahl[b] ?? null);
+      const ids = blockIds().map((b) => auswahl[b] ?? null);
 
       // ---------- Lesen ----------
       const staende = await Promise.all(
@@ -235,7 +237,7 @@ export async function erfasseAdminBuchung(
     angebot: null,
     vorher: null,
     plaetze,
-    slots: BLOCK_IDS.filter((b) => auswahl[b]).length,
+    slots: blockIds().filter((b) => auswahl[b]).length,
   });
 
   return { id: buchungRef.id };
@@ -258,7 +260,7 @@ export async function loescheAnmeldung(buchungId: string): Promise<void> {
       const snap = await tx.get(buchungRef);
       if (!snap.exists()) return;                    // schon weg, nichts zu tun
       const b = snap.data() as Buchung;
-      const ids = BLOCK_IDS.map((k) => b.wahl?.[k] ?? null).filter(Boolean) as string[];
+      const ids = blockIds().map((k) => b.wahl?.[k] ?? null).filter(Boolean) as string[];
       const staende = await Promise.all(
         ids.map(async (id) => ({ id, ...(await leseSlot(tx, doc(db, 'slots', id), id)) })),
       );

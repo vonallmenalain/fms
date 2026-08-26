@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import type { User } from 'firebase/auth';
 import { AnmeldeAndrangFehler, benutzerBereit, bestehenderBenutzer } from './firebase';
-import { BLOCK_IDS, programm, type BlockId } from './programm';
+import { block, blockIds, programm, type BlockId } from './programm';
 import { useAppConfig } from './hooks/useAppConfig';
 import { useBuchung } from './hooks/useBuchung';
 import { useSlots } from './hooks/useSlots';
@@ -114,24 +114,35 @@ function GastApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buchung?.plaetze]);
 
-  const blockSchritt = schritt !== 'start' && schritt !== 'ticket' ? (schritt as BlockId) : null;
+  // Der Bereich, in dem gerade ausgewählt wird — oder null. Er wird gegen das laufende
+  // Programm geprüft: Die Steuerung darf einen Bereich entfernen, während jemand darin
+  // steht. Dann ist der Schritt keiner mehr, und der Effekt weiter unten holt die Person
+  // zurück auf den Start, statt sie vor einer leeren Seite sitzen zu lassen.
+  const aktuellerBlock = schritt !== 'start' && schritt !== 'ticket' ? block(schritt as BlockId) : undefined;
+  const blockSchritt = aktuellerBlock?.id ?? null;
   const { staende, geladen: slotsGeladen } = useSlots(blockSchritt, config.liveZaehler);
 
-  // Die drei Knöpfe der Auswahl laufen immer der Reihe nach durch das Programm —
-  // Start · Atelier 1 · Atelier 2 · Unterrichtsbesuch 1 · Unterrichtsbesuch 2 · Übersicht.
+  useEffect(() => {
+    if (schritt !== 'start' && schritt !== 'ticket' && !aktuellerBlock) ersetze('start');
+  }, [schritt, aktuellerBlock, ersetze]);
+
+  // Die drei Knöpfe der Auswahl laufen immer der Reihe nach durch das Programm — vom
+  // Start über die Bereiche in ihrer zeitlichen Reihenfolge bis zur Übersicht.
   // Bewusst NICHT über den Browser-Verlauf: Wer aus der Übersicht heraus auf «ändern»
   // getippt hat, soll mit «Zurück» trotzdem im vorherigen Block landen und nicht dort,
   // wo er hergekommen ist.
   const abschliessen = useCallback(() => { gehe('ticket'); }, [gehe]);
 
   const weiter = useCallback((von: BlockId) => {
-    const i = BLOCK_IDS.indexOf(von);
-    gehe(i + 1 < BLOCK_IDS.length ? BLOCK_IDS[i + 1] : 'ticket');
+    const ids = blockIds();
+    const i = ids.indexOf(von);
+    gehe(i + 1 < ids.length ? ids[i + 1] : 'ticket');
   }, [gehe]);
 
   const zurueck = useCallback((von: BlockId) => {
-    const i = BLOCK_IDS.indexOf(von);
-    gehe(i > 0 ? BLOCK_IDS[i - 1] : 'start');
+    const ids = blockIds();
+    const i = ids.indexOf(von);
+    gehe(i > 0 ? ids[i - 1] : 'start');
   }, [gehe]);
 
   // Ein Tipp auf eine Karte wählt nur noch aus — weitergeblättert wird über die
@@ -189,7 +200,7 @@ function GastApp() {
     setGibtFrei(true);
     try {
       let alleFrei = true;
-      for (const b of BLOCK_IDS) {
+      for (const b of blockIds()) {
         if (buchung.wahl[b]) alleFrei = (await waehlenStill(benutzer.uid, b)) && alleFrei;
       }
       // Ehrlich bleiben: Ist die Anmeldung inzwischen geschlossen, weist der Server die
@@ -232,22 +243,22 @@ function GastApp() {
           setPlaetze={plaetzeAendern}
           plaetzeSperren={etwasGewaehlt}
           hatTicket={etwasGewaehlt}
-          onStart={() => gehe(BLOCK_IDS[0])}
+          onStart={() => gehe(blockIds()[0])}
           onTicket={() => gehe('ticket')}
         />
       )}
 
-      {blockSchritt && (
+      {aktuellerBlock && (
         <Auswahl
-          blockId={blockSchritt}
+          b={aktuellerBlock}
           staende={staende}
           geladen={slotsGeladen}
           buchung={buchung}
           plaetze={plaetze}
           laeuftFuer={laeuftFuer}
-          onWahl={(id) => waehlen(blockSchritt, id)}
-          onWeiter={() => weiter(blockSchritt)}
-          onZurueck={() => zurueck(blockSchritt)}
+          onWahl={(id) => waehlen(aktuellerBlock.id, id)}
+          onWeiter={() => weiter(aktuellerBlock.id)}
+          onZurueck={() => zurueck(aktuellerBlock.id)}
           onAbschliessen={abschliessen}
         />
       )}

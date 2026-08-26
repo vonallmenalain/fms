@@ -1,5 +1,5 @@
 import { Kopf } from '../ui/Bausteine';
-import { datumLang } from '../programm';
+import { angebotsSatz, blockIds, datumLang } from '../programm';
 import type { AppConfig } from '../hooks/useAppConfig';
 
 export function Start({
@@ -15,6 +15,9 @@ export function Start({
 }) {
   const max = Math.min(4, Math.max(1, config.maxPlaetzeProGeraet));
   const anzahlen = Array.from({ length: max }, (_, i) => i + 1);
+  // Die Steuerung darf alle Bereiche entfernen. Dann gibt es nichts zu wählen — und
+  // «Los geht’s» führte ins Leere. Lieber ehrlich sagen, dass noch nichts bereitsteht.
+  const hatProgramm = blockIds().length > 0;
 
   return (
     <div className="seite">
@@ -25,9 +28,13 @@ export function Start({
         <p className="lauftext">{datumLang()}</p>
       </div>
 
-      <div className="stapel">
-        <p>Du kannst zwei <b>Ateliers</b> und zwei <b>Unterrichtsbesuche</b> auswählen.</p>
-      </div>
+      {/* Aus dem laufenden Programm gerechnet: Wer in der Steuerung einen Bereich
+          hinzufügt oder streicht, muss diesen Satz nicht von Hand nachführen. */}
+      {angebotsSatz() && (
+        <div className="stapel">
+          <p>Du kannst <b>{angebotsSatz()}</b> auswählen.</p>
+        </div>
+      )}
 
       {!hatTicket && (
         <div className="stapel">
@@ -51,7 +58,12 @@ export function Start({
         </div>
       )}
 
-      {config.anmeldungOffen ? (
+      {!hatProgramm ? (
+        <div className="hinweis hinweis--warnung">
+          <b>Das Programm wird gerade vorbereitet.</b> Bitte in ein paar Minuten nochmals
+          nachsehen — die Seite kann offen bleiben.
+        </div>
+      ) : config.anmeldungOffen ? (
         <button type="button" className="knopf knopf--haupt knopf--breit" onClick={hatTicket ? onTicket : onStart}>
           {hatTicket ? 'Meine Auswahl ansehen' : 'Los geht’s'}
         </button>
@@ -62,7 +74,7 @@ export function Start({
         </div>
       )}
 
-      {hatTicket && config.anmeldungOffen && (
+      {hatProgramm && hatTicket && config.anmeldungOffen && (
         <p className="mini mitte">Du hast bereits eine Anmeldung auf diesem Gerät.</p>
       )}
     </div>

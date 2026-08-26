@@ -78,15 +78,42 @@ service cloud.firestore {
       return n is int && n >= 1 && n <= maxPlaetze();
     }
 
-    // Kapazität je Block, gespiegelt aus data/programm.json: Ateliers 35, Lektionen 20.
-    // Wird nur für die Selbstheilung unten gebraucht — siehe dort, warum das nötig ist.
-    function blockKapazitaet(block) {
-      return block in ['a1', 'a2'] ? 35 : 20;
+    /**
+     * Alle Blockschlüssel, die es geben darf: die vier aus data/programm.json und ein
+     * Vorrat von acht Plätzen für Bereiche, welche die Administration unter
+     * «Steuerung → Programm & Kapazitäten» selbst anlegt.
+     *
+     * Warum ein fester Vorrat und kein freies Feld? Weil unten für JEDEN Schlüssel
+     * einzeln geprüft wird, dass die gewählte Angebots-ID auch zu diesem Block gehört —
+     * und die Regelsprache keine Schleifen kennt. Die Liste steht deshalb genauso in
+     * src/programm.ts (NEUE_BLOCK_IDS); beide müssen zusammenpassen.
+     */
+    function bloecke() {
+      return ['a1', 'a2', 'l1', 'l2',
+              'z1', 'z2', 'z3', 'z4', 'z5', 'z6', 'z7', 'z8'];
     }
 
+    // Kapazität je Block, gespiegelt aus data/programm.json: Ateliers 35, Lektionen 20.
+    // Wird nur für die Selbstheilung unten gebraucht — siehe dort, warum das nötig ist.
+    // Für die selbst angelegten Bereiche steht keine Zahl in der Datei; dort gilt eine
+    // Obergrenze, die kein Zimmer der Schule fasst.
+    function gueltigeSelbstheilung(block, kap) {
+      return block in ['a1', 'a2'] ? kap == 35
+           : block in ['l1', 'l2'] ? kap == 20
+           : (kap is int && kap >= 0 && kap <= 40);
+    }
+
+    // Ausgeschrieben statt über die Liste: Die Regelsprache kennt keine Schleifen, und
+    // ein `values().hasOnly([null])` hinge an einem Sonderfall der Sprache. Diese Frage
+    // entscheidet, ob die Gruppengrösse noch änderbar ist — sie soll nicht auf einer
+    // Feinheit ruhen.
     function keineWahl(d) {
       return d.wahl.get('a1', null) == null && d.wahl.get('a2', null) == null
-        && d.wahl.get('l1', null) == null && d.wahl.get('l2', null) == null;
+        && d.wahl.get('l1', null) == null && d.wahl.get('l2', null) == null
+        && d.wahl.get('z1', null) == null && d.wahl.get('z2', null) == null
+        && d.wahl.get('z3', null) == null && d.wahl.get('z4', null) == null
+        && d.wahl.get('z5', null) == null && d.wahl.get('z6', null) == null
+        && d.wahl.get('z7', null) == null && d.wahl.get('z8', null) == null;
     }
 
     // Die Wahl ist der einzige Ort, an dem ein Gast frei formulierten Inhalt schreibt.
@@ -100,11 +127,19 @@ service cloud.firestore {
 
     function gueltigeWahl(d) {
       return d.wahl is map
-        && d.wahl.keys().hasOnly(['a1', 'a2', 'l1', 'l2'])
+        && d.wahl.keys().hasOnly(bloecke())
         && gueltigerSlot(d.wahl.get('a1', null), 'a1')
         && gueltigerSlot(d.wahl.get('a2', null), 'a2')
         && gueltigerSlot(d.wahl.get('l1', null), 'l1')
-        && gueltigerSlot(d.wahl.get('l2', null), 'l2');
+        && gueltigerSlot(d.wahl.get('l2', null), 'l2')
+        && gueltigerSlot(d.wahl.get('z1', null), 'z1')
+        && gueltigerSlot(d.wahl.get('z2', null), 'z2')
+        && gueltigerSlot(d.wahl.get('z3', null), 'z3')
+        && gueltigerSlot(d.wahl.get('z4', null), 'z4')
+        && gueltigerSlot(d.wahl.get('z5', null), 'z5')
+        && gueltigerSlot(d.wahl.get('z6', null), 'z6')
+        && gueltigerSlot(d.wahl.get('z7', null), 'z7')
+        && gueltigerSlot(d.wahl.get('z8', null), 'z8');
     }
 
     // Die Notiz schreibt nur die Betreuung («3 SuS ohne Handy»). Ohne Obergrenze passt
@@ -142,19 +177,21 @@ service cloud.firestore {
         && d.art in ['gast', 'admin']
         && d.geraet is string && d.geraet.size() <= 40
         && d.vorgang in ['gebucht', 'gewechselt', 'freigegeben', 'erfasst', 'uebernommen']
-        && (d.block == null || d.block in ['a1', 'a2', 'l1', 'l2'])
+        && (d.block == null || d.block in bloecke())
         && (d.angebot == null || (d.angebot is string && d.angebot.size() <= 60))
         && (d.vorher == null || (d.vorher is string && d.vorher.size() <= 60))
         && gueltigePlaetze(d.plaetze)
-        // Höchstens die vier Blöcke — mehr Slots kann eine Anmeldung gar nicht halten.
-        && d.slots is int && d.slots >= 0 && d.slots <= 4;
+        // Höchstens ein Slot je Block — mehr kann eine Anmeldung gar nicht halten.
+        && d.slots is int && d.slots >= 0 && d.slots <= bloecke().size();
     }
 
     // ------------------------------------------------------ config: Steuerung
 
     /**
      * Zwei Dokumente: `app` (Freigabeschalter, Banner, Reserveschalter) und `programm`
-     * (die von Hand geänderten Titel, Klassen, Zimmer und Lehrpersonen-Kürzel).
+     * (das Datum des Anlasses, Titel und Zeiten der Bereiche, Titel, Klassen, Zimmer und
+     * Lehrpersonen-Kürzel der Angebote — samt dem, was selbst angelegt oder ausgeblendet
+     * wurde).
      *
      * Für alle lesbar, und zwar bewusst: Ohne Anmeldung muss ein Gerät wissen, ob die
      * Anmeldung offen ist und wie die Angebote gerade heissen. Zusammen mit `slots`
@@ -222,9 +259,9 @@ service cloud.firestore {
       // verpassen, indem er den fehlenden Zähler selbst anlegt.
       allow create: if angemeldet()
         && request.resource.data.keys().hasOnly(['belegt', 'kapazitaet', 'block'])
-        && request.resource.data.block in ['a1', 'a2', 'l1', 'l2']
+        && request.resource.data.block in bloecke()
         && slotId.matches(request.resource.data.block + '-.+')
-        && request.resource.data.kapazitaet == blockKapazitaet(request.resource.data.block)
+        && gueltigeSelbstheilung(request.resource.data.block, request.resource.data.kapazitaet)
         && request.resource.data.belegt is int
         && request.resource.data.belegt >= 0
         && request.resource.data.belegt <= maxPlaetze();

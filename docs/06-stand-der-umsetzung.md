@@ -21,6 +21,7 @@ wie man es startet und wo bewusst vom Konzept abgewichen wurde.
 | Freigabeschalter, wirkt serverseitig | ✅ (Entscheid D4) |
 | Admin: Live-Dashboard, Anmeldung erfassen, Steuerung | ✅ |
 | Steuerung: Titel, Klasse, Zimmer, Lehrperson und Kapazität je Angebot ändern | ✅ seit 26.08. |
+| Steuerung: Datum des Anlasses, Bereiche und Angebote anlegen, umbenennen, umlegen, entfernen | ✅ seit 26.08. |
 | Öffentliche Nur-Lese-Übersicht `/uebersicht` für die Lehrpersonen | ✅ seit 26.08. |
 | Drucken und CSV-Export | ⛔ am 26.08. entfernt — wurde nicht gebraucht |
 | Security Rules | ✅ gegen den Emulator geprüft |

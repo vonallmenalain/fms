@@ -3,8 +3,8 @@
   "version": "2026-08-20",
   "event": {
     "titel": "Besuchsmorgen FMS Neufeld",
+    "$datum": "Startwert. Die Administration kann das Datum unter «Steuerung → Programm & Kapazitäten» umstellen; der Wochentag wird daraus gerechnet.",
     "datum": "2026-10-28",
-    "wochentag": "Mittwoch",
     "adresse": "Bremgartenstrasse 133, 3012 Bern",
     "erwarteteBesuchende": 120,
     "infostand": "GN, 2. Etage – betreut von FMS-Schüler:innen"
@@ -36,15 +36,12 @@
   "hinweise": [
     "Bei den Unterrichtsbesuchen darf die Lektion nach 20 Minuten gewechselt werden – dafür braucht es keine Anmeldung."
   ],
+  "$blocks": "Startwert. Titel, Zeiten und Bestand der Bereiche sind in der Steuerung änderbar; die Doppelwahlsperre gilt jeweils innerhalb einer Art (Entscheid D2).",
   "blocks": [
     { "id": "a1", "art": "atelier", "label": "Atelier 1", "von": "08:50", "bis": "09:10", "kapazitaet": 35, "pflicht": false },
     { "id": "a2", "art": "atelier", "label": "Atelier 2", "von": "09:20", "bis": "09:40", "kapazitaet": 35, "pflicht": false },
     { "id": "l1", "art": "lektion", "label": "Unterrichtsbesuch 1", "von": "09:55", "bis": "10:40", "kapazitaet": 20, "pflicht": false },
     { "id": "l2", "art": "lektion", "label": "Unterrichtsbesuch 2", "von": "10:50", "bis": "11:35", "kapazitaet": 20, "pflicht": false }
-  ],
-  "dedupeGruppen": [
-    { "id": "ateliers", "blocks": ["a1", "a2"], "regel": "fachKey" },
-    { "id": "lektionen", "blocks": ["l1", "l2"], "regel": "fachKey" }
   ],
   "offerings": [
     { "id": "a1-humanbiologie",  "blockId": "a1", "fach": "Humanbiologie",          "fachKey": "humanbiologie",         "lehrperson": "GOR", "raum": "GN 1.52", "kapazitaet": 35 },
