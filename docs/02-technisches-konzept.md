@@ -10,7 +10,7 @@
  │                  │            │  + programm.json   │        │  Firestore               │
  │  Programm-Daten  │            │    (im Bundle!)    │        │   slots/{id}   Zähler    │
  │  liegen lokal ───┼────────────┘  Deploy via GitHub │        │   bookings/{uid}         │
- │  Zähler + Buchung├─────── Firestore SDK (WebSocket)─────────►│   config/app             │
+ │  Zähler + Buchung├─────── Firestore SDK (WebSocket)─────────►│   config/app + /programm │
  └──────────────────┘         Transaktion + Live-Updates        │   admins/{uid}           │
                                                                 └──────────────────────────┘
                                               KEINE eigenen Server · KEINE Cloud Functions
@@ -28,6 +28,13 @@ Vorteile — und alle drei sind hier wichtig:
    das vollständige Programm — nur ohne Platzzahlen. Das ist die halbe Notfallvariante gratis.
 3. **Spart Firestore-Reads** (siehe §6) — die einzige Ressource, die auf dem Gratis-Plan knapp
    werden könnte.
+
+**Nachtrag August 2026 — die Ausnahme am Eventmorgen.** Punkt 1 gilt bis zum Vorabend; um
+08:47 hilft er nicht mehr, wenn ein Zimmer kurzfristig wechselt. Darum kann die
+Administration Titel, Klasse, Zimmer und Lehrpersonen-Kürzel eines Angebots in der
+Steuerung ändern; gespeichert wird das als **Abweichung** in `config/programm` (§3).
+Die Programmdatei bleibt die Quelle der Wahrheit — sie wird überlagert, nicht ersetzt,
+und die Punkte 2 und 3 bleiben unberührt: ein zusätzliches Dokument, das meist leer ist.
 
 ## 2. Technologie-Wahl
 
@@ -99,6 +106,23 @@ Vier Collections plus ein Konfigdokument. Alles bewusst flach.
   "programmVersion": "2026-08-19"   // Warnung, falls Gerät veraltetes Bundle hat
 }
 ```
+
+### `config/programm` — Anpassungen von Hand (1 Dokument, meist leer)
+```jsonc
+{
+  // Nur die Angebote, die in der Steuerung angefasst wurden — alle anderen gelten
+  // unverändert aus data/programm.json. Die Kapazität steht NICHT hier, sondern im
+  // Zähler: Dort prüft die Buchungstransaktion gegen Überbuchung.
+  "angebote": {
+    "l1-28fb": { "fach": "Pädagogik", "klasse": "28Fb", "raum": "GN 2.53", "lehrperson": "KLN" }
+  }
+}
+```
+
+Ein Dokument, ein Listener, auf jedem Gerät — auch beim Gast: Korrigiert die
+Administration um 08:47 ein Zimmer, muss die Änderung dort ankommen, wo gewählt wird.
+`src/programm.ts` legt die Abweichung über die Programmdatei und zeichnet alle
+Bildschirme neu (`useSyncExternalStore`).
 
 ### `zugang/{mail}` — Einladungen (Dokument-ID = Mailadresse, klein geschrieben)
 ```jsonc
@@ -229,7 +253,8 @@ Die drei Regeln, auf die es ankommt:
 | `belegt` muss `>= 0` und `<= kapazitaet` bleiben | **Überbuchung ist serverseitig unmöglich**, selbst bei manipuliertem Client |
 | Änderung von `belegt` max. ± 4 pro Schreibvorgang (Decke aus D3) | ein Skript kann nicht in einem Rutsch alles blockieren |
 | `bookings/{uid}` nur schreibbar, wenn `uid == request.auth.uid` | fremde Tickets sind nicht manipulierbar |
-| `config/app` für alle lesbar, nur für Admins schreibbar | Notbremse bleibt in Lehrer-Hand |
+| `config/*` für alle lesbar, nur für Admins schreibbar | Notbremse bleibt in Lehrer-Hand; zugleich die Grundlage der Nur-Lese-Übersicht unter `/uebersicht` |
+| `bookings` ist nur für die Betreuung auflistbar | die öffentliche Übersicht zeigt Belegung und freie Plätze, nie einzelne Anmeldungen oder Notizen |
 
 > **Härtung Stufe 2 (optional, Phase 6):** Mit `getAfter()` lässt sich in den Rules zusätzlich
 > prüfen, dass im selben Commit auch das Buchungsdokument passend geändert wird. Damit kann ein

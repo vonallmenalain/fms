@@ -19,7 +19,10 @@ wie man es startet und wo bewusst vom Konzept abgewichen wurde.
 | Blöcke überspringen, Wahl ändern, Plätze freigeben | ✅ |
 | Auswahl auf dem Gerät wiederherstellbar | ✅ |
 | Freigabeschalter, wirkt serverseitig | ✅ (Entscheid D4) |
-| Admin: Live-Dashboard, Anmeldung erfassen, Steuerung, Druck, CSV | ✅ |
+| Admin: Live-Dashboard, Anmeldung erfassen, Steuerung | ✅ |
+| Steuerung: Titel, Klasse, Zimmer, Lehrperson und Kapazität je Angebot ändern | ✅ seit 26.08. |
+| Öffentliche Nur-Lese-Übersicht `/uebersicht` für die Lehrpersonen | ✅ seit 26.08. |
+| Drucken und CSV-Export | ⛔ am 26.08. entfernt — wurde nicht gebraucht |
 | Security Rules | ✅ gegen den Emulator geprüft |
 | Überbuchungssicherung, automatisiert nachprüfbar | ✅ `npm run andrangtest` (21 Prüfungen) |
 | Automatischer Rules-Deploy per GitHub-Action | ✅ |
@@ -100,7 +103,7 @@ Anmeldung über das Dienstkonto im Repository-Secret `FIREBASE_SERVICE_ACCOUNT`.
 | Konzept sagte | Umgesetzt | Grund |
 |---|---|---|
 | Tailwind CSS | **eine handgeschriebene CSS-Datei** mit Farb-Tokens | Für sechs Bildschirme ist ein Framework Ballast. Spart einen Build-Schritt und ~10 KB; das CI-Grün ist eine einzige Variable in `src/index.css`. |
-| react-router | **30-Zeilen-Router** (`src/hooks/useRoute.ts`) | Es gibt zwei Pfade (`/` und `/admin`). Eine Bibliothek dafür wären ~15 KB — bei 200 gleichzeitig ladenden Geräten unnötig. |
+| react-router | **30-Zeilen-Router** (`src/hooks/useRoute.ts`) | Es gibt drei Pfade (`/`, `/admin`, `/uebersicht`). Eine Bibliothek dafür wären ~15 KB — bei 200 gleichzeitig ladenden Geräten unnötig. |
 | Webschrift | **Systemschrift** | Nichts blockiert das erste Zeichnen, kein zusätzlicher Netzaufruf. Die Marke trägt das Logo. |
 | Rettungscode am Info-Stand | **entfernt** | Niemand merkt sich einen sechsstelligen Code für den Fall, dass das Handy streikt. Die Auswahl kommt auf demselben Gerät automatisch zurück, ein Screenshot deckt den Rest ab — das spart einen Bildschirmabschnitt, eine Firestore-Sammlung und einen Schreibvorgang je Anmeldung. |
 | Selbstheilung fehlender Zähler mit fester Kapazitätsliste | **Kapazität an den Block gebunden** | Die Rules liessen für ein fehlendes Zählerdokument jede Kapazität aus `[20, 35]` zu — ein manipulierter Client hätte einem 20er-Zimmer 35 Plätze verpassen können. Jetzt muss der Blockschlüssel zur Angebots-ID passen und die Kapazität zum Block. `npm run andrangtest` prüft beide Richtungen: der Angriff prallt ab, die ehrliche Selbstheilung funktioniert weiter. |

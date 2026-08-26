@@ -62,7 +62,7 @@ Der wichtigste Meilenstein. Alles läuft aus `data/programm.json` und React-Stat
   der echte Hook hat → der Austausch in Phase 3 ist ein Einzeiler
 - Zustände einer Angebots-Karte durchspielen: frei · knapp · ausgebucht · schon gewählt · gewählt
 - Ticket-Screen inkl. Rettungscode-Attrappe und «Screenshot machen»-Hinweis
-- Navigationszeile oben (Zurück · Weiter · Abschliessen), Fortschrittsanzeige
+- Navigationszeile unter der Angebotsliste (Zurück · Weiter · Abschliessen), Fortschrittsanzeige
 
 **Fertig, wenn:** du auf dem Handy von Start bis Ticket durchklickst, ohne einmal zu zoomen —
 und drei Kolleg:innen dasselbe schaffen, ohne zu fragen.
@@ -129,11 +129,14 @@ npx firebase deploy --only firestore:rules --project fms-besuchstag-test
 - **Dashboard:** 4 Spalten live, Balken `belegt/kapazitaet`, Sortierung «am vollsten zuerst»
 - **«+ Anmeldung erfassen»:** Gast-Flow mit Notizfeld, für Personen ohne Handy
 - **Rettungscode-Suche:** Code eingeben → Buchung anzeigen / ändern / löschen
-- **Steuerung:** `anmeldungOffen`-Schalter, Banner-Text, Kapazität einzeln erhöhen
-- **Druckansicht** (`/admin/print`) und **CSV-Export**
+- **Steuerung:** `anmeldungOffen`-Schalter, Banner-Text, Programm & Kapazitäten einzeln ändern
+- **Öffentliche Übersicht** (`/uebersicht`) für die Lehrpersonen — ohne Login, nur zum Ansehen
 
-**Fertig, wenn:** eine Lehrperson ohne Erklärung eine Anmeldung für 3 Personen erfasst
-und den Info-Stand-Ausdruck erzeugt.
+> Druckansicht und CSV-Export standen hier ursprünglich mit auf der Liste. Sie sind
+> gebaut und im August 2026 wieder **entfernt** worden: Am Info-Stand wurde nie gedruckt,
+> und für den Blick von aussen genügt der Nur-Lese-Link.
+
+**Fertig, wenn:** eine Lehrperson ohne Erklärung eine Anmeldung für 3 Personen erfasst.
 
 ---
 

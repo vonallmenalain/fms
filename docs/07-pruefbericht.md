@@ -246,7 +246,7 @@ speicher liegen bleiben.
    bekannt ist.**
 2. **Logo auch auf der Auswahlseite.** Dort gibt es heute gar keinen Kopf — mitten im
    Ablauf kommt man nur über den Handy-Zurück-Knopf zurück auf die Startseite. Wäre eine
-   kleine Ergänzung, verschiebt aber die feststehende Navigationszeile.
+   kleine Ergänzung; seit die Navigationszeile unter der Liste steht, ist oben Platz dafür.
 3. **Rückmeldung beim zweiten Tipp.** Tippt jemand eine zweite Karte an, während die
    erste noch bucht, passiert sichtbar nichts (die Sperre «ein Vorgang pro Gerät»
    schluckt den Tipp). Richtig wäre: alle Karten kurz sperren, nicht nur die angetippte.
@@ -290,7 +290,9 @@ speicher liegen bleiben.
 6. Der stärkste Moment: **Steuerung → Anmeldung schliessen.** Auf dem Gast-Handy
    verschwindet der Startknopf **ohne Neuladen**. Wieder öffnen — er kommt zurück.
    Dann «Meldung an alle Gäste» senden, der Banner erscheint auf dem anderen Gerät.
-7. Zum Schluss: Drucken und CSV-Export in der Übersicht.
+7. Zum Schluss: **Steuerung → Programm & Kapazitäten** — ein Zimmer ändern, und auf dem
+   Gast-Handy steht es ohne Neuladen anders da. Dann den Link für die Lehrpersonen
+   (`/uebersicht`) in einem Fenster ohne Anmeldung öffnen.
 
 ---
 

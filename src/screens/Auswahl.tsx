@@ -40,31 +40,6 @@ export function Auswahl({
 
   return (
     <div className="seite">
-      {/* Die Navigation steht oben und bleibt beim Scrollen stehen: Ein Tipp auf eine Karte
-          wählt nur noch aus — weiter geht es erst über diese Knöpfe. Bei langen Listen
-          müsste man sonst zum Weiterkommen erst wieder ganz nach oben scrollen. */}
-      <nav className="navzeile nicht-drucken" aria-label="Navigation">
-        <button type="button" className="knopf knopf--rand knopf--klein" onClick={onZurueck}>
-          ← Zurück
-        </button>
-        <span className="navzeile-luecke" />
-        {/* Im letzten Schritt führen «Weiter» und «Abschliessen» beide in die Übersicht.
-            Zwei Knöpfe für denselben Weg sind nur eine Frage — darum steht dort allein
-            «Abschliessen». Vorher ist «Weiter» der Schritt, der jetzt dran ist. */}
-        {!letzterBlock && (
-          <button type="button" className="knopf knopf--klein knopf--haupt" onClick={onWeiter}>
-            Weiter
-          </button>
-        )}
-        <button
-          type="button"
-          className={`knopf knopf--klein ${letzterBlock ? 'knopf--haupt' : 'knopf--rand'}`}
-          onClick={onAbschliessen}
-        >
-          Abschliessen
-        </button>
-      </nav>
-
       <Fortschritt aktuell={blockId} entschieden={entschieden} />
 
       <ul className="bisher lauftext">
@@ -103,6 +78,31 @@ export function Auswahl({
           Plätzen sind deshalb gesperrt.
         </p>
       )}
+
+      {/* Die Navigation steht unter der Liste: Ein Tipp auf eine Karte wählt nur noch aus —
+          weiter geht es erst über diese Knöpfe. Wer die Liste bis zum letzten Angebot
+          durchgesehen hat, findet sie dort, wo er ohnehin gerade steht. */}
+      <nav className="navzeile" aria-label="Navigation">
+        <button type="button" className="knopf knopf--rand knopf--klein" onClick={onZurueck}>
+          ← Zurück
+        </button>
+        <span className="navzeile-luecke" />
+        {/* Im letzten Schritt führen «Weiter» und «Abschliessen» beide in die Übersicht.
+            Zwei Knöpfe für denselben Weg sind nur eine Frage — darum steht dort allein
+            «Abschliessen». Vorher ist «Weiter» der Schritt, der jetzt dran ist. */}
+        {!letzterBlock && (
+          <button type="button" className="knopf knopf--klein knopf--haupt" onClick={onWeiter}>
+            Weiter
+          </button>
+        )}
+        <button
+          type="button"
+          className={`knopf knopf--klein ${letzterBlock ? 'knopf--haupt' : 'knopf--rand'}`}
+          onClick={onAbschliessen}
+        >
+          Abschliessen
+        </button>
+      </nav>
     </div>
   );
 }
