@@ -34,12 +34,11 @@ export type Wahl = Partial<Record<BlockId, string | null>>;
 
 export const programm = roh as unknown as {
   version: string;
-  event: { titel: string; datum: string; adresse: string; erwarteteBesuchende: number; infostand: string };
+  event: { titel: string; datum: string; adresse: string; erwarteteBesuchende: number };
   anzeige: { lehrpersonKuerzel: boolean; klasse: boolean; raumlegendeAufTicket: boolean };
   regeln: { doppelwahl: string; maxPlaetzeProGeraet: number; freigabe: string };
   rahmenprogramm: { von: string; bis: string; ort: string; was: string }[];
   raumlegende: Record<string, string>;
-  hinweise: string[];
   blocks: Block[];
   offerings: Angebot[];
 };

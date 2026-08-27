@@ -100,8 +100,6 @@ export function Ticket({
           <b>GS</b> = {programm.raumlegende.GS}
         </p>
         <p className="klein">{programm.raumlegende.hinweis}</p>
-        {programm.hinweise.map((h) => <p key={h} className="klein">{h}</p>)}
-        <p className="klein">Fragen? Info-Stand: {programm.event.infostand}.</p>
       </div>
 
       {!nurAnsicht && onNeuBeginnen && (

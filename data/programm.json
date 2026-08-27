@@ -6,8 +6,7 @@
     "$datum": "Startwert. Die Administration kann das Datum unter «Steuerung → Programm & Kapazitäten» umstellen; der Wochentag wird daraus gerechnet.",
     "datum": "2026-10-28",
     "adresse": "Bremgartenstrasse 133, 3012 Bern",
-    "erwarteteBesuchende": 120,
-    "infostand": "GN, 2. Etage – betreut von FMS-Schüler:innen"
+    "erwarteteBesuchende": 120
   },
   "anzeige": {
     "$comment": "Steuert, was Gäste sehen. Lehrpersonen-Kürzel sind bewusst ausgeblendet (Entscheid der Schule) - das Feld bleibt in den Daten, weil es für die internen Listen und den Info-Stand nützlich ist.",
@@ -33,9 +32,6 @@
     "TH": "Turnhalle",
     "hinweis": "Zahl vor dem Punkt = Etage, «-» bedeutet Untergeschoss (z. B. GN -1.55 = Gebäude Nord, 1. UG)."
   },
-  "hinweise": [
-    "Bei den Unterrichtsbesuchen darf die Lektion nach 20 Minuten gewechselt werden – dafür braucht es keine Anmeldung."
-  ],
   "$blocks": "Startwert. Titel, Zeiten und Bestand der Bereiche sind in der Steuerung änderbar; die Doppelwahlsperre gilt jeweils innerhalb einer Art (Entscheid D2).",
   "blocks": [
     { "id": "a1", "art": "atelier", "label": "Atelier 1", "von": "08:50", "bis": "09:10", "kapazitaet": 35, "pflicht": false },
