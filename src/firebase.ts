@@ -1,6 +1,9 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator, type User } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import {
+  connectFirestoreEmulator, getFirestore, initializeFirestore,
+  persistentLocalCache, persistentMultipleTabManager,
+} from 'firebase/firestore';
 import { merkeGeraet } from './geraet';
 
 /**
@@ -21,7 +24,36 @@ export const app = initializeApp({
 });
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+/**
+ * Firestore mit DAUERHAFTEM Zwischenspeicher (IndexedDB) statt nur im Arbeitsspeicher.
+ *
+ * Das ist die Datenhälfte des Offline-Betriebs: Der Service Worker sorgt dafür, dass die
+ * App ohne Netz überhaupt startet (scripts/sw-vorlage.js) — aber ohne diese Zeilen stünde
+ * sie danach vor einer leeren Anmeldung. Der voreingestellte Speicher lebt nur so lange
+ * wie der Tab; wird er geschlossen, ist die eigene Buchung weg und `onSnapshot` meldet
+ * sich ohne Verbindung nie wieder. Mit IndexedDB liegt sie auf dem Gerät und ist beim
+ * nächsten Start sofort da, auch im Flugmodus.
+ *
+ * Gebucht wird deswegen nicht offline: Jede Buchung läuft über `runTransaction`
+ * (src/buchung.ts), und eine Transaktion braucht zwingend den Server. Es kann also nie
+ * eine Wahl auf dem Schirm stehen, die niemand reserviert hat.
+ *
+ * `persistentMultipleTabManager` erlaubt mehrere offene Tabs desselben Browsers — ohne
+ * ihn bekäme nur der erste den dauerhaften Speicher. Steht IndexedDB nicht zur Verfügung
+ * (privates Fenster in Safari, gesperrter Speicher), fällt das SDK von selbst auf den
+ * Arbeitsspeicher zurück; die App läuft dann wie bisher, nur eben ohne Offline-Start.
+ *
+ * Im Lasttest läuft derselbe Kode unter Node (scripts/andrangtest.mjs). Dort gibt es
+ * kein IndexedDB — darum die Weiche, statt das SDK eine Warnung schreiben zu lassen.
+ */
+const imBrowser = typeof window !== 'undefined' && typeof indexedDB !== 'undefined';
+
+export const db = imBrowser
+  ? initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    })
+  : getFirestore(app);
 
 // Nur für lokale Tests gegen die Firebase Emulator Suite (npm run dev:emulator).
 // Vite ersetzt die Variable beim Bauen durch eine Konstante, der Block fällt im

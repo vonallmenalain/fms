@@ -131,7 +131,7 @@ die `apis.google.com` sperrt — das betrifft nur die Google-Anmeldung im Betreu
 | Befund | Wirkung | Umgang |
 |---|---|---|
 | **Betreuungs-Login auf einem Gerät, das schon eine Gast-Anmeldung hat** | Firebase kann pro Browser nur eine Sitzung führen. Die Google-/E-Mail-Anmeldung ersetzt die anonyme — die Gast-Anmeldung hängt danach an einer uid, die dieses Gerät nicht mehr hat. **Das Ticket ist weg, die Plätze bleiben belegt** und lassen sich vom Gerät aus nicht mehr freigeben. | Für die Vorführung: zwei Geräte oder zwei Browser (eines normal, eines im privaten Fenster). Am Eventtag betrifft es nur Betreuungspersonen, die sich vorher selbst angemeldet haben — gehört ins Runbook. Aufräumen: «Steuerung → Alles zurücksetzen». |
-| **Neu laden ohne Netz** | Solange der Tab offen bleibt, ist die Übersicht offline lesbar (Firestore-Zwischenspeicher). Ein **Neuladen** ohne Verbindung zeigt die Fehlerseite des Browsers — die App ist dann gar nicht da. | Deshalb steht «Mach jetzt einen Screenshot» auf der Übersicht. Eine echte Offline-Fassung bräuchte einen Service Worker (§6, Kür). |
+| **Neu laden ohne Netz** | Solange der Tab offen bleibt, ist die Übersicht offline lesbar (Firestore-Zwischenspeicher). Ein **Neuladen** ohne Verbindung zeigt die Fehlerseite des Browsers — die App ist dann gar nicht da. | Deshalb steht «Mach jetzt einen Screenshot» auf der Übersicht. Eine echte Offline-Fassung bräuchte einen Service Worker (§6, Kür). **Nachtrag 27.08.: erledigt** — die App startet jetzt auch mit geschlossenem Tab ohne Netz und zeigt die eigene Anmeldung ([02 §8a](02-technisches-konzept.md)). Der Screenshot-Hinweis bleibt: Er hilft auch dem Gerät, das nie online war, und dem leeren Akku. |
 
 ---
 
@@ -260,9 +260,10 @@ speicher liegen bleiben.
 6. **«Anmeldung erfassen»:** Ändert man die Personenzahl nach der Auswahl, bleibt eine zu
    knappe Wahl stehen und das Speichern scheitert erst am Server. Und die Sperre
    «gleiches Fach» gilt dort nicht.
-7. **Service Worker.** Damit ein Neuladen ohne Netz noch die Übersicht zeigt statt der
-   Fehlerseite des Browsers. Echte Zusatzarbeit — der Screenshot-Hinweis deckt den Fall
-   heute pragmatisch ab.
+7. ~~**Service Worker.** Damit ein Neuladen ohne Netz noch die Übersicht zeigt statt der
+   Fehlerseite des Browsers.~~ **Am 27.08. gebaut** — samt der zweiten, ebenso nötigen
+   Hälfte: Firestore legt seinen Zwischenspeicher jetzt auf die Platte, sonst startete die
+   App zwar, stünde aber vor einer leeren Anmeldung ([02 §8a](02-technisches-konzept.md)).
 
 ---
 

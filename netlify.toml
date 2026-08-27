@@ -59,3 +59,11 @@
   for = "/index.html"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
+
+# Der Service Worker muss bei jedem Aufruf frisch geprüft werden — sonst hielte
+# ein Browser, der ihn stunden- oder tagelang zwischenspeichert, den alten Stand
+# fest und ein neu ausgerollter käme nie an. Er ist ~4 KB.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

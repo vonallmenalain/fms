@@ -235,7 +235,7 @@ gesperrtem Zwischenspeicher, ein Android, das die Verbindung im Hintergrund kapp
 
 | Grösse | Ziel | Wie erreicht |
 |---|---|---|
-| JavaScript auf dem kritischen Pfad | **≤ 200 KB** gepackt | Firebase modular importieren (App + Auth + Firestore ≈ 130 KB), React ≈ 45 KB |
+| JavaScript auf dem kritischen Pfad | **≤ 200 KB** gepackt | Gemessen am 27.08.: **198 KB** — Firebase 140, React 46, App 13. Firebase modular importiert; die 140 statt 116 KB sind der dauerhafte Zwischenspeicher, der die App offline startfähig macht ([02 §8a](02-technisches-konzept.md)). Damit ist das Budget aufgebraucht: Was hier noch dazukommt, muss anderswo weg |
 | Admin-Bereich im Gast-Bundle | **0 KB** | eigene Route, per `lazy()` nachgeladen |
 | Erster sichtbarer Inhalt (4G, Mittelklasse-Android) | **≤ 1.5 s** | statisches CDN, keine Schriftart blockiert das Zeichnen |
 | Tipp bis sichtbare Reaktion | **≤ 100 ms** | optimistisches Zeichnen, keine Netzrunde davor |

@@ -337,14 +337,40 @@ funktionieren. Im Blaze-Tarif kostet dieselbe Situation ein paar Rappen. Dazu ei
 
 | Störung | Verhalten der App |
 |---|---|
-| Kein Netz beim Öffnen | Programm wird trotzdem angezeigt (liegt im Bundle), Hinweis «Keine Verbindung — Auswahl noch nicht möglich» |
-| Netz bricht mitten in der Auswahl ab | Firestore-SDK puffert und sendet automatisch nach; UI zeigt «wird gespeichert …» |
+| Kein Netz beim Öffnen | Die App startet trotzdem — sie liegt seit dem ersten Besuch vollständig im Browser (Service Worker, siehe unten). Banner «Kein Internet …», die eigene Anmeldung ist lesbar, Buchen ist gesperrt |
+| Netz bricht mitten in der Auswahl ab | Der laufende Versuch scheitert sauber — eine Transaktion braucht zwingend den Server. Die Karte fällt in ihren Zustand zurück, die Meldung sagt, woran es liegt. Es kann nie eine Wahl auf dem Schirm stehen, die niemand reserviert hat |
 | Angebot währenddessen ausgebucht | Toast + Karte sofort gesperrt, keine Fehlerseite |
 | Firestore-Kontingent erschöpft | Im Blaze-Tarif gibt es diesen Fall nicht mehr — es wird abgerechnet statt abgeschaltet. Trotzdem hinterlegt: Banner «Anmeldung vorübergehend nicht möglich — bitte beim Info-Stand melden» |
 | Andrang auf ein einzelnes Angebot | Wiederholung mit Streuung; danach «gerade eben ausgebucht», Liste zeigt bereits den neuen Stand ([05 §5](05-last-und-performance.md)) |
 | Gerät hat altes Bundle (Programm geändert) | Vergleich `config/app.programmVersion` → Hinweis «Bitte Seite neu laden» |
 | Browserdaten gelöscht / anderes Handy | Am Info-Stand melden → Admin erfasst die Anmeldung neu (der Screenshot der Auswahl hilft) |
 | **Totalausfall** | Papier-Fallback, siehe [04-eventtag-runbook.md](04-eventtag-runbook.md) §5 |
+
+### 8a. Offline-Betrieb (seit 27.08.)
+
+Der Fall aus dem Prüfbericht — Tab geschlossen, kein Netz, `fms.alae.app` neu aufgerufen —
+zeigte bis dahin die Fehlerseite des Browsers. Er braucht **zwei** Hälften, eine ohne die
+andere nützt nichts:
+
+| Hälfte | Wo | Was sie tut |
+|---|---|---|
+| **App** | `scripts/sw-vorlage.js` → beim Bau `dist/sw.js` | Ein Service Worker legt den gebauten Stand (index.html, Bündel, CSS, Logo — ~835 KB) im Zwischenspeicher des Browsers ab. Ohne Netz kommt die App von dort. |
+| **Daten** | `src/firebase.ts` | Firestore schreibt seinen Zwischenspeicher nach IndexedDB statt nur in den Arbeitsspeicher. Damit überlebt die eigene Anmeldung das Schliessen des Tabs und ist beim Start ohne Netz sofort da. |
+
+**Was offline geht:** die App starten, die eigene Anmeldung mit allen Bereichen, Zimmern und
+Zeiten ansehen, durch die Angebotslisten blättern. Oben steht dann ein Banner «Kein Internet
+— du siehst deinen zuletzt geladenen Stand».
+
+**Was offline nicht geht:** buchen, wechseln, freigeben. Jeder dieser Vorgänge ist eine
+Firestore-Transaktion und braucht den Server (§4) — genau deshalb kann offline auch keine
+Wahl entstehen, die in Wirklichkeit niemand reserviert hat. Die App sagt das beim Tippen
+sofort, statt ein Rädchen drehen zu lassen. Auch die Platzzahlen sind offline der zuletzt
+geladene Stand, nicht der aktuelle.
+
+**Neue Fassungen** kommen trotzdem an: Seitenaufrufe holen index.html zuerst aus dem Netz
+(Frist 3.5 s, danach die gespeicherte Fassung). Der Service Worker lädt einen neuen Stand
+im Hintergrund vollständig herunter und übernimmt ihn, sobald kein Tab der App mehr offen
+ist — nie halb, und nie mitten im Buchen.
 
 ## 9. Projektstruktur (Zielbild)
 
@@ -355,13 +381,16 @@ fms/
 ├── scripts/
 │   ├── seed.mjs                # programm.json → Firestore slots/ (idempotent)
 │   ├── reset.mjs               # alle Buchungen löschen, Zähler auf 0
-│   └── lasttest.mjs            # 150 parallele Buchungen simulieren
+│   ├── lasttest.mjs            # 150 parallele Buchungen simulieren
+│   ├── sw-vorlage.js           # Service Worker, Offline-Start (§8a)
+│   └── sw-bauen.mjs            # trägt die gebauten Dateien ein → dist/sw.js
 ├── src/
 │   ├── programm.ts             # importiert + typisiert programm.json
 │   ├── firebase.ts             # Init, anonyme Anmeldung
 │   ├── buchung.ts              # runTransaction-Logik aus §4
 │   ├── wiederholung.ts         # Retry mit Streuung gegen Andrang (05 §5)
 │   ├── hooks/useSlots.ts       # Live-Zähler für einen Block
+│   ├── hooks/useVerbindung.ts  # hat das Gerät gerade Netz?
 │   ├── screens/                # Start · Auswahl · Ticket · Admin
 │   └── ui/                     # AngebotsKarte, Fortschritt, Banner …
 ├── firestore.rules

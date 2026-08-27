@@ -15,6 +15,7 @@ import { Ticket } from './screens/Ticket';
 import { useRoute } from './hooks/useRoute';
 import { useVerlauf } from './hooks/useVerlauf';
 import { useProgrammAnpassungen } from './hooks/useProgrammAnpassungen';
+import { useVerbindung } from './hooks/useVerbindung';
 
 const Admin = lazy(() => import('./screens/Admin'));
 // Die Übersicht für die Lehrpersonen liegt im selben Nachlade-Bündel wie der
@@ -52,6 +53,7 @@ function GastApp() {
   const [authGeprueft, setAuthGeprueft] = useState(false);
   const { config, veraltet } = useAppConfig();
   const { buchung, geladen: buchungGeladen } = useBuchung(benutzer?.uid ?? null);
+  const { offline } = useVerbindung();
 
   // Jeder Bildschirmwechsel ist ein History-Eintrag — damit geht der Zurück-Knopf des
   // Handys genau einen Bildschirm zurück statt aus der App hinaus.
@@ -150,6 +152,14 @@ function GastApp() {
   // ein Tipp auf eine andere Karte tauscht sie (das erledigt `waehle` in einem Zug).
   const waehlen = useCallback(async (blockId: BlockId, angebotId: string | null) => {
     if (tippLaeuft.current) return;           // ein Tipp ist schon unterwegs
+    // Ohne Netz führt der Versuch zu nichts: Eine Transaktion wartet auf den Server, und
+    // bis der antwortet, drehte sich das Rädchen auf der Karte endlos. Lieber sofort
+    // sagen, woran es liegt. Bewusst `navigator.onLine` statt des Zustands von oben —
+    // hier zählt der Moment des Tippens.
+    if (!navigator.onLine) {
+      setMeldung('Ohne Internetverbindung lässt sich nichts buchen. Deine bisherige Auswahl bleibt bestehen.');
+      return;
+    }
     const schonGewaehlt = buchung?.wahl?.[blockId] ?? null;
     const ziel = angebotId !== null && schonGewaehlt === angebotId ? null : angebotId;
 
@@ -185,6 +195,10 @@ function GastApp() {
   const plaetzeAendern = useCallback((n: number) => {
     setPlaetzeLokal(n);                       // sofort, ohne Netz
     if (!benutzer || !buchung) return;        // vor der ersten Buchung gibt es kein Dokument
+    // Ohne Netz bliebe die Transaktion in der Warteschlange «ein Vorgang pro Gerät»
+    // hängen und verzögerte die erste echte Buchung nach der Rückkehr der Verbindung.
+    // Die getippte Zahl gilt trotzdem: Sie wird beim Buchen mitgegeben.
+    if (!navigator.onLine) return;
     plaetzeWunsch.current = n;
     setzePlaetze(benutzer.uid, n).catch(() => {
       // Abgelehnt (z. B. weil inzwischen gebucht wurde): ehrlich bleiben und zurückfallen.
@@ -195,6 +209,10 @@ function GastApp() {
 
   const neuBeginnen = useCallback(async () => {
     if (!benutzer || !buchung || gibtFrei) return;
+    if (!navigator.onLine) {
+      setMeldung('Ohne Internetverbindung lässt sich nichts freigeben. Bitte später nochmals versuchen.');
+      return;
+    }
     // Vier Blöcke nacheinander freigeben dauert einen Moment. Ohne sichtbares Zeichen
     // wirkt die App in dieser Zeit, als hätte sie den Tipp verschluckt.
     setGibtFrei(true);
@@ -233,6 +251,10 @@ function GastApp() {
 
   return (
     <>
+      {/* Ohne Netz startet die App zwar (Service Worker), zeigt aber nur den zuletzt
+          geladenen Stand — und buchen kann sie nicht. Beides gehört gesagt, sonst wirkt
+          sie bloss kaputt. */}
+      {offline && <Banner text="Kein Internet — du siehst deinen zuletzt geladenen Stand. Buchen und Ändern geht erst wieder mit Verbindung." />}
       {veraltet && <Banner text="Das Programm wurde angepasst — bitte lade die Seite neu." />}
       {config.banner && <Banner text={config.banner} />}
 

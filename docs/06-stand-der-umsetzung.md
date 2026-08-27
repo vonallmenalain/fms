@@ -38,6 +38,7 @@ wie man es startet und wo bewusst vom Konzept abgewichen wurde.
 | Protokoll als aufklappbare Liste, ohne Querlauf auf dem Handy | ✅ seit 22.08. |
 | Einzelne Anmeldung löschen — die Plätze werden dabei frei | ✅ seit 22.08. |
 | Keine Schattenbuchungen mehr: eigene Gast-Anmeldung wandert ins Konto | ✅ seit 22.08. — [05 §10a](05-last-und-performance.md) |
+| App startet ohne Netz — Tab geschlossen, Flugmodus, Aufruf: Anmeldung ist da | ✅ seit 27.08. — Service Worker + Firestore auf der Platte, [02 §8a](02-technisches-konzept.md) |
 
 **Noch offen:** Latenzmessung gegen die echte Datenbank mit 200/400 Clients (muss von einem
 gewöhnlichen Anschluss aus laufen, siehe unten), Generalprobe, CI-Grün aus dem

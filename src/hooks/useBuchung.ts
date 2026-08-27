@@ -12,7 +12,7 @@ export function useBuchung(uid: string | null) {
   useEffect(() => {
     if (!uid) return;
     setGeladen(false);
-    return onSnapshot(
+    const ab = onSnapshot(
       doc(db, 'bookings', uid),
       (s) => {
         setBuchung(s.exists() ? { ...(s.data() as Buchung), wahl: { ...leereWahl(), ...(s.data() as Buchung).wahl } } : null);
@@ -20,6 +20,16 @@ export function useBuchung(uid: string | null) {
       },
       () => setGeladen(true),
     );
+
+    // Sicherheitsnetz gegen einen Ladebildschirm ohne Ende: Firestore meldet sich für ein
+    // Dokument, das es weder auf dem Server noch im Zwischenspeicher findet, schlicht nie —
+    // weder mit Daten noch mit einem Fehler. Ohne Netz ist das der Normalfall für ein
+    // Gerät, dessen Anmeldung noch nie geladen wurde; die App bliebe bei «Einen Moment …»
+    // stehen. Nach der Frist gilt: Es ist nichts da. Kommt die Anmeldung später doch noch,
+    // ersetzt der Listener sie ohnehin.
+    const frist = setTimeout(() => setGeladen(true), navigator.onLine ? 10000 : 1500);
+
+    return () => { clearTimeout(frist); ab(); };
   }, [uid]);
 
   return { buchung, geladen };
