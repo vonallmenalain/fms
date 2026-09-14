@@ -2320,31 +2320,31 @@ function Zugaenge({ melde, ich }: { melde: (t: string) => void; ich: User }) {
           </select>
         </div>
       </div>
-      <label className="schieber">
+      <label className="schieber schieber--erklaert">
         <input type="checkbox" checked={rolle === 'betreuung' && wege.link} disabled={rolle !== 'betreuung'}
           onChange={(e) => setWege((w) => ({ ...w, link: e.target.checked }))} />
         <span>
           Anmeldung per Link
-          <span className="mini" style={{ fontWeight: 400 }}>
+          <span className="mini">
             {rolle === 'betreuung'
-              ? ' — ein Link für alle Geräte, nur die E-Mail-Adresse eintippen'
-              : ' — für die Administration nicht vorgesehen (Passwort oder Google)'}
+              ? 'Ein Link für alle Geräte, nur die E-Mail-Adresse eintippen.'
+              : 'Für die Administration nicht vorgesehen — Passwort oder Google.'}
           </span>
         </span>
       </label>
-      <label className="schieber">
+      <label className="schieber schieber--erklaert">
         <input type="checkbox" checked={wege.passwort}
           onChange={(e) => setWege((w) => ({ ...w, passwort: e.target.checked }))} />
         <span>
           Login mit Passwort
-          <span className="mini" style={{ fontWeight: 400 }}> — «Login erstellen» im E-Mail, einmal ein Passwort festlegen</span>
+          <span className="mini">«Login erstellen» im E-Mail, einmal ein Passwort festlegen.</span>
         </span>
       </label>
-      <label className="schieber">
+      <label className="schieber schieber--erklaert">
         <input type="checkbox" checked={mailSchicken} onChange={(e) => setMailSchicken(e.target.checked)} />
         <span>
           E-Mail jetzt schicken
-          <span className="mini" style={{ fontWeight: 400 }}> — sonst stehen die Links in der Liste unter «Links kopieren»</span>
+          <span className="mini">Sonst stehen die Links in der Liste unter «Links kopieren».</span>
         </span>
       </label>
       <button className="knopf knopf--haupt" style={{ alignSelf: 'start' }} disabled={laeuft || !mail}
@@ -2352,63 +2352,73 @@ function Zugaenge({ melde, ich }: { melde: (t: string) => void; ich: User }) {
         Zugang eintragen
       </button>
 
-      <div className="roller">
-        <table className="tabelle">
-          <thead><tr><th>E-Mail</th><th>Name</th><th>Rolle</th><th>Anmeldung</th><th>Stand</th><th /></tr></thead>
-          <tbody>
-            {einladungen.length === 0 && (
-              <tr><td colSpan={6} className="mini">Noch keine Zugänge eingetragen.</td></tr>
-            )}
-            {[...einladungen].sort((a, b) => a.id.localeCompare(b.id)).map((e) => (
-              <tr key={e.id}>
-                <td>{e.id}</td>
-                <td>{e.name}</td>
-                <td>
-                  <select value={e.rolle} onChange={(ev) => rolleAendern(e, ev.target.value as Rolle)}
-                    style={{ minHeight: 36, padding: '4px 8px' }}>
-                    <option value="betreuung">{ROLLEN_TEXT.betreuung}</option>
-                    <option value="admin">{ROLLEN_TEXT.admin}</option>
-                  </select>
-                </td>
-                <td>
-                  <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-                    <label className="schieber" style={{ fontWeight: 400, fontSize: 13 }}
-                      title={e.rolle === 'admin' ? 'Für die Administration nicht vorgesehen' : 'Ein Link für alle Geräte'}>
-                      <input type="checkbox" checked={e.rolle === 'betreuung' && e.link !== false}
-                        disabled={e.rolle !== 'betreuung'}
-                        onChange={(ev) => wegAendern(e, 'link', ev.target.checked)} />
-                      Link
-                    </label>
-                    <label className="schieber" style={{ fontWeight: 400, fontSize: 13 }} title="«Login erstellen» im E-Mail">
-                      <input type="checkbox" checked={e.passwort !== false}
-                        onChange={(ev) => wegAendern(e, 'passwort', ev.target.checked)} />
-                      Passwort
-                    </label>
-                  </div>
-                </td>
-                <td className="mini">{kontenZu(e.id).length > 0 ? 'angemeldet' : 'noch nie angemeldet'}</td>
-                <td>
-                  <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                    <button className="knopf knopf--still knopf--klein" onClick={() => mailSchickenAn(e)}>E-Mail schicken</button>
-                    <button className="knopf knopf--still knopf--klein" onClick={() => linksKopieren(e)}>Links kopieren</button>
-                    <button className="knopf knopf--still knopf--klein" onClick={() => codeErneuern(e)}>Code erneuern</button>
-                    <button className="knopf knopf--still knopf--klein" onClick={() => entfernen(e)}>Entfernen</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {ohneEinladung.map((k) => (
-              <tr key={k.id}>
-                <td>{k.email ?? '—'}</td>
-                <td>{k.name}</td>
-                <td className="mini">{ROLLEN_TEXT[k.rolle] ?? k.rolle}</td>
-                <td className="mini">Passwort oder Google</td>
-                <td className="mini">Erstzugang</td>
-                <td />
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Eine Karte je Person statt einer Tabelle: Rollenfeld, zwei Ankreuzfelder und
+          vier Knöpfe je Zeile sprengten jedes Handy in die Breite — siehe .zk in index.css. */}
+      <div className="zugang-liste">
+        {einladungen.length === 0 && <p className="mini">Noch keine Zugänge eingetragen.</p>}
+
+        {[...einladungen].sort((a, b) => a.id.localeCompare(b.id)).map((e) => (
+          <div className="zk" key={e.id}>
+            <div className="zk-kopf">
+              <span className="zk-wer">
+                <b className="zk-mail">{e.id}</b>
+                <span className="zk-unter">
+                  {[e.name, kontenZu(e.id).length > 0 ? 'angemeldet' : 'noch nie angemeldet']
+                    .filter(Boolean).join(' · ')}
+                </span>
+              </span>
+              <select className="zk-rolle" value={e.rolle} aria-label={`Rolle von ${e.id}`}
+                onChange={(ev) => rolleAendern(e, ev.target.value as Rolle)}>
+                <option value="betreuung">{ROLLEN_TEXT.betreuung}</option>
+                <option value="admin">{ROLLEN_TEXT.admin}</option>
+              </select>
+            </div>
+
+            <div className="zk-fuss">
+              <div className="zk-wege">
+                {/* Der Link ist der Administration nicht erlaubt — das Kästchen bleibt
+                    sichtbar, damit die Spalte nicht springt, aber abgeschaltet. */}
+                <label className={`schieber schieber--klein${e.rolle === 'admin' ? ' schieber--aus' : ''}`}
+                  title={e.rolle === 'admin'
+                    ? 'Für die Administration nicht vorgesehen'
+                    : 'Ein Link für alle Geräte'}>
+                  <input type="checkbox" checked={e.rolle === 'betreuung' && e.link !== false}
+                    disabled={e.rolle !== 'betreuung'}
+                    onChange={(ev) => wegAendern(e, 'link', ev.target.checked)} />
+                  Link
+                </label>
+                <label className="schieber schieber--klein" title="«Login erstellen» im E-Mail">
+                  <input type="checkbox" checked={e.passwort !== false}
+                    onChange={(ev) => wegAendern(e, 'passwort', ev.target.checked)} />
+                  Passwort
+                </label>
+              </div>
+
+              <div className="zk-aktionen">
+                <button className="knopf knopf--still" onClick={() => mailSchickenAn(e)}>E-Mail schicken</button>
+                <button className="knopf knopf--still" onClick={() => linksKopieren(e)}>Links kopieren</button>
+                <button className="knopf knopf--still" onClick={() => codeErneuern(e)}>Code erneuern</button>
+                <button className="knopf knopf--still knopf--weg" onClick={() => entfernen(e)}>Entfernen</button>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {/* Konten ohne Einladung — etwa der Erstzugang aus den Rules. Hier gibt es
+            nichts einzustellen: Sie haben kein Einladungsdokument und keinen Code. */}
+        {ohneEinladung.map((k) => (
+          <div className="zk zk--still" key={k.id}>
+            <div className="zk-kopf">
+              <span className="zk-wer">
+                <b className="zk-mail">{k.email ?? '—'}</b>
+                <span className="zk-unter">
+                  {[k.name, 'Erstzugang · Passwort oder Google'].filter(Boolean).join(' · ')}
+                </span>
+              </span>
+              <span className="zk-marke">{ROLLEN_TEXT[k.rolle] ?? k.rolle}</span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

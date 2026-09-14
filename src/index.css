@@ -465,10 +465,56 @@ button.ticket-karte:disabled { cursor: default; }
 .kennzahl dt { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--grau-hell); font-weight: 700; }
 .kennzahl dd { margin: 2px 0 0; font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
-table.tabelle { width: 100%; border-collapse: collapse; font-size: 14.5px; background: var(--flaeche); }
-table.tabelle th, table.tabelle td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--linie); }
-table.tabelle th { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--grau-hell); background: var(--flaeche-2); }
-.roller { overflow-x: auto; border: 1px solid var(--linie); border-radius: var(--radius); }
+/* ---------- Zugänge: eine Karte je Person ----------
+   Früher eine Tabelle mit sechs Spalten. Sobald je Zeile ein Rollenfeld, zwei
+   Ankreuzfelder und vier Knöpfe darin standen, war sie breiter als jedes Handy:
+   waagrecht schieben, und die Zeilen wurden meterhoch, weil jede Zelle einzeln
+   umbrach. Eine Karte je Person braucht diese Breite nicht — sie stapelt, was
+   nicht nebeneinander passt, und hält jede Angabe an ihrem Platz. */
+
+.zugang-liste { display: flex; flex-direction: column; gap: 8px; }
+
+.zk {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 12px;
+  background: var(--flaeche); border: 1px solid var(--linie); border-radius: var(--radius);
+}
+
+.zk-kopf { display: flex; align-items: flex-start; gap: 8px 12px; flex-wrap: wrap; }
+/* min-width: 0 lässt die Adresse umbrechen statt die Karte aufzuspannen. */
+.zk-wer { flex: 1 1 210px; min-width: 0; }
+.zk-mail { display: block; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.zk-unter { display: block; font-size: 13px; color: var(--grau-hell); }
+
+.zk-rolle {
+  min-height: 40px; padding: 6px 10px;
+  border: 1px solid var(--linie-stark); border-radius: var(--radius);
+  background: var(--flaeche); font: inherit; font-size: 14.5px; color: var(--schwarz);
+}
+
+/* Ankreuzfelder links, Knöpfe rechts — und untereinander, sobald es eng wird:
+   `space-between` setzt ein allein gebliebenes Element an den Anfang seiner Zeile. */
+.zk-fuss {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 4px 18px; flex-wrap: wrap;
+  padding-top: 6px; border-top: 1px solid var(--linie);
+}
+.zk-wege { display: flex; gap: 16px; flex-wrap: wrap; }
+.zk-aktionen { display: flex; gap: 2px; flex-wrap: wrap; }
+/* 44px wie in der Navigationszeile: kleiner als ein Hauptknopf, mit dem Daumen
+   aber weiterhin sicher zu treffen. */
+.zk-aktionen .knopf { min-height: 44px; padding: 9px 10px; font-size: 14px; }
+/* Die einzige Aktion, die etwas wegnimmt — sie soll sich von den drei anderen
+   unterscheiden, ohne als roter Kasten die ganze Karte an sich zu ziehen. */
+.zk-aktionen .knopf--weg { color: var(--rot); }
+
+/* Konten ohne Einladung (Erstzugang): nichts zu ändern, nur zu wissen. */
+.zk--still { background: var(--flaeche-2); }
+.zk-marke {
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--gruen-hell); color: var(--gruen-tief);
+  font-size: 11px; font-weight: 700; letter-spacing: .04em; white-space: nowrap;
+}
 
 /* ---------- Fusszeile ---------- */
 
@@ -491,7 +537,18 @@ table.tabelle th { font-size: 11px; letter-spacing: .1em; text-transform: upperc
 .stapel { display: flex; flex-direction: column; gap: 12px; }
 .reihe { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .schieber { display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 600; }
-.schieber input { width: 22px; height: 22px; accent-color: var(--gruen-dunkel); }
+.schieber input { width: 22px; height: 22px; accent-color: var(--gruen-dunkel); flex: none; }
+
+/* Ankreuzfeld mit einer Erklärung darunter statt hinter dem Namen: Der Satz läuft
+   sonst um das Kästchen herum und die Zeile verliert ihren Anfang. */
+.schieber--erklaert { align-items: flex-start; }
+.schieber--erklaert input { margin-top: 3px; }
+.schieber--erklaert .mini { display: block; font-weight: 400; }
+
+/* In der Zugangsliste: kleiner, weil dort zwei davon neben den Knöpfen stehen. */
+.schieber--klein { gap: 7px; font-size: 13.5px; font-weight: 500; }
+.schieber--klein input { width: 18px; height: 18px; }
+.schieber--aus { color: var(--grau-hell); cursor: default; }
 
 :where(a, button, input, select, textarea):focus-visible {
   outline: 2px solid var(--gruen-dunkel);
