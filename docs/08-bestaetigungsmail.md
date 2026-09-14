@@ -69,7 +69,7 @@ Niemand bleibt vor der Tür stehen; die Mail sieht dann nur wieder nüchtern aus
 | `netlify/lib/dienst.mjs` | Admin-SDK, die Schranke, einheitliche Antworten, die 30-Sekunden-Sperre |
 | `src/zugang.ts` | Ruft die Schnittstellen auf, mit Rückfall auf Firebase |
 | `scripts/mailvorschau.mjs` | Vorschau im Browser und Testversand |
-| `scripts/mailtest.mjs` | 19 Prüfungen gegen die Emulator Suite (`npm run mailtest`) |
+| `scripts/mailtest.mjs` | 27 Prüfungen gegen die Emulator Suite (`npm run mailtest`) |
 
 ---
 
@@ -120,7 +120,7 @@ Scope: *All scopes*, Deploy contexts: *All deploy contexts*.
 | Variable | Wert | Pflicht |
 |---|---|---|
 | `RESEND_API_KEY` | der Schlüssel `re_…` aus 2.2 | ja |
-| `MAIL_ABSENDER` | `FMS Neufeld <besuchsmorgen@alae.app>` | ja |
+| `MAIL_ABSENDER` | `Besuchsmorgen FMS Neufeld <besuchsmorgen@alae.app>` — **mit Namen**, nicht nur die Adresse | ja |
 | `FIREBASE_SERVICE_ACCOUNT` | **der ganze Inhalt** der JSON-Datei aus 2.3 | ja |
 | `MAIL_ANTWORT` | Adresse für Antworten, z. B. deine eigene | nein |
 | `SEITEN_URL` | nur falls die Hauptadresse nicht `https://fms.alae.app` ist | nein |
@@ -129,6 +129,10 @@ Zum Einfügen von `FIREBASE_SERVICE_ACCOUNT`: JSON-Datei im Editor öffnen, **al
 markieren (inklusive der geschweiften Klammern) und ins Wertfeld einfügen. Zeilenumbrüche
 im Schlüssel sind kein Problem — die Funktion behandelt beide Schreibweisen.
 
+> **Name vor der Adresse:** Steht in `MAIL_ABSENDER` nur die Adresse, setzt die Funktion
+> selbst «Besuchsmorgen FMS Neufeld» davor (`mitAbsenderName` in `netlify/lib/mail.mjs`).
+> Ein Absender ohne Namen wirkt automatisiert — Gmail zeigt dann die nackte Adresse an.
+>
 > **Absenderadresse:** Auf `alae.app` läuft Cloudflare Email Routing (die drei MX-Einträge).
 > Antworten auf `besuchsmorgen@alae.app` landen nur dann irgendwo, wenn du in Cloudflare →
 > **Email** → *Routing Addresses* eine Weiterleitung dafür anlegst. Sonst besser eine
@@ -161,7 +165,7 @@ RESEND_API_KEY=re_… MAIL_ABSENDER='FMS Neufeld <besuchsmorgen@alae.app>' \
 Resend wird dabei abgefangen, es geht keine Post raus:
 
 ```bash
-npm run mailtest                # 19 Prüfungen, startet die Emulatoren selbst
+npm run mailtest                # 27 Prüfungen, startet die Emulatoren selbst
 ```
 
 Darin steckt auch die Schranke aus §1: eingeladen → Mail, nicht eingeladen → keine Mail,
@@ -270,8 +274,55 @@ und nicht an dieser App.
 | Log: `Resend hat abgelehnt (HTTP 403)` | Absenderdomain im Schlüssel nicht erlaubt | Schlüssel mit Domain `alae.app` neu erstellen |
 | Log: `Resend hat abgelehnt (HTTP 422)` | `MAIL_ABSENDER` passt nicht zur verifizierten Domain | Adresse auf `…@alae.app` ändern |
 | Mail kommt nur an die eigene Adresse | Resend läuft noch ohne verifizierte Domain | Resend → Domains → `alae.app` verifizieren |
-| Mail landet im Spam | DMARC steht auf `p=none`, Domain ist neu im Versand | einige Mails abwarten; später `p=quarantine` erwägen |
+| Mail landet im Spam oder unter «Werbung» | Ruf und Echtheitsnachweise des Absenders, Tracking, Aussehen der Mail | §4.3 |
 | Logo fehlt im Mail | Bild wird von `SEITEN_URL` geladen | `SEITEN_URL` prüfen; `https://fms.alae.app/fms-neufeld.png` muss öffentlich erreichbar sein |
+
+### 4.3 Mail landet im Spam oder unter «Werbung»
+
+Zwei verschiedene Dinge, dieselbe Suche. Ob eine Mail **Spam** ist, entscheidet Gmail vor
+allem nach Echtheit und Ruf des Absenders; ob sie unter **«Werbung»** einsortiert wird,
+nach ihrem Aussehen (Knopf, Logo, Tracking, Abmelde-Link). Beides lernt Gmail je Postfach
+dazu — was jemand einmal in den Posteingang zieht, bleibt dort.
+
+**Was die App selbst tut** — nichts einzustellen, aber gut zu wissen:
+
+- **Der Anmeldelink zeigt auf `fms.alae.app`**, nicht mehr auf
+  `fmsbesuchstag.firebaseapp.com`. Ein einziger Link, der auf eine andere Domain zeigt als
+  der Absender, ist für Spam-Filter ein Warnzeichen — und firebaseapp.com ist obendrein als
+  Hoster von Phishing-Seiten berüchtigt. Möglich ist das, weil der Link ohnehin in der App
+  eingelöst wird: Das SDK liest dafür nur `mode`, `oobCode` und `apiKey` aus der
+  Adresszeile, die Domain davor ist ihm egal (`eigenerAnmeldelink` in `netlify/lib/mail.mjs`).
+- **Der Absender trägt immer einen Namen** (siehe §2.4).
+- Jede Mail hat eine **reine Textfassung** neben dem HTML, **keinen Abmelde-Link** und
+  **keine Zählpixel** — Merkmale von Werbung, die in einer Anmeldemail nichts verloren haben.
+
+**Was ausserhalb des Repos zu prüfen ist**, in dieser Reihenfolge:
+
+| # | Wo | Was | Warum |
+|---|---|---|---|
+| 1 | Resend → **Domains** → `alae.app` | **Click Tracking** und **Open Tracking** ausschalten | Eingeschaltet schreibt Resend jeden Link auf eine Tracking-Domain um und hängt ein unsichtbares Bild an — zwei der stärksten Werbe-Signale, und der Link zeigt dann wieder auf eine fremde Domain. Dazu klicken Mail-Scanner (etwa bei Schul-Postfächern) solche Links vorab an und **verbrauchen den Einmal-Link**. |
+| 2 | Netlify → **Environment variables** | `MAIL_ABSENDER` = `Besuchsmorgen FMS Neufeld <besuchsmorgen@alae.app>`, danach neu deployen | Steht nur die Adresse drin, zeigt Gmail sie nackt an. Die Funktion ergänzt den Namen zwar selbst; sauberer ist er in der Variablen. |
+| 3 | Cloudflare → **DNS** (Seite 2 der Liste) | `_dmarc.alae.app` TXT muss vorhanden sein (`v=DMARC1; p=none;`, §2.1) | Gmail verlangt DMARC von Absendern mit Volumen und wertet fehlendes DMARC ab. Prüfen: `dig TXT _dmarc.alae.app +short` |
+| 4 | Cloudflare → **Email** → **DMARC Management** | einschalten | Gratis. Cloudflare trägt eine `rua=`-Adresse in den DMARC-Eintrag und zeigt danach, wer alles im Namen von `alae.app` verschickt und ob SPF und DKIM stimmen. |
+| 5 | wie 3 — nach ein, zwei Wochen ohne Befund in 4 | `p=none` → `p=quarantine` | Eine durchgesetzte Richtlinie zählt bei Gmail mehr als `p=none`. Sie gilt für **alle** Absender von alae.app, auch Photographic und die Firebase-Mails von `dt.alae.app` — darum erst die Berichte aus 4 abwarten. |
+| 6 | Cloudflare → **Email** → **Routing Addresses** | Weiterleitung für `besuchsmorgen@alae.app` anlegen — oder `MAIL_ANTWORT` setzen (§2.4) | Rückfragen sollen ankommen; ein Absender, dessen Adresse keine Post annimmt, wirkt unseriös. |
+| 7 | [postmaster.google.com](https://postmaster.google.com) | `alae.app` eintragen (ein TXT-Eintrag) | Zeigt Ruf der Domain und Spam-Quote aus Gmails Sicht — die einzige Stelle, an der man das sieht. |
+
+Der SPF-Eintrag auf `alae.app` selbst (`include:_spf.mx.cloudflare.net`) muss Resend
+**nicht** enthalten: Resend verschickt mit der Rücksendeadresse `…@send.alae.app`, und dort
+steht der eigene SPF-Eintrag (§2.1). Für DMARC genügt das — Unterdomain und Domain gelten
+als zusammengehörig.
+
+**Beim Empfänger** — bei vier, fünf Betreuungspersonen der wirksamste Hebel: die Mail einmal
+aus «Spam» beziehungsweise «Werbung» in den Posteingang holen («Kein Spam» / nach
+«Allgemein» ziehen) und `besuchsmorgen@alae.app` als Kontakt speichern. Gmail merkt sich
+das je Postfach; die weiteren Mails landen dann dort. Der Hinweis im Login («auch im
+Spam-Ordner nachsehen») bleibt darum stehen.
+
+**Was bleibt:** Bestätigungsmail und Passwort-Zurücksetzen zeigen weiterhin auf
+`fmsbesuchstag.firebaseapp.com` (§6). Und der Betreff «Anmelden — …» ist knapp; sollten die
+Mails trotz allem hängen bleiben, liest sich «Dein Anmeldelink — Besuchsmorgen FMS Neufeld»
+weniger nach Phishing.
 
 ---
 
@@ -296,9 +347,13 @@ zusammen.
 
 ## 6 · Was bewusst **nicht** umgestellt wurde
 
-- **Die Adresse hinter dem Link** zeigt weiterhin auf `fmsbesuchstag.firebaseapp.com`.
-  Eine eigene Adresse dafür verlangt, dass die App den Firebase-Aktionsablauf
-  (`/__/auth/action`) selbst bedient — deutlich mehr Aufwand als Nutzen für vier Konten.
+- **Bestätigungslink und Rücksetzlink** zeigen weiterhin auf
+  `fmsbesuchstag.firebaseapp.com`: Dort löst die Firebase-Seite den Code ein (Adresse
+  bestätigen, neues Passwort setzen). Eine eigene Adresse dafür verlangt, dass die App
+  diese beiden Abläufe selbst bedient (`applyActionCode`, `confirmPasswordReset` samt
+  Bildschirm für das neue Passwort) — deutlich mehr Aufwand als Nutzen für vier Konten.
+  **Der Anmeldelink** ist die Ausnahme: Er wird ohnehin in der App eingelöst und zeigt
+  darum direkt auf `fms.alae.app` (§4.3).
 - **Gäste bekommen weiterhin keine Mail.** Das ist Absicht: Die App erhebt bewusst keine
   Personendaten (siehe [01-fachkonzept §7](01-fachkonzept.md)).
 

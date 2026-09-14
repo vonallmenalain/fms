@@ -10,7 +10,9 @@
    ========================================================================= */
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { anmeldelinkMail, bestaetigungsMail, passwortMail, sendeMail } from '../netlify/lib/mail.mjs';
+import {
+  anmeldelinkMail, bestaetigungsMail, eigenerAnmeldelink, passwortMail, sendeMail,
+} from '../netlify/lib/mail.mjs';
 
 const empfaenger = process.argv[2] ?? null;
 
@@ -21,7 +23,8 @@ const beispielLink = (modus) =>
 
 const mails = [
   { name: 'Bestätigungsmail', ...bestaetigungsMail(beispielLink('verifyEmail')) },
-  { name: 'Anmeldelink', ...anmeldelinkMail(beispielLink('signIn')) },
+  // Wie im echten Mail: Der Anmeldelink zeigt auf fms.alae.app, nicht auf Firebase.
+  { name: 'Anmeldelink', ...anmeldelinkMail(eigenerAnmeldelink(beispielLink('signIn'))) },
   { name: 'Passwort zurücksetzen', ...passwortMail(beispielLink('resetPassword')) },
 ];
 

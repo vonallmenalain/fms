@@ -31,6 +31,19 @@ export function seitenUrl() {
   return (process.env.SEITEN_URL || process.env.URL || 'https://fms.alae.app').replace(/\/+$/, '');
 }
 
+/** Der Name vor der Adresse, falls MAIL_ABSENDER nur die Adresse enthält. */
+const ABSENDER_NAME = 'Besuchsmorgen FMS Neufeld';
+
+/**
+ * «besuchsmorgen@alae.app» → «Besuchsmorgen FMS Neufeld <besuchsmorgen@alae.app>».
+ *
+ * Ein Absender ohne Anzeigenamen wirkt automatisiert: Gmail zeigt dann die nackte
+ * Adresse an, und Spam-Filter werten es als kleines Warnzeichen. Steht in MAIL_ABSENDER
+ * schon ein Name (`Name <adresse>`), bleibt er unangetastet.
+ */
+export const mitAbsenderName = (von) =>
+  (von.includes('<') ? von : `${ABSENDER_NAME} <${von.trim()}>`);
+
 export async function sendeMail({ an, betreff, html, text }) {
   const schluessel = process.env.RESEND_API_KEY;
   const von = process.env.MAIL_ABSENDER;
@@ -46,7 +59,7 @@ export async function sendeMail({ an, betreff, html, text }) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: von,
+        from: mitAbsenderName(von),
         to: [an],
         subject: betreff,
         html,
@@ -195,11 +208,50 @@ export function bestaetigungsMail(link) {
   return { betreff, html, text };
 }
 
+/* ------------------------------------------------------ Anmeldelink-Ziel */
+
+/**
+ * Den Anmeldelink von Firebase auf die eigene Adresse umschreiben.
+ *
+ * Firebase erzeugt `https://fmsbesuchstag.firebaseapp.com/__/auth/action?mode=signIn
+ * &oobCode=…&apiKey=…&continueUrl=https://fms.alae.app/admin&lang=de`. Diese Seite tut
+ * bei einem Anmeldelink nichts weiter, als auf `continueUrl` weiterzuleiten und dabei
+ * `mode`, `oobCode`, `apiKey` und `lang` anzuhängen — eingelöst wird der Code erst in der
+ * App (`signInWithEmailLink` in src/zugang.ts, darum `handleCodeInApp: true`). Das SDK
+ * liest dafür nur diese Parameter aus der Adresszeile; die Domain davor ist ihm egal.
+ *
+ * Wir lassen den Umweg darum weg und verweisen direkt auf /admin mit denselben
+ * Parametern. Der Grund ist nicht Tempo, sondern Zustellbarkeit: Für Spam-Filter ist es
+ * ein Warnzeichen, wenn der einzige Link einer Mail auf eine andere Domain zeigt als der
+ * Absender — und firebaseapp.com ist obendrein ein beliebter Hoster von Phishing-Seiten.
+ * Mit dem Link auf fms.alae.app passen Absender (alae.app) und Ziel zusammen.
+ *
+ * Fehlt einer der drei Parameter (etwa, weil Firebase das Format ändert), bleibt es beim
+ * Originallink — lieber der Umweg als ein Link, der nicht funktioniert.
+ */
+export function eigenerAnmeldelink(firebaseLink) {
+  let quelle;
+  try { quelle = new URL(firebaseLink); } catch { return firebaseLink; }
+  const mode = quelle.searchParams.get('mode');
+  const oobCode = quelle.searchParams.get('oobCode');
+  const apiKey = quelle.searchParams.get('apiKey');
+  if (mode !== 'signIn' || !oobCode || !apiKey) return firebaseLink;
+
+  const ziel = new URL(`${seitenUrl()}/admin`);
+  ziel.searchParams.set('mode', mode);
+  ziel.searchParams.set('oobCode', oobCode);
+  ziel.searchParams.set('apiKey', apiKey);
+  const lang = quelle.searchParams.get('lang');
+  if (lang) ziel.searchParams.set('lang', lang);
+  return ziel.toString();
+}
+
 /**
  * Der Anmeldelink — der Weg in den Betreuungsbereich ohne Passwort.
  *
- * Wieder ist `link` der von Firebase erzeugte Einmal-Link (siehe
- * anmeldelink.mjs). Er wird in der App eingelöst, nicht auf einer Firebase-Seite.
+ * Wieder ist `link` der von Firebase erzeugte Einmal-Link (siehe anmeldelink.mjs) —
+ * umgeschrieben auf die eigene Adresse, siehe `eigenerAnmeldelink`. Er wird in der App
+ * eingelöst, nicht auf einer Firebase-Seite.
  */
 export function anmeldelinkMail(link) {
   const betreff = 'Anmelden — Besuchsmorgen FMS Neufeld';
