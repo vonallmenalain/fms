@@ -114,12 +114,27 @@ pruefe('fremde Adresse: keine Mail, aber unauffällige Antwort',
 
 await adminDb().collection('zugang').doc('eingeladen@example.ch')
   .set({ email: 'eingeladen@example.ch', name: 'Test', rolle: 'betreuung' });
+// MAIL_ABSENDER einmal ohne Namen — die Funktion muss ihn selbst davorsetzen, sonst zeigt
+// Gmail die nackte Adresse (siehe mitAbsenderName in lib/mail.mjs).
+process.env.MAIL_ABSENDER = 'besuchsmorgen@alae.app';
 letzteMail = null;
 r = await post(anmeldelink, { mail: '  Eingeladen@Example.CH ' });        // Schreibweise egal
 d = await r.json();
+process.env.MAIL_ABSENDER = 'FMS Neufeld <besuchsmorgen@alae.app>';
 pruefe('eingeladene Adresse: Mail geht raus',
   r.status === 200 && d.stand === 'erledigt' && letzteMail?.to?.[0] === 'eingeladen@example.ch');
 pruefe('enthält den Anmeldelink von Firebase', /mode=signIn/.test(html()) && /oobCode=/.test(html()));
+// Der Link zeigt auf die eigene Domain, nicht auf firebaseapp.com (bzw. im Test: nicht auf
+// den Emulator) — Absender und Ziel passen zusammen, siehe eigenerAnmeldelink.
+pruefe('Anmeldelink zeigt auf fms.alae.app statt auf Firebase',
+  (letzteMail?.text ?? '').includes('https://fms.alae.app/admin?mode=signIn&oobCode=')
+  && html().includes('href="https://fms.alae.app/admin?mode=signIn&amp;oobCode=')
+  && !/firebaseapp\.com|127\.0\.0\.1|localhost/.test(html() + letzteMail?.text),
+  letzteMail?.text?.split('\n').find((z) => z.startsWith('http')));
+pruefe('Anmeldelink bringt den apiKey mit — ohne ihn löst das SDK nichts ein',
+  /[?&]apiKey=[^&\s]+/.test(letzteMail?.text ?? ''));
+pruefe('Absender ohne Namen in MAIL_ABSENDER bekommt einen',
+  letzteMail?.from === 'Besuchsmorgen FMS Neufeld <besuchsmorgen@alae.app>', letzteMail?.from);
 
 letzteMail = null;
 r = await post(anmeldelink, { mail: 'eingeladen@example.ch' });

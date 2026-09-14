@@ -25,7 +25,7 @@ import {
   adminAuth, antwort, darfPostBekommen, EinrichtungsFehler, istAdministration, istMailAdresse,
   mailSchluessel, sperreLoesen, zuSchnell,
 } from '../lib/dienst.mjs';
-import { anmeldelinkMail, sendeMail, seitenUrl } from '../lib/mail.mjs';
+import { anmeldelinkMail, eigenerAnmeldelink, sendeMail, seitenUrl } from '../lib/mail.mjs';
 
 export default async function handler(anfrage) {
   if (anfrage.method !== 'POST') return antwort(405, { fehler: 'Nur POST' });
@@ -57,11 +57,13 @@ export default async function handler(anfrage) {
     }
 
     // handleCodeInApp: true — der Link muss in der App eingelöst werden
-    // (signInWithEmailLink in src/zugang.ts), nicht auf einer Firebase-Seite.
-    const link = await adminAuth().generateSignInWithEmailLink(adresse, {
+    // (signInWithEmailLink in src/zugang.ts), nicht auf einer Firebase-Seite. Darum
+    // zeigt er in der Mail auch direkt auf fms.alae.app statt auf firebaseapp.com
+    // (siehe eigenerAnmeldelink in lib/mail.mjs — Absender und Ziel passen so zusammen).
+    const link = eigenerAnmeldelink(await adminAuth().generateSignInWithEmailLink(adresse, {
       url: `${seitenUrl()}/admin`,
       handleCodeInApp: true,
-    });
+    }));
     const { betreff, html, text } = anmeldelinkMail(link);
     await sendeMail({ an: adresse, betreff, html, text });
     console.info('[anmeldelink] verschickt an', adresse);
