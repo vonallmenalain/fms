@@ -2,7 +2,7 @@
    Vorschau der verschickten Mails — und auf Wunsch ein echter Testversand.
    -------------------------------------------------------------------------
      npm run mailvorschau                  → schreibt mailvorschau.html
-     npm run mailvorschau -- du@example.ch → schickt alle drei Mails zusätzlich hin
+     npm run mailvorschau -- du@example.ch → schickt alle Mails zusätzlich hin
 
    Für den Versand braucht es RESEND_API_KEY und MAIL_ABSENDER in der Umgebung:
      RESEND_API_KEY=re_… MAIL_ABSENDER='FMS Neufeld <besuchsmorgen@alae.app>' \
@@ -11,7 +11,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import {
-  anmeldelinkMail, bestaetigungsMail, eigenerAnmeldelink, passwortMail, sendeMail,
+  bestaetigungsMail, einladungsLinks, einladungsMail, passwortMail, sendeMail,
 } from '../netlify/lib/mail.mjs';
 
 const empfaenger = process.argv[2] ?? null;
@@ -21,10 +21,19 @@ const beispielLink = (modus) =>
   `https://fmsbesuchstag.firebaseapp.com/__/auth/action?mode=${modus}`
   + '&oobCode=BEISPIEL-nur-zur-Ansicht&apiKey=BEISPIEL&lang=de';
 
+// Der Zugangscode der Einladung — echt sind es 32 Zeichen Zufall.
+const beispielCode = 'BEISPIEL-nur-zur-Ansicht';
+
 const mails = [
+  {
+    name: 'Einladung Betreuung (beide Knöpfe)',
+    ...einladungsMail({ name: 'Anna', rolle: 'betreuung', links: einladungsLinks({ rolle: 'betreuung' }, beispielCode) }),
+  },
+  {
+    name: 'Einladung Administration (nur Login erstellen)',
+    ...einladungsMail({ name: '', rolle: 'admin', links: einladungsLinks({ rolle: 'admin' }, beispielCode) }),
+  },
   { name: 'Bestätigungsmail', ...bestaetigungsMail(beispielLink('verifyEmail')) },
-  // Wie im echten Mail: Der Anmeldelink zeigt auf fms.alae.app, nicht auf Firebase.
-  { name: 'Anmeldelink', ...anmeldelinkMail(eigenerAnmeldelink(beispielLink('signIn'))) },
   { name: 'Passwort zurücksetzen', ...passwortMail(beispielLink('resetPassword')) },
 ];
 

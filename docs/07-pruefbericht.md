@@ -274,7 +274,7 @@ speicher liegen bleiben.
 | **1** | **Diesen Stand ausrollen.** Branch `claude/app-teacher-demo-prep-g0v6s0` nach `main` — Netlify baut, die GitHub-Action «Firebase» rollt die verschärften Rules aus. | Technik | 5 min |
 | **2** | **Anmeldung öffnen.** Actions → «Firebase» → `reset-und-oeffnen`. Setzt gleichzeitig alle Zähler auf 0, damit die Lehrperson eine leere App sieht. | Technik | 2 min |
 | **3** | **Zwei Geräte oder zwei Browser bereitlegen**, falls auch der Betreuungsbereich gezeigt wird — sonst schluckt der Login die eigene Gast-Anmeldung (§4). | — | — |
-| **4** | **Zugang für die Lehrperson**, falls sie selbst hineinschauen soll: Steuerung → Zugänge → Adresse, Rolle «Betreuung». Der Anmeldelink geht direkt raus. | Alain | 2 min |
+| **4** | **Zugang für die Lehrperson**, falls sie selbst hineinschauen soll: Steuerung → Zugänge → Adresse, Rolle «Betreuung». Die Einladung geht direkt raus. | Alain | 2 min |
 | **5** | **Das CI-Grün ansprechen.** `#B4BD00` in `src/index.css` ist noch ein gemessener Platzhalter. Am besten selbst erwähnen, bevor es jemand bemerkt — und gleich nach dem Original fragen. | Alain | — |
 | **6** | **Danach: Actions → «Firebase» → `reset`.** Löscht die Vorführ-Anmeldungen und schliesst die Anmeldung wieder. | Technik | 2 min |
 

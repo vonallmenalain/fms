@@ -134,31 +134,37 @@ Erster Zugang: **«Mit Google anmelden»** — die Adresse in `firestore.rules`
 (`bootstrapMail`) trägt sich beim ersten Anmelden selbst als Administration ein. Das ist
 die einzige Stelle, die dafür einen Deploy braucht.
 
-Alle weiteren: **Steuerung → Zugänge** → Adresse und Rolle eintragen. Auf Wunsch geht
-gleich ein Anmeldelink raus; die Person kann sich auch mit Google oder E-Mail und
-Passwort anmelden. Freigeschaltet wird sie beim ersten Anmelden automatisch, mit genau
-der Rolle aus der Einladung.
+Alle weiteren: **Steuerung → Zugänge** → Adresse und Rolle eintragen. Die Einladung geht
+per E-Mail raus, mit bis zu zwei Knöpfen:
 
-Wer noch kein Konto hat, erstellt sich im Login über **«Konto erstellen»** selbst eines —
-mit Passwort, per Anmeldelink oder mit Google. Zugang gibt das für sich allein nicht: Es
-funktionieren nur Adressen, die hier schon eine Rolle erhalten haben; alle anderen landen
-auf «Kein Zugang». Ein Konto mit Passwort muss zusätzlich seine Adresse bestätigen (die
-Mail kommt sofort) — die Datenbank verlangt das, damit niemand ein Konto auf eine fremde,
-eingeladene Adresse anlegen kann.
+- **«Jetzt anmelden»** (nur Betreuung): ein Link, der auf **allen Geräten** gilt — öffnen,
+  E-Mail-Adresse eintippen, drin. Auf dem zweiten Gerät denselben Link nochmals öffnen.
+- **«Login erstellen»**: einmal ein Passwort festlegen, danach überall mit E-Mail und
+  Passwort anmelden. Ohne Bestätigungsmail — der Link belegt bereits, wem die Adresse gehört.
 
-Wer sein Passwort vergessen hat, tippt im Login auf **«Passwort vergessen?»**.
+Welche Knöpfe die Person bekommt, steht bei den Haken «Anmeldung per Link» und «Login mit
+Passwort». Die **Administration** meldet sich mit Passwort oder Google an; für sie gibt es
+keinen Anmeldelink. Freigeschaltet wird jede Person automatisch, mit genau der Rolle aus
+der Einladung. Kommt das Mail nicht an: **«Links kopieren»** in der Liste und per Chat
+weitergeben; **«Code erneuern»** macht die bisherigen Links ungültig.
 
-**Bestätigungsmail, Anmeldelink und Passwort-Zurücksetzen verschickt die App selbst**:
-eigene Gestaltung mit FMS-Logo, Absender auf `alae.app`, Zustellung über Resend. Erzeugt
-und geprüft werden die Links weiterhin von Firebase — umgestellt sind nur Aussehen und
-Absender. Anmeldelink und Rücksetzlink bekommen dabei nur eingeladene oder bereits
-freigeschaltete Adressen, ohne dass die Antwort verrät, welcher Fall vorlag. Einrichtung,
-Vorschau und Fehlersuche: **[docs/08-bestaetigungsmail.md](docs/08-bestaetigungsmail.md)**.
+Wer die Einladung verloren hat, tippt im Login auf **«Einladung nochmals per E-Mail
+schicken»**; wer sein Passwort vergessen hat, auf **«Passwort vergessen?»**. Ein Konto lässt
+sich auch ohne Einladungsmail über **«Konto erstellen»** anlegen — dann mit
+Bestätigungsmail, weil sonst niemand belegt, wem die Adresse gehört. Zugang gibt das für
+sich allein nicht: Es funktionieren nur Adressen, die hier eine Rolle erhalten haben; alle
+anderen landen auf «Kein Zugang».
 
-> Damit der Anmeldelink eingelöst werden kann, muss in der Firebase-Konsole unter
-> Authentication → Sign-in method bei «E-Mail-Adresse/Passwort» auch **E-Mail-Link
-> (passwortloses Anmelden)** aktiviert sein, und die Domain unter Settings → Authorized
-> domains stehen. Ohne das melden Google und Passwort weiterhin normal an.
+**Alle Mails verschickt die App selbst**: eigene Gestaltung mit FMS-Logo, Absender auf
+`alae.app`, Zustellung über Resend. Die Einladung löst die App selbst ein (Zugangscode);
+Bestätigungs- und Rücksetzlink erzeugt und prüft weiterhin Firebase. Einladung und
+Rücksetzmail bekommen nur eingetragene Adressen, ohne dass die Antwort verrät, welcher
+Fall vorlag. Einrichtung, Vorschau und Fehlersuche:
+**[docs/08-bestaetigungsmail.md](docs/08-bestaetigungsmail.md)**.
+
+> In der Firebase-Konsole muss unter Authentication → Sign-in method
+> «E-Mail-Adresse/Passwort» aktiviert sein, und die Domain unter Settings → Authorized
+> domains stehen. «E-Mail-Link (passwortloses Anmelden)» braucht es nicht mehr.
 
 ## Getroffene Entscheide (19.08.2026)
 

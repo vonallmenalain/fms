@@ -37,8 +37,8 @@ Bewusst weggelassen — jede dieser Funktionen kostet Zeit und bringt am Event n
 | Rolle | Wer | Anzahl | Zugang |
 |---|---|---|---|
 | **Gast** | Besuchende Schüler:innen (oft in 2er-/3er-Gruppen) | ~120 | QR-Code → offene URL, anonym |
-| **Betreuung** | Lehrpersonen und FMS-Schüler:innen am Info-Stand (GN, 2. Etage) | 3–8 | E-Mail-Link, Passwort oder Google; Rolle `betreuung` |
-| **Administration** | Projektleitung Schule | 1–2 | gleicher Zugang, Rolle `admin` — zusätzlich Steuerung und Zugänge |
+| **Betreuung** | Lehrpersonen und FMS-Schüler:innen am Info-Stand (GN, 2. Etage) | 3–8 | Einladungslink (gilt auf allen Geräten), Passwort oder Google; Rolle `betreuung` |
+| **Administration** | Projektleitung Schule | 1–2 | Passwort oder Google (kein Link), Rolle `admin` — zusätzlich Steuerung und Zugänge |
 | **Technik** | Entwickler (du) | 1 | Firebase-Konsole, Netlify, GitHub |
 
 ## 4. Ablauf aus Sicht der Gäste
@@ -221,13 +221,14 @@ Zwei Dinge verhindern das:
   freigebbar. Das Protokoll hält die Übernahme als eigenen Vorgang fest.
 
 **7.7 Zugänge** (Steuerung → Zugänge, nur `admin`)
-Adresse eintragen, Rolle wählen, fertig — Firebase verschickt auf Wunsch gleich einen
-Anmeldelink. Die Person schaltet sich beim ersten Anmelden selbst frei, und zwar mit genau
-der Rolle aus der Einladung. Sie kann sich dazu im Login auch selbst ein Konto erstellen
-(«Konto erstellen» → Passwort festlegen, Anmeldelink oder Google). Zugang gibt das erst,
-wenn die Adresse hier eingetragen **und** bestätigt ist — ohne Eintrag landet sie auf
-«Kein Zugang». Wer die Rolle wechselt oder den Zugang verliert, merkt das
-beim nächsten Laden der Seite.
+Adresse eintragen, Rolle wählen, fertig — die Einladung geht per E-Mail raus, mit «Jetzt
+anmelden» (ein Link für alle Geräte, nur Betreuung) und «Login erstellen» (einmal ein
+Passwort festlegen). Die Person wird beim ersten Anmelden freigeschaltet, und zwar mit
+genau der Rolle aus der Einladung. Die Administration meldet sich mit Passwort oder Google
+an. Ein Konto lässt sich auch ohne Einladungsmail im Login erstellen («Konto erstellen» →
+Passwort festlegen und Adresse bestätigen, oder Google). Zugang gibt das erst, wenn die
+Adresse hier eingetragen ist — ohne Eintrag landet sie auf «Kein Zugang». Wer die Rolle
+wechselt oder den Zugang verliert, merkt das beim nächsten Laden der Seite.
 
 Die Trennung ist der Grund für die zwei Rollen: Betreuende sollen am Morgen Anmeldungen
 erfassen können, ohne dass ein Fehlgriff die Anmeldung für alle schliesst oder alle

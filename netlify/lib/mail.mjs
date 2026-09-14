@@ -100,24 +100,45 @@ const LINIE = '#DCDFD0';
 const SCHRIFT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
 /**
- * Dasselbe Kleingedruckte in allen drei Mails — auch beim Zurücksetzen. Wer die
- * Nachricht nicht angefordert hat, soll überall dieselbe Antwort finden.
+ * Dasselbe Kleingedruckte in Bestätigungs- und Rücksetzmail. Wer die Nachricht nicht
+ * angefordert hat, soll überall dieselbe Antwort finden.
  */
 const KLEINGEDRUCKTES = 'Der Link gilt einmalig. Nicht angefordert? Dann diese Nachricht einfach löschen.';
 
+/** Ein Knopf im Gerüst. `hinweis` steht klein darunter, `zweitrangig` zeichnet nur einen Rand. */
+function knopf({ text, link, hinweis, zweitrangig }) {
+  const flaeche = zweitrangig
+    ? `background:#FFFFFF;border:2px solid ${GRUEN};padding:15px 22px;`
+    : `background:${GRUEN};padding:17px 22px;`;
+  return `
+          <tr>
+            <td style="padding:24px 28px 0;">
+              <a href="${sicher(link)}"
+                 style="display:block;${flaeche}color:${SCHWARZ};font-family:${SCHRIFT};font-size:17px;font-weight:600;text-align:center;text-decoration:none;border-radius:4px;">
+                ${sicher(text)}
+              </a>
+            </td>
+          </tr>${hinweis ? `
+          <tr>
+            <td style="padding:8px 28px 0;font-family:${SCHRIFT};font-size:13px;line-height:1.5;color:${GRAU};">
+              ${sicher(hinweis)}
+            </td>
+          </tr>` : ''}`;
+}
+
 /**
- * Gerüst für alle Mails dieser App: Logo, Titel, Knopf, Kleingedrucktes.
+ * Gerüst für alle Mails dieser App: Logo, Titel, ein oder zwei Knöpfe, Kleingedrucktes.
  *
  * Bewusst ohne erklärenden Satz zwischen Titel und Knopf: Der Titel sagt bereits, worum
- * es geht, der Knopf sagt, was zu tun ist. `vorschau` ist die Zeile, die im Postfach
- * neben dem Betreff steht — sie ist im Mail selbst unsichtbar und bleibt darum bestehen.
+ * es geht, der Knopf sagt, was zu tun ist. Braucht ein Knopf doch eine Erklärung (die
+ * Einladung hat zwei), steht sie klein unter ihm. `vorschau` ist die Zeile, die im
+ * Postfach neben dem Betreff steht — sie ist im Mail selbst unsichtbar.
  *
  * Aufgebaut mit Tabellen und Attributen statt mit Flexbox — nicht aus Nostalgie,
  * sondern weil Outlook auf Windows bis heute mit der Word-Maschine rendert und
  * moderne Anordnung dort schlicht zusammenfällt.
  */
-function geruest({ titel, knopfText, link, klein, vorschau }) {
-  const url = sicher(link);
+function geruest({ titel, knoepfe, klein, vorschau }) {
   return `<!doctype html>
 <html lang="de-CH">
 <head>
@@ -147,14 +168,7 @@ function geruest({ titel, knopfText, link, klein, vorschau }) {
               ${sicher(titel)}
             </td>
           </tr>
-          <tr>
-            <td style="padding:24px 28px 0;">
-              <a href="${url}"
-                 style="display:block;background:${GRUEN};color:${SCHWARZ};font-family:${SCHRIFT};font-size:17px;font-weight:600;text-align:center;text-decoration:none;padding:17px 22px;border-radius:4px;">
-                ${sicher(knopfText)}
-              </a>
-            </td>
-          </tr>
+${knoepfe.map(knopf).join('')}
           <tr>
             <td style="padding:18px 28px 28px;font-family:${SCHRIFT};font-size:13px;line-height:1.5;color:${GRAU};">
               ${klein}
@@ -188,8 +202,7 @@ export function bestaetigungsMail(link) {
   const betreff = 'E-Mail bestätigen — Besuchsmorgen FMS Neufeld';
   const html = geruest({
     titel: 'E-Mail bestätigen',
-    knopfText: 'E-Mail bestätigen',
-    link,
+    knoepfe: [{ text: 'E-Mail bestätigen', link }],
     vorschau: KLEINGEDRUCKTES,
     // Bewusst ohne den ausgeschriebenen Link: Er ist über 200 Zeichen lang und würde das
     // kurze Mail optisch beherrschen. Wer HTML abgeschaltet hat, sieht die Textfassung
@@ -208,66 +221,69 @@ export function bestaetigungsMail(link) {
   return { betreff, html, text };
 }
 
-/* ------------------------------------------------------ Anmeldelink-Ziel */
+/* -------------------------------------------------------------- Einladung */
 
 /**
- * Den Anmeldelink von Firebase auf die eigene Adresse umschreiben.
+ * Die beiden Links der Einladung, je nachdem, was die Administration erlaubt hat.
  *
- * Firebase erzeugt `https://fmsbesuchstag.firebaseapp.com/__/auth/action?mode=signIn
- * &oobCode=…&apiKey=…&continueUrl=https://fms.alae.app/admin&lang=de`. Diese Seite tut
- * bei einem Anmeldelink nichts weiter, als auf `continueUrl` weiterzuleiten und dabei
- * `mode`, `oobCode`, `apiKey` und `lang` anzuhängen — eingelöst wird der Code erst in der
- * App (`signInWithEmailLink` in src/zugang.ts, darum `handleCodeInApp: true`). Das SDK
- * liest dafür nur diese Parameter aus der Adresszeile; die Domain davor ist ihm egal.
+ *   anmelden  «Jetzt anmelden»  — /admin?zugang=CODE           nur Rolle «betreuung»
+ *   login     «Login erstellen» — /admin?zugang=CODE&login=1   beide Rollen
  *
- * Wir lassen den Umweg darum weg und verweisen direkt auf /admin mit denselben
- * Parametern. Der Grund ist nicht Tempo, sondern Zustellbarkeit: Für Spam-Filter ist es
- * ein Warnzeichen, wenn der einzige Link einer Mail auf eine andere Domain zeigt als der
- * Absender — und firebaseapp.com ist obendrein ein beliebter Hoster von Phishing-Seiten.
- * Mit dem Link auf fms.alae.app passen Absender (alae.app) und Ziel zusammen.
- *
- * Fehlt einer der drei Parameter (etwa, weil Firebase das Format ändert), bleibt es beim
- * Originallink — lieber der Umweg als ein Link, der nicht funktioniert.
+ * Beide zeigen auf fms.alae.app, nicht auf eine Firebase-Seite: Der Code wird in der App
+ * eingelöst (src/zugang.ts → /api/zugang-anmelden bzw. /api/login-erstellen). Für
+ * Spam-Filter zählt das mit — Absender (alae.app) und Ziel passen zusammen.
  */
-export function eigenerAnmeldelink(firebaseLink) {
-  let quelle;
-  try { quelle = new URL(firebaseLink); } catch { return firebaseLink; }
-  const mode = quelle.searchParams.get('mode');
-  const oobCode = quelle.searchParams.get('oobCode');
-  const apiKey = quelle.searchParams.get('apiKey');
-  if (mode !== 'signIn' || !oobCode || !apiKey) return firebaseLink;
-
-  const ziel = new URL(`${seitenUrl()}/admin`);
-  ziel.searchParams.set('mode', mode);
-  ziel.searchParams.set('oobCode', oobCode);
-  ziel.searchParams.set('apiKey', apiKey);
-  const lang = quelle.searchParams.get('lang');
-  if (lang) ziel.searchParams.set('lang', lang);
-  return ziel.toString();
+export function einladungsLinks({ rolle, link, passwort }, code) {
+  const basis = `${seitenUrl()}/admin?zugang=${encodeURIComponent(code)}`;
+  return {
+    ...(rolle !== 'admin' && link !== false ? { anmelden: basis } : {}),
+    ...(passwort !== false ? { login: `${basis}&login=1` } : {}),
+  };
 }
 
+const EINLADUNG_KLEIN = 'Der Link ist persönlich und gehört zu deiner Adresse. Nicht angefordert? '
+  + 'Dann diese Nachricht einfach löschen.';
+
+const HINWEIS_ANMELDEN = 'Gilt auf allen deinen Geräten: Link öffnen, E-Mail-Adresse eintippen, fertig.';
+const HINWEIS_LOGIN = 'Einmal ein Passwort festlegen — danach meldest du dich überall mit E-Mail und Passwort an.';
+const HINWEIS_ADMIN = 'Als Administration meldest du dich mit Passwort an — oder mit Google, mit derselben Adresse.';
+
 /**
- * Der Anmeldelink — der Weg in den Betreuungsbereich ohne Passwort.
+ * Die Einladungsmail — ein oder zwei Knöpfe, je nach Rolle und Einstellung.
  *
- * Wieder ist `link` der von Firebase erzeugte Einmal-Link (siehe anmeldelink.mjs) —
- * umgeschrieben auf die eigene Adresse, siehe `eigenerAnmeldelink`. Er wird in der App
- * eingelöst, nicht auf einer Firebase-Seite.
+ * Betreuung: «Jetzt anmelden» (ein Link für alle Geräte) und «Login erstellen» (einmal ein
+ * Passwort setzen). Administration: nur «Login erstellen» — ihr Zugang soll nicht als
+ * Dauerschlüssel in einem Postfach liegen. Welche Knöpfe erscheinen, entscheidet
+ * `einladungsLinks`; hier wird nur gezeichnet, was da ist.
  */
-export function anmeldelinkMail(link) {
-  const betreff = 'Anmelden — Besuchsmorgen FMS Neufeld';
+export function einladungsMail({ name, rolle, links }) {
+  const admin = rolle === 'admin';
+  const titel = admin ? 'Dein Zugang zur Administration' : 'Dein Zugang zur Betreuung';
+  const betreff = 'Dein Zugang — Besuchsmorgen FMS Neufeld';
+
+  const knoepfe = [];
+  if (links.anmelden) knoepfe.push({ text: 'Jetzt anmelden', link: links.anmelden, hinweis: HINWEIS_ANMELDEN });
+  if (links.login) {
+    knoepfe.push({
+      text: 'Login erstellen', link: links.login,
+      hinweis: admin ? HINWEIS_ADMIN : HINWEIS_LOGIN,
+      zweitrangig: Boolean(links.anmelden),
+    });
+  }
+
   const html = geruest({
-    titel: 'Anmelden',
-    knopfText: 'Jetzt anmelden',
-    link,
-    vorschau: KLEINGEDRUCKTES,
-    klein: KLEINGEDRUCKTES,
+    titel,
+    knoepfe,
+    vorschau: `${name ? `${name}, du` : 'Du'} bist für den Besuchsmorgen eingetragen.`,
+    klein: EINLADUNG_KLEIN,
   });
+
   const text = [
-    'Anmelden',
+    titel,
     '',
-    link,
-    '',
-    KLEINGEDRUCKTES,
+    ...(links.anmelden ? [`Jetzt anmelden — ${HINWEIS_ANMELDEN}`, links.anmelden, ''] : []),
+    ...(links.login ? [`Login erstellen — ${admin ? HINWEIS_ADMIN : HINWEIS_LOGIN}`, links.login, ''] : []),
+    EINLADUNG_KLEIN,
     '',
     'Besuchsmorgen FMS Neufeld',
   ].join('\n');
@@ -282,8 +298,7 @@ export function passwortMail(link) {
   const betreff = 'Passwort zurücksetzen — Besuchsmorgen FMS Neufeld';
   const html = geruest({
     titel: 'Passwort zurücksetzen',
-    knopfText: 'Neues Passwort setzen',
-    link,
+    knoepfe: [{ text: 'Neues Passwort setzen', link }],
     vorschau: KLEINGEDRUCKTES,
     klein: KLEINGEDRUCKTES,
   });
