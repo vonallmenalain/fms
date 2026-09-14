@@ -1,6 +1,6 @@
 import {
-  createUserWithEmailAndPassword, isSignInWithEmailLink, sendEmailVerification,
-  sendPasswordResetEmail, sendSignInLinkToEmail, signInWithEmailLink, type User,
+  createUserWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail,
+  signInWithCustomToken, signInWithEmailAndPassword, type User,
 } from 'firebase/auth';
 import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -28,9 +28,29 @@ export interface Zugang {
   email: string;
   name: string;
   rolle: Rolle;
+  /** «Jetzt anmelden» im Mail — ein Link für alle Geräte. Nur für `betreuung` wirksam. */
+  link?: boolean;
+  /** «Login erstellen» im Mail — einmal ein Passwort festlegen. */
+  passwort?: boolean;
   erstelltAm?: string;
   erstelltVon?: string | null;
 }
+
+/**
+ * Wie sich eine eingeladene Person anmelden darf. Beides steht in der Einladung und
+ * bestimmt, welche Knöpfe die Einladungsmail bekommt (einladungsLinks in
+ * netlify/lib/mail.mjs) — und was die Zugangsfunktionen auf dem Server zulassen.
+ *
+ * `link` gibt es nur für die Betreuung: Der Link gilt, solange die Einladung besteht, auf
+ * jedem Gerät. Für die Administration wäre das ein Dauerschlüssel im Postfach — sie
+ * meldet sich mit Passwort oder Google an.
+ */
+export interface Anmeldewege {
+  link: boolean;
+  passwort: boolean;
+}
+
+export const STANDARD_WEGE = (rolle: Rolle): Anmeldewege => ({ link: rolle === 'betreuung', passwort: true });
 
 /** Freigeschaltetes Konto, angelegt beim ersten Anmelden. */
 export interface Konto {
@@ -82,18 +102,30 @@ export async function zugangKlaeren(u: User): Promise<Rolle | null> {
   }
 }
 
-/** Einladen oder Rolle ändern. Wirkt beim nächsten Anmelden der Person. */
+/** Einladen. Wirkt beim nächsten Anmelden der Person. */
 export async function zugangSetzen(
   mail: string, name: string, rolle: Rolle, von: string | null,
+  wege: Anmeldewege = STANDARD_WEGE(rolle),
 ): Promise<void> {
   const schluessel = mailSchluessel(mail);
   await setDoc(doc(db, 'zugang', schluessel), {
     email: schluessel,
     name: name.trim() || schluessel,
     rolle,
+    link: rolle === 'betreuung' && wege.link,
+    passwort: wege.passwort,
     erstelltAm: new Date().toISOString(),
     erstelltVon: von,
   });
+}
+
+/** Rolle oder Anmeldewege einer Einladung ändern. Wer Administration wird, verliert den Link. */
+export async function zugangAendern(
+  mail: string, felder: Partial<Pick<Zugang, 'rolle' | 'link' | 'passwort' | 'name'>>,
+): Promise<void> {
+  const neu = { ...felder };
+  if (neu.rolle === 'admin') neu.link = false;
+  await updateDoc(doc(db, 'zugang', mailSchluessel(mail)), neu);
 }
 
 /** Rolle einer bereits freigeschalteten Person nachziehen. */
@@ -255,60 +287,135 @@ export async function bestaetigungPruefen(): Promise<boolean> {
   return true;
 }
 
-/* ------------------------------------------------- Anmeldung per E-Mail-Link */
-
-const MAIL_MERKER = 'fms-anmeldemail';
+/* ------------------------------------------------- Einladung und Zugangscode */
 
 /**
- * Anmeldelink verschicken — wie die Bestätigungsmail zuerst über die eigene
- * Schnittstelle (`netlify/functions/anmeldelink.mjs`), sonst über Firebase.
+ * Der Zugangscode aus der Einladungsmail steht im Link: `/admin?zugang=CODE` für «Jetzt
+ * anmelden», dazu `&login=1` für «Login erstellen». Beides wird hier in der App
+ * eingelöst — über die Netlify-Funktionen, die den Code prüfen (netlify/lib/dienst.mjs);
+ * der Browser kennt ihn nur aus dem Link.
  *
- * Ein Unterschied zur Bestätigungsmail: Unsere Schnittstelle schickt den Link nur an
- * Adressen, die eingeladen oder bereits freigeschaltet sind — sonst wäre sie ein offenes
- * Tor, um von unserer Domain aus beliebige Leute anzuschreiben. Sie sagt bewusst nicht,
- * welcher Fall vorlag, damit sich nicht durchprobieren lässt, wer Zugang hat. Für die
- * Person am Bildschirm ändert das nichts: Ein Link an eine nicht eingeladene Adresse
- * führte ohnehin nur auf «Kein Zugang».
- *
- * Voraussetzung in der Firebase-Konsole (für beide Wege): Authentication → Sign-in method
- * → «E-Mail-Adresse/Passwort» mit **E-Mail-Link (passwortloses Anmelden)** aktiviert, und
- * die Domain unter Authentication → Settings → Authorized domains eingetragen.
+ * Warum kein Einmal-Link von Firebase mehr: Der galt genau einmal und nur in dem Browser,
+ * in dem er geöffnet wurde. Wer ihn im Mailprogramm antippte, war dort angemeldet — und
+ * im eigentlichen Browser nicht; beim zweiten Versuch war der Link verbraucht. Der
+ * Zugangscode gilt, solange die Einladung besteht, auf jedem Gerät: Link öffnen, Adresse
+ * eintippen, fertig.
  */
-export async function anmeldelinkSenden(
-  mail: string, aufDiesemGeraet: boolean, alsAdministration = false,
-): Promise<MailErgebnis> {
-  const adresse = mailSchluessel(mail);
-  if (aufDiesemGeraet) window.localStorage.setItem(MAIL_MERKER, adresse);
-
-  // Beim Einladen weiss die Administration ohnehin, wen sie eingetragen hat — ihr
-  // gegenüber antwortet der Server offen, ob die Mail wirklich rausging. Ohne diese
-  // Auskunft ist ein ausbleibendes Mail nicht von einem stillen «nicht eingeladen»
-  // zu unterscheiden, und man sucht am falschen Ende.
-  const idToken = alsAdministration ? await auth.currentUser?.getIdToken() : undefined;
-
-  const eigen = await mailSchnittstelle('/api/anmeldelink', { mail: adresse, idToken },
-    ['erledigt', 'gesendet', 'nicht-eingeladen', 'gesperrt']);
-  if (eigen) return { weg: 'eigen', ...eigen };
-
-  await sendSignInLinkToEmail(auth, adresse, {
-    url: `${window.location.origin}/admin`,
-    handleCodeInApp: true,
-  });
-  return { weg: 'firebase' };
+export interface Zugangslink {
+  code: string;
+  /** `&login=1`: nicht anmelden, sondern ein Passwort festlegen. */
+  login: boolean;
 }
 
-/** Wurde diese Seite über einen Anmeldelink geöffnet? */
-export const linkAnmeldung = (): boolean => isSignInWithEmailLink(auth, window.location.href);
+export function zugangslink(): Zugangslink | null {
+  const p = new URLSearchParams(window.location.search);
+  const code = p.get('zugang');
+  return code ? { code, login: p.get('login') === '1' } : null;
+}
 
-/** Auf dem Gerät, das den Link angefordert hat, kennen wir die Adresse bereits. */
-export const gemerkteMail = (): string => window.localStorage.getItem(MAIL_MERKER) ?? '';
+/** Ein Anmeldelink aus der Zeit vor dem Zugangscode — der Einmal-Link von Firebase. */
+export const alterAnmeldelink = (): boolean => {
+  const p = new URLSearchParams(window.location.search);
+  return p.get('mode') === 'signIn' && p.has('oobCode');
+};
 
-export async function mitLinkAnmelden(mail: string): Promise<void> {
-  await signInWithEmailLink(auth, mailSchluessel(mail), window.location.href);
-  window.localStorage.removeItem(MAIL_MERKER);
-  // Den Einmal-Link aus der Adresszeile putzen: Ein Neuladen soll ihn nicht nochmals
-  // einlösen (er ist dann verbraucht und ergäbe eine verwirrende Fehlermeldung).
-  window.history.replaceState({}, '', '/admin');
+/**
+ * Den Link aus der Adresszeile putzen, sobald er eingelöst ist: Ein Neuladen soll nicht
+ * nochmals den Anmeldebildschirm für den Link zeigen.
+ */
+const adresszeilePutzen = () => window.history.replaceState({}, '', '/admin');
+
+/**
+ * Was die Zugangs-Schnittstellen ablehnen — `code` passt in anmeldeFehlerText wie ein
+ * Firebase-Code (`zugang/passt-nicht`, `zugang/nur-betreuung`, `zugang/gesperrt` …).
+ */
+export class ZugangFehler extends Error {
+  readonly code: string;
+
+  constructor(grund: string, nachricht: string) {
+    super(nachricht);
+    this.name = 'ZugangFehler';
+    this.code = `zugang/${grund}`;
+  }
+}
+
+async function zugangsAufruf<T>(pfad: string, rumpf: object): Promise<T> {
+  let antwort: Response;
+  try {
+    antwort = await fetch(pfad, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rumpf),
+    });
+  } catch {
+    throw new ZugangFehler('netz', 'Keine Verbindung');
+  }
+  const text = await antwort.text().catch(() => '');
+  let daten: { fehler?: string; grund?: string } | null = null;
+  // Ohne Funktionen (npm run dev) antwortet der Entwicklungsserver mit der Startseite —
+  // Status 200, aber HTML. Erst gültiges JSON beweist, dass die Funktion geantwortet hat.
+  try { daten = JSON.parse(text); } catch { daten = null; }
+  if (!antwort.ok || !daten || typeof daten !== 'object') {
+    console.warn(`[zugang] ${pfad} antwortete HTTP ${antwort.status}: ${text.slice(0, 200)}`);
+    const grund = daten?.grund ?? (!daten || antwort.status === 404 ? 'keine-funktion' : 'server');
+    throw new ZugangFehler(grund, daten?.fehler ?? 'Unerwartete Antwort der Schnittstelle');
+  }
+  return daten as T;
+}
+
+/** «Jetzt anmelden»: Code und Adresse → Anmelde-Token von Firebase → angemeldet. */
+export async function mitZugangscodeAnmelden(code: string, mail: string): Promise<void> {
+  const { token } = await zugangsAufruf<{ token: string }>('/api/zugang-anmelden', {
+    code, mail: mailSchluessel(mail),
+  });
+  await signInWithCustomToken(auth, token);
+  adresszeilePutzen();
+}
+
+/**
+ * «Login erstellen»: Code, Adresse und neues Passwort → Konto mit Passwort → angemeldet.
+ * Ohne Bestätigungsmail: Der Code kam per Mail an genau diese Adresse, das genügt als
+ * Nachweis — der Server setzt die Adresse als bestätigt.
+ */
+export async function loginErstellen(code: string, mail: string, passwort: string): Promise<void> {
+  const adresse = mailSchluessel(mail);
+  await zugangsAufruf('/api/login-erstellen', { code, mail: adresse, passwort });
+  await signInWithEmailAndPassword(auth, adresse, passwort);
+  adresszeilePutzen();
+}
+
+export interface EinladungsLinks {
+  anmelden?: string;
+  login?: string;
+}
+
+/**
+ * Was aus der Einladung geworden ist. `stand` und `links` sind nur für die Administration
+ * gefüllt (`gesendet`, `links`, `nicht-eingeladen`, `gesperrt`, `nichts-erlaubt`); alle
+ * anderen bekommen `erledigt`, damit sich nicht durchprobieren lässt, wer eingeladen ist.
+ */
+export interface EinladungsErgebnis {
+  stand: string;
+  links?: EinladungsLinks;
+}
+
+/**
+ * Einladungsmail verschicken — oder nur die Links holen (`senden: false`), etwa um sie
+ * per Chat weiterzugeben. `erneuern` erzeugt einen neuen Zugangscode; die alten Links
+ * sind damit tot. Beides nur als Administration (mit ID-Token); ohne Ausweis wird
+ * verschickt, und die Antwort bleibt neutral (siehe netlify/functions/einladung.mjs).
+ */
+export async function einladungSenden(
+  mail: string,
+  optionen: { alsAdministration?: boolean; senden?: boolean; erneuern?: boolean } = {},
+): Promise<EinladungsErgebnis> {
+  const idToken = optionen.alsAdministration ? await auth.currentUser?.getIdToken() : undefined;
+  return zugangsAufruf<EinladungsErgebnis>('/api/einladung', {
+    mail: mailSchluessel(mail),
+    idToken,
+    senden: optionen.senden ?? true,
+    erneuern: optionen.erneuern ?? false,
+  });
 }
 
 /* ------------------------------------------------ Passwort zurücksetzen */

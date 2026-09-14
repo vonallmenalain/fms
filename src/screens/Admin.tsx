@@ -24,11 +24,11 @@ import { AusgebuchtFehler } from '../wiederholung';
 import { Kopf, Meldung } from '../ui/Bausteine';
 import { Uebersicht } from './Uebersicht';
 import {
-  ROLLEN_TEXT, anmeldelinkSenden, bestaetigungPruefen, bestaetigungSenden, gemerkteMail,
-  kontoEntfernen, kontoErstellen, kontoRolleSetzen, linkAnmeldung, mailSchluessel,
-  mitLinkAnmelden, passwortZuruecksetzen, zugangEntfernen, zugangKlaeren, zugangSetzen,
-  type MailErgebnis,
-  type Konto, type Rolle, type Zugang,
+  ROLLEN_TEXT, STANDARD_WEGE, alterAnmeldelink, bestaetigungPruefen, bestaetigungSenden,
+  einladungSenden, kontoEntfernen, kontoErstellen, kontoRolleSetzen, loginErstellen,
+  mailSchluessel, mitZugangscodeAnmelden, passwortZuruecksetzen, zugangAendern,
+  zugangEntfernen, zugangKlaeren, zugangSetzen, zugangslink,
+  type Anmeldewege, type EinladungsErgebnis, type Konto, type Rolle, type Zugang,
 } from '../zugang';
 
 type Reiter = 'uebersicht' | 'erfassen' | 'steuerung';
@@ -205,8 +205,59 @@ function anmeldeFehlerText(code: string): { text: string; hinweis?: string } {
     case 'auth/email-already-in-use':
       return {
         text: 'Für diese Adresse gibt es bereits ein Konto.',
-        hinweis: 'Bitte oben mit dem bestehenden Passwort anmelden — oder einen '
-          + 'Anmeldelink per E-Mail schicken lassen.',
+        hinweis: 'Bitte mit dem bestehenden Passwort anmelden — oder über «Login erstellen» '
+          + 'in der Einladungs-E-Mail ein neues festlegen.',
+      };
+    case 'auth/invalid-action-code':
+    case 'auth/expired-action-code':
+      return {
+        text: 'Dieser Link wurde schon verwendet oder ist abgelaufen.',
+        hinweis: 'Bitte einen neuen anfordern.',
+      };
+    // Die Zugangs-Schnittstellen (src/zugang.ts → netlify/functions/): Was sie ablehnen,
+    // kommt mit einem Grund, und der Bildschirm sagt, was zu tun ist.
+    case 'zugang/passt-nicht':
+      return {
+        text: 'Link und E-Mail-Adresse passen nicht zusammen.',
+        hinweis: 'Bitte genau die Adresse eintippen, an die die Einladung ging. Hilft das '
+          + 'nicht: die Einladung nochmals schicken lassen — der Link im neuen E-Mail gilt.',
+      };
+    case 'zugang/gesperrt':
+      return { text: 'Zu viele Versuche. Bitte zehn Minuten warten und nochmals versuchen.' };
+    case 'zugang/nur-betreuung':
+      return {
+        text: 'Für die Administration ist die Anmeldung per Link nicht vorgesehen.',
+        hinweis: 'Bitte im E-Mail «Login erstellen» verwenden — oder mit Google anmelden.',
+      };
+    case 'zugang/link-aus':
+      return {
+        text: 'Für diesen Zugang ist die Anmeldung per Link nicht freigegeben.',
+        hinweis: 'Bitte im E-Mail «Login erstellen» verwenden — oder die Administration fragen.',
+      };
+    case 'zugang/passwort-aus':
+      return {
+        text: 'Für diesen Zugang ist kein Login mit Passwort vorgesehen.',
+        hinweis: 'Bitte im E-Mail «Jetzt anmelden» verwenden — oder die Administration fragen.',
+      };
+    case 'zugang/passwort':
+      return { text: 'Das Passwort ist zu kurz — bitte mindestens 6 Zeichen wählen.' };
+    case 'zugang/ungleich':
+      return { text: 'Die beiden Passwörter stimmen nicht überein.' };
+    case 'zugang/adresse':
+      return { text: 'Diese E-Mail-Adresse sieht nicht richtig aus.' };
+    case 'zugang/netz':
+      return { text: 'Keine Verbindung. Bitte Netz prüfen und nochmals versuchen.' };
+    case 'zugang/keine-funktion':
+      return {
+        text: 'Die Anmeldung ist unter dieser Adresse nicht erreichbar.',
+        hinweis: 'Läuft hier der Entwicklungsserver (npm run dev) statt netlify dev, oder '
+          + 'fehlt der /api/*-Umweg in netlify.toml?',
+      };
+    case 'zugang/server':
+      return {
+        text: 'Das hat auf dem Server nicht geklappt.',
+        hinweis: 'Bitte nochmals versuchen. Bleibt es dabei, steht der Grund in Netlify → '
+          + 'Logs → Functions.',
       };
     case 'auth/weak-password':
     case 'auth/password-does-not-meet-requirements':
@@ -248,14 +299,18 @@ type AnmeldeModus = 'anmelden' | 'konto';
  */
 function Anmelden({ onRaus }: { onRaus: () => void }) {
   const [modus, setModus] = useState<AnmeldeModus>('anmelden');
-  const [mail, setMail] = useState(() => (linkAnmeldung() ? gemerkteMail() : ''));
+  const [mail, setMail] = useState('');
   const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
   const [fehler, setFehler] = useState<{ text: string; hinweis?: string } | null>(null);
   const [laeuft, setLaeuft] = useState(false);
-  const [linkGesendet, setLinkGesendet] = useState(false);
+  const [einladungGesendet, setEinladungGesendet] = useState(false);
   const [pwGesendet, setPwGesendet] = useState(false);
-  // Über einen Anmeldelink hereingekommen? Dann zählt nur noch, ihn einzulösen.
-  const [ueberLink] = useState(linkAnmeldung);
+  // Über einen Link aus der Einladungsmail hereingekommen? Dann zählt nur noch, ihn
+  // einzulösen — anmelden oder ein Passwort festlegen, je nach Knopf im Mail.
+  const [link] = useState(zugangslink);
+  // Ein Einmal-Link von Firebase aus einer Einladung vor dieser Umstellung.
+  const [alterLink] = useState(alterAnmeldelink);
 
   const melden = async (vorgang: () => Promise<unknown>) => {
     setLaeuft(true); setFehler(null);
@@ -271,7 +326,7 @@ function Anmelden({ onRaus }: { onRaus: () => void }) {
   // Beim Wechsel bleibt nur die Adresse stehen — eine Fehlermeldung oder ein «Link
   // verschickt» aus der anderen Ansicht gehörte sonst plötzlich zu etwas anderem.
   const wechsle = (m: AnmeldeModus) => {
-    setModus(m); setFehler(null); setLinkGesendet(false); setPwGesendet(false);
+    setModus(m); setFehler(null); setEinladungGesendet(false); setPwGesendet(false);
   };
 
   const fehlerKasten = fehler && (
@@ -292,24 +347,65 @@ function Anmelden({ onRaus }: { onRaus: () => void }) {
     <button className="knopf knopf--still" onClick={onRaus}>Zurück zur Startseite</button>
   );
 
-  // Die Adresse steht nur auf dem Gerät bereit, das den Link angefordert hat. Kommt der
-  // Link aus einer Einladung, muss sie hier nochmals eingetippt werden — so verlangt es
-  // Firebase, damit ein abgefangener Link allein nicht genügt.
-  if (ueberLink) {
+  // Einladung nochmals anfordern: Der Server verschickt nur an eingetragene Adressen und
+  // sagt bewusst nicht, welcher Fall vorlag (siehe einladungSenden).
+  const einladungKnopf = einladungGesendet ? (
+    <div className="hinweis">
+      <b>Bitte das Postfach prüfen.</b> Ist {mail} für den Betreuungsbereich eingetragen, liegt
+      die Einladung dort (auch im Spam-Ordner nachsehen) — mit den Links zum Anmelden.
+    </div>
+  ) : (
+    <button className="knopf knopf--still" disabled={laeuft || !mail}
+      onClick={() => melden(() => einladungSenden(mail).then(() => setEinladungGesendet(true)))}>
+      Einladung nochmals per E-Mail schicken
+    </button>
+  );
+
+  // Der Link aus der Einladungsmail. Die Adresse muss hier eingetippt werden: Der Link
+  // allein genügt nicht, und so gibt es auch kein Vertun, an wen die Einladung ging.
+  if (link) {
+    const einloesen = () => {
+      if (link.login && pw !== pw2) throw Object.assign(new Error('ungleich'), { code: 'zugang/ungleich' });
+      return link.login ? loginErstellen(link.code, mail, pw) : mitZugangscodeAnmelden(link.code, mail);
+    };
     return (
       <div className="seite">
         <Kopf />
-        <h1>Betreuung</h1>
-        <p className="lauftext">Bitte zur Bestätigung die eingeladene E-Mail-Adresse eingeben.</p>
-        <form className="stapel" onSubmit={(e) => { e.preventDefault(); melden(() => mitLinkAnmelden(mail)); }}>
+        <h1>{link.login ? 'Login erstellen' : 'Betreuung'}</h1>
+        <p className="lauftext">
+          {link.login
+            ? 'Einmal ein Passwort festlegen — danach meldest du dich überall mit E-Mail und Passwort an.'
+            : 'Bitte zur Bestätigung die E-Mail-Adresse eingeben, an die die Einladung ging.'}
+        </p>
+        <form className="stapel" onSubmit={(e) => { e.preventDefault(); melden(async () => einloesen()); }}>
           <div className="feld">
             <label htmlFor="linkmail">E-Mail</label>
             <input id="linkmail" type="email" autoComplete="username" value={mail}
               onChange={(e) => setMail(e.target.value)} required autoFocus />
           </div>
+          {link.login && (
+            <>
+              <div className="feld">
+                <label htmlFor="link-pw">Passwort festlegen</label>
+                <input id="link-pw" type="password" autoComplete="new-password" minLength={6}
+                  value={pw} onChange={(e) => setPw(e.target.value)} required />
+                <span className="mini">Mindestens 6 Zeichen.</span>
+              </div>
+              <div className="feld">
+                <label htmlFor="link-pw2">Passwort wiederholen</label>
+                <input id="link-pw2" type="password" autoComplete="new-password" minLength={6}
+                  value={pw2} onChange={(e) => setPw2(e.target.value)} required />
+              </div>
+            </>
+          )}
           {fehlerKasten}
-          <button className="knopf knopf--haupt knopf--breit" disabled={laeuft}>Anmelden</button>
+          <button className="knopf knopf--haupt knopf--breit" disabled={laeuft}>
+            {link.login ? 'Login erstellen' : 'Anmelden'}
+          </button>
         </form>
+        {!link.login && (
+          <p className="mini">Der Link gilt auf allen deinen Geräten — dort einfach nochmals öffnen.</p>
+        )}
         {zurStartseite}
       </div>
     );
@@ -344,22 +440,13 @@ function Anmelden({ onRaus }: { onRaus: () => void }) {
 
         <hr className="trenner" />
 
-        <p className="mini">Oder ohne Passwort:</p>
-
-        {/* Ohne Passwort: ein Einmal-Link an die Adresse — verschickt wird er nur an
-            eingeladene oder bereits freigeschaltete Adressen, und die Meldung sagt
-            bewusst nicht, welcher Fall vorlag (siehe anmeldelinkSenden). */}
-        {linkGesendet ? (
-          <div className="hinweis">
-            <b>Bitte das Postfach prüfen.</b> Ist {mail} für den Betreuungsbereich freigeschaltet,
-            liegt der Anmeldelink dort (auch im Spam-Ordner nachsehen). Bitte auf diesem Gerät öffnen.
-          </div>
-        ) : (
-          <button className="knopf knopf--rand knopf--breit" disabled={laeuft || !mail}
-            onClick={() => melden(() => anmeldelinkSenden(mail, true).then(() => setLinkGesendet(true)))}>
-            Anmeldelink per E-Mail schicken
-          </button>
-        )}
+        {/* Eingeladene haben den einfacheren Weg: «Login erstellen» in der Einladungsmail —
+            ohne Bestätigungsmail, weil der Link selbst belegt, wem die Adresse gehört. */}
+        <div className="hinweis">
+          <b>Eingeladen?</b> Dann steht in der Einladungs-E-Mail «Login erstellen» — das geht
+          ohne Bestätigungsmail. E-Mail nicht mehr da? Dann hier nochmals anfordern:
+        </div>
+        {einladungKnopf}
 
         {google}
 
@@ -376,6 +463,14 @@ function Anmelden({ onRaus }: { onRaus: () => void }) {
       <Kopf />
       <h1>Betreuung</h1>
       <p className="lauftext">Nur für Betreuungspersonen am Besuchsmorgen.</p>
+
+      {alterLink && (
+        <div className="hinweis hinweis--warnung">
+          <b>Dieser Anmeldelink stammt aus einer älteren Einladung</b> und gilt nicht mehr.
+          Bitte die E-Mail-Adresse eintragen und «Einladung nochmals per E-Mail schicken» —
+          die neue E-Mail enthält einen Link, der auf allen Geräten gilt.
+        </div>
+      )}
 
       <form className="stapel" onSubmit={(e) => { e.preventDefault(); melden(() => signInWithEmailAndPassword(auth, mail, pw)); }}>
         <div className="feld">
@@ -404,6 +499,7 @@ function Anmelden({ onRaus }: { onRaus: () => void }) {
           Passwort vergessen?
         </button>
       )}
+      {einladungKnopf}
 
       {google}
 
@@ -489,26 +585,30 @@ function MailBestaetigen(
   );
 }
 
-/** Was aus dem Anmeldelink geworden ist — im Klartext für die Administration. */
-function mailStandText(adresse: string, post: MailErgebnis): string {
-  if (post.weg === 'firebase') {
-    return 'Anmeldelink verschickt, aber über Firebase statt über alae.app: Der eigene '
-      + `Versand hat nicht geantwortet.${post.grund ? ` ${post.grund}` : ''} Mehr steht in der `
-      + 'Browserkonsole und in Netlify → Logs → Functions.';
-  }
+/** Was aus der Einladung geworden ist — im Klartext für die Administration. */
+function einladungStandText(adresse: string, post: EinladungsErgebnis): string {
   switch (post.stand) {
     case 'gesendet':
-      return `Anmeldelink an ${adresse} verschickt.`;
+      return `Einladung an ${adresse} verschickt.`;
     case 'nicht-eingeladen':
-      return 'aber kein Anmeldelink verschickt — der Server findet die Adresse weder unter '
-        + 'den Zugängen noch unter den Konten. Bitte die Schreibweise prüfen.';
+      return 'aber keine Einladung verschickt — der Server findet die Adresse nicht unter '
+        + 'den Zugängen. Bitte die Schreibweise prüfen.';
     case 'gesperrt':
-      return 'aber kein zweiter Anmeldelink verschickt: An diese Adresse ging vor weniger '
-        + 'als 30 Sekunden schon einer. Der erste gilt.';
+      return 'aber keine zweite Einladung verschickt: An diese Adresse ging vor weniger '
+        + 'als 30 Sekunden schon eine. Die erste gilt.';
+    case 'nichts-erlaubt':
+      return 'aber keine Einladung verschickt: Weder Anmeldung per Link noch Login mit '
+        + 'Passwort ist erlaubt — bitte eines davon ankreuzen.';
     default:
-      return 'Anmeldelink verschickt.';
+      return 'Einladung verschickt.';
   }
 }
+
+/** Fehler einer Zugangs-Schnittstelle als Satz — für Meldungen der Administration. */
+const fehlerSatz = (f: unknown): string => {
+  const { text, hinweis } = anmeldeFehlerText((f as { code?: string })?.code ?? '');
+  return hinweis ? `${text} ${hinweis}` : text;
+};
 
 /* ------------------------------------------------------------------ Übersicht */
 
@@ -2070,8 +2170,12 @@ function Zugaenge({ melde, ich }: { melde: (t: string) => void; ich: User }) {
   const [mail, setMail] = useState('');
   const [name, setName] = useState('');
   const [rolle, setRolle] = useState<Rolle>('betreuung');
-  const [linkSchicken, setLinkSchicken] = useState(true);
+  const [wege, setWege] = useState<Anmeldewege>(STANDARD_WEGE('betreuung'));
+  const [mailSchicken, setMailSchicken] = useState(true);
   const [laeuft, setLaeuft] = useState(false);
+
+  // Mit der Rolle wechseln die Vorgaben: Betreuung bekommt beides, Administration nur das Passwort.
+  const rolleWaehlen = (r: Rolle) => { setRolle(r); setWege(STANDARD_WEGE(r)); };
 
   useEffect(() => onSnapshot(
     collection(db, 'zugang'),
@@ -2092,22 +2196,23 @@ function Zugaenge({ melde, ich }: { melde: (t: string) => void; ich: User }) {
   const einladen = async () => {
     const adresse = mailSchluessel(mail);
     if (!adresse.includes('@')) { melde('Bitte eine gültige E-Mail-Adresse eingeben.'); return; }
+    const erlaubt = { link: rolle === 'betreuung' && wege.link, passwort: wege.passwort };
+    if (!erlaubt.link && !erlaubt.passwort) { melde('Bitte mindestens einen Anmeldeweg ankreuzen.'); return; }
     setLaeuft(true);
     try {
-      await zugangSetzen(adresse, name, rolle, ich.email);
-      if (linkSchicken) {
-        // false: Die Adresse gehört nicht diesem Gerät — sie darf hier nicht gemerkt werden.
+      await zugangSetzen(adresse, name, rolle, ich.email, erlaubt);
+      if (mailSchicken) {
+        // Als Administration — der Server darf ehrlich antworten, sonst wäre ein
+        // ausbleibendes Mail nicht von einem stillen «nicht eingeladen» zu unterscheiden.
         try {
-          // true: als Administration — der Server darf ehrlich antworten, sonst wäre ein
-          // ausbleibendes Mail nicht von einem stillen «nicht eingeladen» zu unterscheiden.
-          const post = await anmeldelinkSenden(adresse, false, true);
-          melde(`${adresse} eingeladen — ${mailStandText(adresse, post)}`);
-        } catch {
-          melde(`${adresse} eingetragen. Der Anmeldelink liess sich nicht verschicken — `
-            + 'die Person kann sich mit Google oder über «Anmeldelink per E-Mail schicken» anmelden.');
+          const post = await einladungSenden(adresse, { alsAdministration: true });
+          melde(`${adresse} eingetragen — ${einladungStandText(adresse, post)}`);
+        } catch (f) {
+          melde(`${adresse} eingetragen. Die Einladung liess sich nicht verschicken — ${fehlerSatz(f)} `
+            + 'Die Links stehen in der Liste unter «Links kopieren».');
         }
       } else {
-        melde(`${adresse} eingetragen.`);
+        melde(`${adresse} eingetragen. Die Links stehen in der Liste unter «Links kopieren».`);
       }
       setMail(''); setName('');
     } catch {
@@ -2116,10 +2221,56 @@ function Zugaenge({ melde, ich }: { melde: (t: string) => void; ich: User }) {
   };
 
   const rolleAendern = async (eintrag: Zugang & { id: string }, neu: Rolle) => {
-    await zugangSetzen(eintrag.id, eintrag.name, neu, ich.email);
+    await zugangAendern(eintrag.id, { rolle: neu });
     // Wer schon angemeldet ist, hat sein Konto bereits — dort muss die Rolle mitziehen.
     for (const k of kontenZu(eintrag.id)) await kontoRolleSetzen(k.id, neu);
     melde(`${eintrag.id}: ${ROLLEN_TEXT[neu]}.`);
+  };
+
+  const wegAendern = async (eintrag: Zugang & { id: string }, feld: 'link' | 'passwort', wert: boolean) => {
+    await zugangAendern(eintrag.id, { [feld]: wert });
+    melde(`${eintrag.id}: ${feld === 'link' ? 'Anmeldung per Link' : 'Login mit Passwort'} ${wert ? 'erlaubt' : 'abgeschaltet'}.`);
+  };
+
+  const mailSchickenAn = async (eintrag: Zugang & { id: string }) => {
+    try {
+      const post = await einladungSenden(eintrag.id, { alsAdministration: true });
+      melde(einladungStandText(eintrag.id, post));
+    } catch (f) {
+      melde(`Einladung nicht verschickt — ${fehlerSatz(f)}`);
+    }
+  };
+
+  /** Die Links zum Weitergeben von Hand — etwa per Chat, wenn das Mail nicht ankommt. */
+  const linksKopieren = async (eintrag: Zugang & { id: string }) => {
+    try {
+      const post = await einladungSenden(eintrag.id, { alsAdministration: true, senden: false });
+      const zeilen = [
+        ...(post.links?.anmelden ? [`Jetzt anmelden (gilt auf allen Geräten): ${post.links.anmelden}`] : []),
+        ...(post.links?.login ? [`Login erstellen (Passwort festlegen): ${post.links.login}`] : []),
+      ];
+      if (zeilen.length === 0) { melde('Keine Links: Für diesen Zugang ist kein Anmeldeweg erlaubt.'); return; }
+      const text = zeilen.join('\n');
+      try {
+        await navigator.clipboard.writeText(text);
+        melde(`Links für ${eintrag.id} kopiert — zum Weitergeben, etwa per Chat.`);
+      } catch {
+        window.prompt(`Links für ${eintrag.id} — mit Ctrl+C kopieren:`, text);
+      }
+    } catch (f) {
+      melde(`Links nicht erhalten — ${fehlerSatz(f)}`);
+    }
+  };
+
+  /** Neuer Zugangscode: Die bisherigen Links sind damit tot — etwa nach einer Weiterleitung an die falsche Person. */
+  const codeErneuern = async (eintrag: Zugang & { id: string }) => {
+    if (!confirm(`Neuen Zugangscode für ${eintrag.id} erzeugen? Die bisherigen Links gelten dann nicht mehr; die neue Einladung geht per E-Mail raus.`)) return;
+    try {
+      const post = await einladungSenden(eintrag.id, { alsAdministration: true, erneuern: true });
+      melde(`Neuer Code — ${einladungStandText(eintrag.id, post)}`);
+    } catch (f) {
+      melde(`Code nicht erneuert — ${fehlerSatz(f)}`);
+    }
   };
 
   const entfernen = async (eintrag: Zugang & { id: string }) => {
@@ -2144,6 +2295,12 @@ function Zugaenge({ melde, ich }: { melde: (t: string) => void; ich: User }) {
         <b> Administration</b> darf zusätzlich alles auf dieser Seite — Freigabeschalter,
         Meldungen, Kapazitäten, Zurücksetzen und Zugänge.
       </p>
+      <p className="mini">
+        Die Einladung geht per E-Mail mit bis zu zwei Knöpfen: <b>«Jetzt anmelden»</b> — ein
+        Link, der auf allen Geräten gilt; die Person tippt nur ihre E-Mail-Adresse ein (nur
+        Betreuung). <b>«Login erstellen»</b> — einmal ein Passwort festlegen, danach überall mit
+        E-Mail und Passwort. Die Administration meldet sich mit Passwort oder Google an.
+      </p>
 
       <div className="reihe">
         <div className="feld" style={{ flex: 2, minWidth: 200 }}>
@@ -2157,15 +2314,38 @@ function Zugaenge({ melde, ich }: { melde: (t: string) => void; ich: User }) {
         </div>
         <div className="feld" style={{ flex: 1, minWidth: 150 }}>
           <label htmlFor="z-rolle">Rolle</label>
-          <select id="z-rolle" value={rolle} onChange={(e) => setRolle(e.target.value as Rolle)}>
+          <select id="z-rolle" value={rolle} onChange={(e) => rolleWaehlen(e.target.value as Rolle)}>
             <option value="betreuung">{ROLLEN_TEXT.betreuung}</option>
             <option value="admin">{ROLLEN_TEXT.admin}</option>
           </select>
         </div>
       </div>
       <label className="schieber">
-        <input type="checkbox" checked={linkSchicken} onChange={(e) => setLinkSchicken(e.target.checked)} />
-        Anmeldelink sofort per E-Mail schicken
+        <input type="checkbox" checked={rolle === 'betreuung' && wege.link} disabled={rolle !== 'betreuung'}
+          onChange={(e) => setWege((w) => ({ ...w, link: e.target.checked }))} />
+        <span>
+          Anmeldung per Link
+          <span className="mini" style={{ fontWeight: 400 }}>
+            {rolle === 'betreuung'
+              ? ' — ein Link für alle Geräte, nur die E-Mail-Adresse eintippen'
+              : ' — für die Administration nicht vorgesehen (Passwort oder Google)'}
+          </span>
+        </span>
+      </label>
+      <label className="schieber">
+        <input type="checkbox" checked={wege.passwort}
+          onChange={(e) => setWege((w) => ({ ...w, passwort: e.target.checked }))} />
+        <span>
+          Login mit Passwort
+          <span className="mini" style={{ fontWeight: 400 }}> — «Login erstellen» im E-Mail, einmal ein Passwort festlegen</span>
+        </span>
+      </label>
+      <label className="schieber">
+        <input type="checkbox" checked={mailSchicken} onChange={(e) => setMailSchicken(e.target.checked)} />
+        <span>
+          E-Mail jetzt schicken
+          <span className="mini" style={{ fontWeight: 400 }}> — sonst stehen die Links in der Liste unter «Links kopieren»</span>
+        </span>
       </label>
       <button className="knopf knopf--haupt" style={{ alignSelf: 'start' }} disabled={laeuft || !mail}
         onClick={einladen}>
@@ -2174,10 +2354,10 @@ function Zugaenge({ melde, ich }: { melde: (t: string) => void; ich: User }) {
 
       <div className="roller">
         <table className="tabelle">
-          <thead><tr><th>E-Mail</th><th>Name</th><th>Rolle</th><th>Stand</th><th /></tr></thead>
+          <thead><tr><th>E-Mail</th><th>Name</th><th>Rolle</th><th>Anmeldung</th><th>Stand</th><th /></tr></thead>
           <tbody>
             {einladungen.length === 0 && (
-              <tr><td colSpan={5} className="mini">Noch keine Zugänge eingetragen.</td></tr>
+              <tr><td colSpan={6} className="mini">Noch keine Zugänge eingetragen.</td></tr>
             )}
             {[...einladungen].sort((a, b) => a.id.localeCompare(b.id)).map((e) => (
               <tr key={e.id}>
@@ -2190,9 +2370,30 @@ function Zugaenge({ melde, ich }: { melde: (t: string) => void; ich: User }) {
                     <option value="admin">{ROLLEN_TEXT.admin}</option>
                   </select>
                 </td>
+                <td>
+                  <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                    <label className="schieber" style={{ fontWeight: 400, fontSize: 13 }}
+                      title={e.rolle === 'admin' ? 'Für die Administration nicht vorgesehen' : 'Ein Link für alle Geräte'}>
+                      <input type="checkbox" checked={e.rolle === 'betreuung' && e.link !== false}
+                        disabled={e.rolle !== 'betreuung'}
+                        onChange={(ev) => wegAendern(e, 'link', ev.target.checked)} />
+                      Link
+                    </label>
+                    <label className="schieber" style={{ fontWeight: 400, fontSize: 13 }} title="«Login erstellen» im E-Mail">
+                      <input type="checkbox" checked={e.passwort !== false}
+                        onChange={(ev) => wegAendern(e, 'passwort', ev.target.checked)} />
+                      Passwort
+                    </label>
+                  </div>
+                </td>
                 <td className="mini">{kontenZu(e.id).length > 0 ? 'angemeldet' : 'noch nie angemeldet'}</td>
                 <td>
-                  <button className="knopf knopf--still" onClick={() => entfernen(e)}>Entfernen</button>
+                  <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                    <button className="knopf knopf--still knopf--klein" onClick={() => mailSchickenAn(e)}>E-Mail schicken</button>
+                    <button className="knopf knopf--still knopf--klein" onClick={() => linksKopieren(e)}>Links kopieren</button>
+                    <button className="knopf knopf--still knopf--klein" onClick={() => codeErneuern(e)}>Code erneuern</button>
+                    <button className="knopf knopf--still knopf--klein" onClick={() => entfernen(e)}>Entfernen</button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -2201,6 +2402,7 @@ function Zugaenge({ melde, ich }: { melde: (t: string) => void; ich: User }) {
                 <td>{k.email ?? '—'}</td>
                 <td>{k.name}</td>
                 <td className="mini">{ROLLEN_TEXT[k.rolle] ?? k.rolle}</td>
+                <td className="mini">Passwort oder Google</td>
                 <td className="mini">Erstzugang</td>
                 <td />
               </tr>

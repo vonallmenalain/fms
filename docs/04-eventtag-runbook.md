@@ -69,10 +69,12 @@ Admin → `Anmeldung geschlossen` + Banner «Bitte beim Info-Stand melden», dan
 
 ### 4.5 Jemand braucht kurzfristig Zugang
 
-Administration → **Steuerung → Zugänge** → Adresse eintragen, Rolle **Betreuung**,
-«Anmeldelink sofort per E-Mail schicken» angehakt lassen. Die Person öffnet den Link auf
-ihrem Gerät und ist drin. Wer nur betreut, sieht die Steuerung gar nicht — es kann also
-niemand versehentlich die Anmeldung schliessen oder alles zurücksetzen.
+Administration → **Steuerung → Zugänge** → Adresse eintragen, Rolle **Betreuung**, die
+drei Haken gesetzt lassen. Die Person öffnet im Mail «Jetzt anmelden», tippt ihre Adresse
+ein und ist drin — auf jedem Gerät, mit demselben Link. Kommt das Mail nicht an: «Links
+kopieren» in der Liste und den Link per Chat schicken. Wer nur betreut, sieht die Steuerung
+gar nicht — es kann also niemand versehentlich die Anmeldung schliessen oder alles
+zurücksetzen.
 
 ## 5. Papier-Fallback (am Vorabend vorbereiten, kostet 20 Minuten)
 

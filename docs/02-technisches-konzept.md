@@ -186,13 +186,15 @@ Zurücksetzen und Zugänge vergeben. Erzwungen wird das in `firestore.rules` —
 `admin` eintragen dürfen. Das ist die einzige Stelle, die einen Deploy braucht — alles
 Weitere läuft danach über die App.
 
-**Anmelden** geht auf drei Wegen: E-Mail + Passwort, Google oder Anmeldelink per E-Mail
-(Firebase verschickt ihn selbst, kein Mailserver nötig). Der Anmeldebildschirm zeigt nur
-die ersten beiden; wer noch kein Konto hat, wechselt über «Konto erstellen» in die zweite
-Ansicht — dort stehen alle drei Wege, ein Konto anzulegen. Voraussetzung für den Link:
-Firebase-Konsole → Authentication → Sign-in method → «E-Mail-Adresse/Passwort» mit
-**E-Mail-Link (passwortloses Anmelden)** aktiviert, und die Domain unter Settings →
-Authorized domains eingetragen.
+**Anmelden** geht auf drei Wegen: E-Mail + Passwort, Google oder — nur für die Betreuung —
+der Link «Jetzt anmelden» aus der Einladungsmail. Der trägt einen Zugangscode, den eine
+Netlify-Funktion prüft und gegen ein Anmelde-Token von Firebase tauscht
+(`signInWithCustomToken`); er gilt, solange die Einladung besteht, auf jedem Gerät. «Login
+erstellen» aus demselben Mail setzt ein Passwort ohne Bestätigungsmail. Der
+Anmeldebildschirm zeigt E-Mail/Passwort und Google; wer noch kein Konto hat, wechselt über
+«Konto erstellen» in die zweite Ansicht. Details: [08](08-bestaetigungsmail.md).
+Voraussetzung: Firebase-Konsole → Authentication → Sign-in method → «E-Mail-Adresse/Passwort»
+aktiviert, und die Domain unter Settings → Authorized domains eingetragen.
 
 **Konto selbst erstellen.** Ein Konto anzulegen öffnet keinen Zugang: Freigeschaltet wird
 nur, wessen Adresse unter «Steuerung → Zugänge» eingetragen ist. Bei einem Passwort-Konto

@@ -1,13 +1,13 @@
 /* =========================================================================
-   Prüft die beiden Mail-Funktionen gegen die Firebase Emulator Suite.
+   Prüft die Mail- und Zugangsfunktionen gegen die Firebase Emulator Suite.
    -------------------------------------------------------------------------
      npm run mailtest        (startet die Emulatoren selbst)
 
    Geprüft wird der echte Kode aus netlify/ — nur der Versand über Resend wird
-   abgefangen, damit im Test keine Post rausgeht. Wichtigster Punkt ist die
-   Schranke bei Anmeldelink und Passwort: Sie ist die einzige Stelle, die
-   verhindert, dass sich über die Schnittstellen beliebige Adressen von unserer
-   Domain aus anschreiben lassen — und sie soll nicht verraten, wer Zugang hat.
+   abgefangen, damit im Test keine Post rausgeht. Wichtigste Punkte: die
+   Schranke bei Einladung und Passwort (nur eingetragene Adressen bekommen Post,
+   ohne dass die Antwort verrät, wer eingetragen ist) und der Zugangscode —
+   er darf nur mit der richtigen Adresse und nur für das Erlaubte gelten.
    ========================================================================= */
 
 import { generateKeyPairSync } from 'node:crypto';
@@ -44,7 +44,9 @@ globalThis.fetch = async (url, opt) => {
 };
 
 const { default: bestaetigung } = await import('../netlify/functions/bestaetigung.mjs');
-const { default: anmeldelink } = await import('../netlify/functions/anmeldelink.mjs');
+const { default: einladung } = await import('../netlify/functions/einladung.mjs');
+const { default: zugangAnmelden } = await import('../netlify/functions/zugang-anmelden.mjs');
+const { default: loginErstellen } = await import('../netlify/functions/login-erstellen.mjs');
 const { default: passwort } = await import('../netlify/functions/passwort.mjs');
 const { adminAuth, adminDb } = await import('../netlify/lib/dienst.mjs');
 
@@ -103,91 +105,161 @@ pruefe('zweiter Versuch sofort danach ist gesperrt', r.status === 429 && letzteM
 r = await post(bestaetigung, { idToken: 'unsinn' });
 pruefe('ungültiges Token bekommt keine Mail', r.status === 401);
 
-/* ----------------------------------------------------------- Anmeldelink */
-console.log('\nAnmeldelink');
+/* ------------------------------------------------------------- Einladung */
+console.log('\nEinladung');
+
+const linksAus = (t) => (t ?? '').split('\n').filter((z) => z.startsWith('http'));
 
 letzteMail = null;
-r = await post(anmeldelink, { mail: 'fremde@example.ch' });
+r = await post(einladung, { mail: 'fremde@example.ch' });
 d = await r.json();
 pruefe('fremde Adresse: keine Mail, aber unauffällige Antwort',
   r.status === 200 && d.stand === 'erledigt' && letzteMail === null);
 
 await adminDb().collection('zugang').doc('eingeladen@example.ch')
-  .set({ email: 'eingeladen@example.ch', name: 'Test', rolle: 'betreuung' });
+  .set({ email: 'eingeladen@example.ch', name: 'Test', rolle: 'betreuung', link: true, passwort: true });
 // MAIL_ABSENDER einmal ohne Namen — die Funktion muss ihn selbst davorsetzen, sonst zeigt
 // Gmail die nackte Adresse (siehe mitAbsenderName in lib/mail.mjs).
 process.env.MAIL_ABSENDER = 'besuchsmorgen@alae.app';
 letzteMail = null;
-r = await post(anmeldelink, { mail: '  Eingeladen@Example.CH ' });        // Schreibweise egal
+r = await post(einladung, { mail: '  Eingeladen@Example.CH ' });        // Schreibweise egal, ohne Ausweis
 d = await r.json();
 process.env.MAIL_ABSENDER = 'FMS Neufeld <besuchsmorgen@alae.app>';
-pruefe('eingeladene Adresse: Mail geht raus',
-  r.status === 200 && d.stand === 'erledigt' && letzteMail?.to?.[0] === 'eingeladen@example.ch');
-pruefe('enthält den Anmeldelink von Firebase', /mode=signIn/.test(html()) && /oobCode=/.test(html()));
-// Der Link zeigt auf die eigene Domain, nicht auf firebaseapp.com (bzw. im Test: nicht auf
-// den Emulator) — Absender und Ziel passen zusammen, siehe eigenerAnmeldelink.
-pruefe('Anmeldelink zeigt auf fms.alae.app statt auf Firebase',
-  (letzteMail?.text ?? '').includes('https://fms.alae.app/admin?mode=signIn&oobCode=')
-  && html().includes('href="https://fms.alae.app/admin?mode=signIn&amp;oobCode=')
-  && !/firebaseapp\.com|127\.0\.0\.1|localhost/.test(html() + letzteMail?.text),
-  letzteMail?.text?.split('\n').find((z) => z.startsWith('http')));
-pruefe('Anmeldelink bringt den apiKey mit — ohne ihn löst das SDK nichts ein',
-  /[?&]apiKey=[^&\s]+/.test(letzteMail?.text ?? ''));
+pruefe('eingetragene Adresse ohne Ausweis: Mail geht raus, Antwort bleibt neutral',
+  r.status === 200 && d.stand === 'erledigt' && d.links === undefined
+  && letzteMail?.to?.[0] === 'eingeladen@example.ch', JSON.stringify(d));
+const [anmeldenLink, loginLink] = linksAus(letzteMail?.text);
+pruefe('Betreuung bekommt zwei Links: «Jetzt anmelden» und «Login erstellen»',
+  anmeldenLink?.startsWith('https://fms.alae.app/admin?zugang=') && loginLink === `${anmeldenLink}&login=1`,
+  `${anmeldenLink} / ${loginLink}`);
+pruefe('beide Links stehen auch im HTML und zeigen auf die eigene Domain, nicht auf Firebase',
+  html().includes(`href="${anmeldenLink}"`) && html().includes(`href="${loginLink.replace('&', '&amp;')}"`)
+  && !/firebaseapp\.com|127\.0\.0\.1|localhost/.test(html() + letzteMail?.text));
 pruefe('Absender ohne Namen in MAIL_ABSENDER bekommt einen',
   letzteMail?.from === 'Besuchsmorgen FMS Neufeld <besuchsmorgen@alae.app>', letzteMail?.from);
+const code = anmeldenLink ? new URL(anmeldenLink).searchParams.get('zugang') : null;
+pruefe('der Zugangscode ist lang genug, um nicht erraten zu werden', typeof code === 'string' && code.length >= 32);
 
 letzteMail = null;
-r = await post(anmeldelink, { mail: 'eingeladen@example.ch' });
+r = await post(einladung, { mail: 'eingeladen@example.ch' });
 pruefe('zweiter Versuch sofort danach ist gesperrt — mit derselben Antwort',
   r.status === 200 && (await r.json()).stand === 'erledigt' && letzteMail === null);
 
-// Freigeschaltetes Konto ohne Einladung — etwa der Erstzugang aus den Rules.
+// Die Administration weist sich mit ihrem ID-Token aus und bekommt ehrliche Antworten.
 const admin = await neuesKonto('konto@example.ch');
 const wer = await adminAuth().getUserByEmail('konto@example.ch');
 await adminDb().collection('admins').doc(wer.uid)
   .set({ rolle: 'admin', name: 'Erstzugang', email: 'konto@example.ch', seit: '2026-01-01' });
-letzteMail = null;
-r = await post(anmeldelink, { mail: 'konto@example.ch' });
-pruefe('freigeschaltetes Konto ohne Einladung: Mail geht raus', letzteMail?.to?.[0] === 'konto@example.ch');
-
 const ohneRolle = await neuesKonto('nurkonto@example.ch');
-letzteMail = null;
-r = await post(anmeldelink, { mail: 'nurkonto@example.ch' });
-pruefe('Konto ohne Freischaltung: keine Mail', letzteMail === null);
 
-r = await post(anmeldelink, { mail: 'keine-adresse' });
-pruefe('unsinnige Adresse wird abgewiesen', r.status === 400);
-
-// Gegenüber der Administration ist die Antwort ehrlich: Sie weiss ohnehin, wen sie
-// eingetragen hat, und ohne diese Auskunft ist «nichts verschickt» nicht von «Mail
-// unterwegs» zu unterscheiden. Für alle anderen bleibt es bei der neutralen Antwort.
-await adminDb().collection('zugang').doc('offen@example.ch')
-  .set({ email: 'offen@example.ch', name: 'Test', rolle: 'betreuung' });
 letzteMail = null;
-r = await post(anmeldelink, { mail: 'offen@example.ch', idToken: admin.idToken });
+r = await post(einladung, { mail: 'eingeladen@example.ch', idToken: admin.idToken, senden: false });
 d = await r.json();
-pruefe('Administration erfährt, dass verschickt wurde',
-  r.status === 200 && d.stand === 'gesendet' && letzteMail?.to?.[0] === 'offen@example.ch',
-  JSON.stringify(d));
+pruefe('Administration holt nur die Links: nichts verschickt, derselbe Code wie im Mail',
+  r.status === 200 && d.stand === 'links' && letzteMail === null
+  && d.links?.anmelden === anmeldenLink && d.links?.login === loginLink, JSON.stringify(d));
 
 letzteMail = null;
-r = await post(anmeldelink, { mail: 'niemand@example.ch', idToken: admin.idToken });
+r = await post(einladung, { mail: 'niemand@example.ch', idToken: admin.idToken });
 d = await r.json();
 pruefe('Administration erfährt, dass nichts verschickt wurde',
   r.status === 200 && d.stand === 'nicht-eingeladen' && letzteMail === null, JSON.stringify(d));
 
+await adminDb().collection('zugang').doc('chef@example.ch')
+  .set({ email: 'chef@example.ch', name: 'Chef', rolle: 'admin', link: false, passwort: true });
 letzteMail = null;
-r = await post(anmeldelink, { mail: 'offen@example.ch', idToken: admin.idToken });
-pruefe('Administration erfährt, dass die Sperre griff',
-  (await r.json()).stand === 'gesperrt' && letzteMail === null);
+r = await post(einladung, { mail: 'chef@example.ch', idToken: admin.idToken });
+d = await r.json();
+pruefe('Administration erfährt, dass verschickt wurde',
+  r.status === 200 && d.stand === 'gesendet' && letzteMail?.to?.[0] === 'chef@example.ch', JSON.stringify(d));
+pruefe('Einladung für die Administration hat nur «Login erstellen»',
+  linksAus(letzteMail?.text).length === 1 && d.links?.anmelden === undefined && d.links?.login?.endsWith('&login=1'));
+const chefCode = d.links?.login ? new URL(d.links.login).searchParams.get('zugang') : null;
 
-r = await post(anmeldelink, { mail: 'niemand2@example.ch', idToken: ohneRolle.idToken });
-pruefe('Konto ohne Rolle «admin» bekommt weiterhin die neutrale Antwort',
-  (await r.json()).stand === 'erledigt');
+letzteMail = null;
+r = await post(einladung, { mail: 'chef@example.ch', idToken: admin.idToken });
+pruefe('Administration erfährt, dass die Sperre griff', (await r.json()).stand === 'gesperrt' && letzteMail === null);
 
-r = await post(anmeldelink, { mail: 'niemand3@example.ch', idToken: 'unsinn' });
-pruefe('ungültiges Token bekommt weiterhin die neutrale Antwort',
-  (await r.json()).stand === 'erledigt');
+await adminDb().collection('zugang').doc('leer@example.ch')
+  .set({ email: 'leer@example.ch', name: '', rolle: 'betreuung', link: false, passwort: false });
+letzteMail = null;
+r = await post(einladung, { mail: 'leer@example.ch', idToken: admin.idToken });
+pruefe('beide Wege abgeschaltet: keine Mail, und die Administration erfährt es',
+  (await r.json()).stand === 'nichts-erlaubt' && letzteMail === null);
+
+r = await post(einladung, { mail: 'niemand2@example.ch', idToken: ohneRolle.idToken });
+pruefe('Konto ohne Rolle «admin» bekommt weiterhin die neutrale Antwort', (await r.json()).stand === 'erledigt');
+r = await post(einladung, { mail: 'niemand3@example.ch', idToken: 'unsinn' });
+pruefe('ungültiges Token bekommt weiterhin die neutrale Antwort', (await r.json()).stand === 'erledigt');
+
+/* ------------------------------------------------- Jetzt anmelden (Zugangscode) */
+console.log('\nJetzt anmelden');
+
+r = await post(zugangAnmelden, { mail: 'eingeladen@example.ch', code: 'falsch' });
+d = await r.json();
+pruefe('falscher Code wird abgewiesen', r.status === 403 && d.grund === 'passt-nicht', JSON.stringify(d));
+r = await post(zugangAnmelden, { mail: 'andere@example.ch', code });
+pruefe('richtiger Code mit anderer Adresse wird abgewiesen', r.status === 403 && (await r.json()).grund === 'passt-nicht');
+
+r = await post(zugangAnmelden, { mail: 'Eingeladen@example.ch', code });
+d = await r.json();
+const tokenTeile = String(d.token ?? '').split('.');
+pruefe('Code und Adresse passen: Anmelde-Token kommt', r.status === 200 && tokenTeile.length === 3, JSON.stringify(d).slice(0, 80));
+const nutzlast = tokenTeile.length === 3 ? JSON.parse(Buffer.from(tokenTeile[1], 'base64url').toString()) : {};
+const eingeladenKonto = await adminAuth().getUserByEmail('eingeladen@example.ch').catch(() => null);
+pruefe('Konto ist angelegt, Adresse gilt als bestätigt, Token lautet auf dieses Konto',
+  eingeladenKonto?.emailVerified === true && nutzlast.uid === eingeladenKonto?.uid);
+const frei = await adminDb().collection('admins').doc(eingeladenKonto?.uid ?? 'x').get();
+pruefe('freigeschaltet mit der Rolle aus der Einladung',
+  frei.exists && frei.data()?.rolle === 'betreuung' && frei.data()?.email === 'eingeladen@example.ch');
+
+r = await post(zugangAnmelden, { mail: 'eingeladen@example.ch', code });
+pruefe('derselbe Code geht nochmals — das zweite Gerät',
+  r.status === 200 && String((await r.json()).token).split('.').length === 3);
+
+r = await post(zugangAnmelden, { mail: 'chef@example.ch', code: chefCode });
+pruefe('Administration kann sich nicht per Link anmelden', r.status === 403 && (await r.json()).grund === 'nur-betreuung');
+
+await adminDb().collection('zugang').doc('eingeladen@example.ch').update({ link: false });
+r = await post(zugangAnmelden, { mail: 'eingeladen@example.ch', code });
+pruefe('Link abgeschaltet: keine Anmeldung per Code', r.status === 403 && (await r.json()).grund === 'link-aus');
+await adminDb().collection('zugang').doc('eingeladen@example.ch').update({ link: true });
+
+// Die Bremse: fünf Fehlversuche, dann Pause — auch mit dem richtigen Code.
+for (let i = 0; i < 5; i++) await post(zugangAnmelden, { mail: 'bremse@example.ch', code: `falsch${i}` });
+r = await post(zugangAnmelden, { mail: 'bremse@example.ch', code });
+pruefe('nach fünf Fehlversuchen ist die Adresse zehn Minuten gesperrt', r.status === 429 && (await r.json()).grund === 'gesperrt');
+
+/* ------------------------------------------------------- Login erstellen */
+console.log('\nLogin erstellen');
+
+r = await post(loginErstellen, { mail: 'eingeladen@example.ch', code, passwort: '123' });
+pruefe('zu kurzes Passwort wird abgewiesen', r.status === 400 && (await r.json()).grund === 'passwort');
+r = await post(loginErstellen, { mail: 'eingeladen@example.ch', code: 'falsch', passwort: 'geheim123' });
+pruefe('falscher Code wird abgewiesen', r.status === 403 && (await r.json()).grund === 'passt-nicht');
+
+r = await post(loginErstellen, { mail: 'eingeladen@example.ch', code, passwort: 'geheim123' });
+d = await r.json();
+pruefe('Betreuung legt ein Passwort fest', r.status === 200 && d.stand === 'erstellt', JSON.stringify(d));
+const mitPasswort = await adminAuth().getUserByEmail('eingeladen@example.ch');
+pruefe('das Konto hat jetzt einen Passwort-Anbieter und bleibt bestätigt',
+  mitPasswort.providerData.some((p) => p.providerId === 'password') && mitPasswort.emailVerified === true);
+r = await post(zugangAnmelden, { mail: 'eingeladen@example.ch', code });
+pruefe('«Jetzt anmelden» geht für die Betreuung danach weiterhin', r.status === 200);
+
+r = await post(loginErstellen, { mail: 'chef@example.ch', code: chefCode, passwort: 'chefgeheim' });
+d = await r.json();
+pruefe('Administration erstellt ihr Login', r.status === 200 && d.stand === 'erstellt', JSON.stringify(d));
+const chef = await adminAuth().getUserByEmail('chef@example.ch');
+const chefFrei = await adminDb().collection('admins').doc(chef.uid).get();
+pruefe('… und ist als Administration freigeschaltet', chefFrei.exists && chefFrei.data()?.rolle === 'admin');
+r = await post(loginErstellen, { mail: 'chef@example.ch', code: chefCode, passwort: 'nochmals123' });
+pruefe('der Code der Administration ist danach verbraucht', r.status === 403 && (await r.json()).grund === 'passt-nicht');
+
+await adminDb().collection('zugang').doc('eingeladen@example.ch').update({ passwort: false });
+r = await post(loginErstellen, { mail: 'eingeladen@example.ch', code, passwort: 'geheim123' });
+pruefe('Passwort abgeschaltet: kein Login erstellen', r.status === 403 && (await r.json()).grund === 'passwort-aus');
+await adminDb().collection('zugang').doc('eingeladen@example.ch').update({ passwort: true });
 
 /* --------------------------------------------------- Passwort zurücksetzen */
 console.log('\nPasswort zurücksetzen');
@@ -199,8 +271,10 @@ pruefe('fremde Adresse: keine Mail, aber unauffällige Antwort',
   r.status === 200 && d.stand === 'erledigt' && letzteMail === null);
 
 // Eingeladen, aber es gibt noch gar kein Konto — es gibt nichts zurückzusetzen.
+await adminDb().collection('zugang').doc('nur-eingeladen@example.ch')
+  .set({ email: 'nur-eingeladen@example.ch', name: 'Test', rolle: 'betreuung' });
 letzteMail = null;
-r = await post(passwort, { mail: 'eingeladen@example.ch' });
+r = await post(passwort, { mail: 'nur-eingeladen@example.ch' });
 pruefe('eingeladen ohne Konto: keine Mail', r.status === 200 && letzteMail === null);
 
 // Freigeschaltetes Konto mit Passwort — der eigentliche Fall.
