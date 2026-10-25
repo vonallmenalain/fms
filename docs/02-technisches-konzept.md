@@ -286,11 +286,15 @@ Die drei Regeln, auf die es ankommt:
 | `config/*` für alle lesbar, nur für Admins schreibbar | Notbremse bleibt in Lehrer-Hand; zugleich die Grundlage der Nur-Lese-Übersicht unter `/uebersicht` |
 | `bookings` ist nur für die Betreuung auflistbar | die öffentliche Übersicht zeigt Belegung und freie Plätze, nie einzelne Anmeldungen oder Notizen |
 
-> **Härtung Stufe 2 (optional, Phase 6):** Mit `getAfter()` lässt sich in den Rules zusätzlich
+> **Härtung Stufe 2 (optional):** Mit `getAfter()` lässt sich in den Rules zusätzlich
 > prüfen, dass im selben Commit auch das Buchungsdokument passend geändert wird. Damit kann ein
 > manipulierter Client nicht mehr fremde Zähler senken, ohne selbst eine Buchung zu bewegen.
-> Für einen Schulanlass mit 120 wohlgesinnten Gästen ist Stufe 1 ausreichend — Stufe 2 nur, wenn
-> nach dem Lasttest noch Zeit bleibt.
+> **Am 25.10.2026 gebaut, geprüft und bewusst NICHT ausgerollt:** Eine Regel, die den exakten
+> Schritt gegen `resource.data.belegt` prüft, wird unter Andrang gegen den inzwischen
+> veränderten Serverstand ausgewertet und antwortet dann mit `permission-denied` statt mit dem
+> Transaktionsabbruch, den das SDK von selbst wiederholt — im Andrangtest fielen 20 von 20
+> gleichzeitigen Geräten durch. Für einen Schulanlass mit 120 wohlgesinnten Gästen bleibt
+> Stufe 1 ausreichend; Befund und Weg für die Zeit nach dem Event in [09 §4](09-golive-check.md).
 
 **Kein Geheimnis im Frontend:** Die Firebase-Web-Konfiguration (`apiKey` etc.) ist öffentlich —
 das ist so vorgesehen und kein Sicherheitsproblem. Der Schutz kommt zu 100 % aus den Rules.
