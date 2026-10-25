@@ -43,6 +43,7 @@ ohne Handy selbst eintragen.
 | **[docs/06-stand-der-umsetzung.md](docs/06-stand-der-umsetzung.md)** | **Was gebaut ist**, lokal starten, Skripte, GitHub-Actions, bewusste Abweichungen vom Konzept, Messwerte |
 | **[docs/07-pruefbericht.md](docs/07-pruefbericht.md)** | **Prüfbericht vor der ersten Vorführung:** Stresstest mit 150 Geräten, Browsertest, gefundene Schwachstellen, **ToDo-Listen** und ein Drehbuch für die Vorführung |
 | **[docs/08-bestaetigungsmail.md](docs/08-bestaetigungsmail.md)** | **Eigene Mails statt derer von Firebase:** Bestätigungsmail, Anmeldelink und Passwort-Zurücksetzen, wer eine Mail auslösen darf, Einrichtung in Resend/Netlify Schritt für Schritt, Vorschau, Testversand und Fehlersuche |
+| **[docs/09-golive-check.md](docs/09-golive-check.md)** | **GoLive-Check vom 25.10.2026**: Lasttests mit 200 Clients, Browsertest der Live-Site, Zustand der Produktionsdatenbank, zwei Korrekturen, Checkliste vor Mittwoch, Befund zur Zählerbindung |
 | **[docs/snippets/](docs/snippets/)** | Entwurfsfassungen aus der Konzeptphase — verbindlich ist der Kode im Repo |
 
 ## Schnellstart

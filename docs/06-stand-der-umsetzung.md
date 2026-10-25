@@ -199,6 +199,6 @@ Zusätzlich verifiziert:
 | 5 | Blaze-Tarif + Budget-Alarm CHF 5/20 | Schule |
 | 6 | Generalprobe mit ~20 echten Handys im Gast-WLAN | beide |
 | 7 | Vor dem Event: `reset`, danach Anmeldung geschlossen lassen bis 08:35 | Technik |
-| 8 | Zählerbewegung an die eigene Anmeldung binden — [07 §5.1](07-pruefbericht.md) | Technik |
+| 8 | Zählerbewegung an die eigene Anmeldung binden — am 25.10. geprüft und wegen des Andrang-Befunds auf **nach dem Event** verschoben, siehe [07 §5.1](07-pruefbericht.md) und [09 §4](09-golive-check.md) | Technik |
 
 Vollständige, nach Dringlichkeit sortierte Listen: **[07 §7 und §8](07-pruefbericht.md)**.

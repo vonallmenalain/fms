@@ -140,7 +140,18 @@ die `apis.google.com` sperrt — das betrifft nur die Google-Anmeldung im Betreu
 Gefunden mit einer gezielten Sonde, die als angemeldeter Gast am App-Kode vorbei
 schreibt. Sortiert nach Schwere.
 
-### 5.1 Zähler lassen sich verschieben, ohne dort gebucht zu haben — **offen**
+### 5.1 Zähler lassen sich verschieben, ohne dort gebucht zu haben — **bewusst offen**
+
+> **Nachtrag 25.10.2026:** Die Skizze unten wurde gebaut und gegen den Emulator geprüft
+> (`regeltest` 100/100 mit 13 neuen Prüfungen) — und dann **nicht ausgerollt**. Grund: Unter
+> Andrang wertet Firestore die Regel gegen den inzwischen veränderten Serverstand aus; eine
+> Prüfung des exakten Schritts gegen `resource.data.belegt` antwortet dann mit `permission-denied`
+> statt mit dem Transaktionsabbruch, den das SDK von selbst wiederholt. Im `andrangtest` fielen
+> **20 von 20** gleichzeitigen Geräten durch, im Lasttest 2 von 730 Buchungen. Drei Tage vor dem
+> Anlass ist das die falsche Stelle für ein Experiment. Befund, Zahlen und der Weg für die Zeit
+> nach dem Event: [09 §4](09-golive-check.md). Am Eventtag gilt weiterhin: `pruefe` zweimal
+> laufen lassen.
+
 
 Die Regel für `slots` prüft nur die Grenzen (0 … Kapazität) und die Schrittweite (± 4).
 Sie prüft **nicht**, ob die schreibende Person dort wirklich einen Platz hat. Gemessen:
@@ -304,7 +315,7 @@ ergänzt.
 
 | # | Was | Wer | Wann |
 |---|---|---|---|
-| **1** | **Zähler an die eigene Anmeldung binden** (§5.1) — mit `getAfter()`, danach `andrangtest` + Lastlauf. Wenn es Zeitdruck gibt: weglassen und stattdessen `pruefe` am Eventtag zweimal laufen lassen. | Technik | vor der Generalprobe |
+| **1** | **Zähler an die eigene Anmeldung binden** (§5.1) — am 25.10. gebaut und geprüft, wegen des Andrang-Befunds **bewusst nicht ausgerollt** (siehe Nachtrag in §5.1, [09 §4](09-golive-check.md)). Stattdessen `pruefe` am Eventtag zweimal laufen lassen. | Technik | nach dem Event |
 | **2** | **Latenztest gegen die echte Datenbank** von einem gewöhnlichen Anschluss aus: `node scripts/lasttest.mjs --clients 200 --produktion`, danach zwingend `reset`. Erst dann sind L5 und L6 belastbar. | Technik | September |
 | **3** | **Generalprobe mit ~20 echten Handys im Gast-WLAN.** Der einzige belastbare Test für die Anmelde-Drosselung pro IP. | beide | Oktober |
 | **4** | **Gast-WLAN mit der Schul-IT klären**: Verbindungszahl *und* gemeinsame öffentliche IP. Auf die QR-Folie: **Mobilfunk bevorzugen**, WLAN nur als Ergänzung. | beide | September |

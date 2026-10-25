@@ -172,7 +172,11 @@ function GastApp() {
       await waehle(u.uid, blockId, ziel, plaetze);
     } catch (fehler) {
       if (fehler instanceof AnmeldeAndrangFehler) {
-        setMeldung('Gerade melden sich sehr viele gleichzeitig an. Bitte in ein paar Sekunden nochmals tippen.');
+        // Die Drosselung gilt je IP-Adresse — im Gast-WLAN teilen sich alle Geräte eine.
+        // Über Mobilfunk hat jedes Gerät seine eigene; der Hinweis ist darum der schnellste
+        // Ausweg, nicht bloss Trost. Siehe docs/05 §5a.
+        setMeldung('Gerade melden sich sehr viele gleichzeitig an. Bitte in ein paar Sekunden '
+          + 'nochmals tippen — oder das WLAN kurz ausschalten und über Mobilfunk anmelden.');
       } else if (fehler instanceof AusgebuchtFehler) {
         const a = angebot(fehler.angebotId);
         setMeldung(`${a?.fach ?? 'Das Angebot'} ist leider gerade eben ausgebucht. Bitte wähle etwas anderes.`);
