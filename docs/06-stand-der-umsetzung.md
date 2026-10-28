@@ -6,6 +6,81 @@ wie man es startet und wo bewusst vom Konzept abgewichen wurde.
 > Der vollständige Durchgang vor der ersten Vorführung — Stresstest mit 150 Geräten,
 > Browsertest, gefundene Schwachstellen und die ToDo-Listen — steht in
 > **[07-pruefbericht.md](07-pruefbericht.md)**.
+>
+> **Nachtrag 28.10.2026:** Funde vom Besuchsmorgen und was daraufhin geändert wurde → §0.
+
+---
+
+## 0. Nach dem Besuchsmorgen vom 28.10.2026
+
+### Fund 1: Auf einzelnen iPhones war die Auswahl nach «Abschliessen» leer
+
+**Symptom.** Einige Personen wählten vier Kurse, nach «Abschliessen» standen sie aber nicht
+in der Auswahl — teils auch nach dem Neuladen nicht. Gemeldet vor allem von iPhones.
+
+**Ursache.** Ein Fehler in WebKit ab Safari/iOS 26.4
+([firebase/firebase-js-sdk#9789](https://github.com/firebase/firebase-js-sdk/issues/9789),
+betrifft Firebase 11.10 — genau die eingesetzte Version — und 12.x): Safari hält die
+Live-Daten, die Firestore über einen offenen Datenstrom schickt, zurück, bis nach bis zu
+30 Sekunden ein Lebenszeichen des Servers sie freigibt; manche Änderungen kommen gar nie an.
+Auf dem iPhone ist jeder Browser technisch ein Safari, auch Chrome. Die **Buchungen selbst**
+laufen dagegen über gewöhnliche Einzelanfragen (`runTransaction`) und **wurden gespeichert**.
+Haken auf den Karten, Merkzettel und Auswahl kamen aber **ausschliesslich aus dem
+Live-Listener** — und der schwieg. Nach dem Neuladen holte der Firestore-Zwischenspeicher
+(IndexedDB) denselben veralteten Stand hervor, denn auch er erfährt nur, was der Listener
+liefert.
+
+**Nachgestellt** gegen die Emulator Suite mit dem produktiven Stand, indem nach «Los geht's»
+der Listen-Kanal abgeschnitten wird (Buchen funktioniert weiter):
+
+| | Stand am Besuchsmorgen | neuer Stand |
+|---|---|---|
+| Datenbank | alle 4 Kurse gespeichert | alle 4 Kurse gespeichert |
+| Karten nach dem Antippen | kein Haken | ✓ gewählt |
+| Nach «Abschliessen» | «Es ist noch keine Anmeldung vorhanden» | alle 4 Kurse |
+| Nach dem Neuladen | Startseite ohne Auswahl | alle 4 Kurse |
+
+**Behoben in zwei Schichten:**
+
+1. **Ursache:** Auf WebKit (iPhone, iPad, Safari auf dem Mac) nutzt Firestore Long Polling
+   statt des Datenstroms (`src/firebase.ts`) — die vom Firebase-Team empfohlene Abhilfe.
+   Jede Antwort ist eine abgeschlossene Anfrage, die Safari nicht zurückhalten kann. Das
+   behebt auf iPhones auch verzögerte Platzzahlen und eine verspätet sichtbare Freigabe.
+   Andere Browser bleiben beim Datenstrom.
+2. **Unabhängig vom Transport** (`src/hooks/useBuchung.ts`): Jede Buchung meldet zurück, was
+   gespeichert wurde, und genau das steht sofort auf dem Schirm — ohne auf den Listener zu
+   warten. Ältere Stände, die er verspätet nachliefert, überschreiben es nicht. Ein
+   abgebrochener Listener verbindet sich neu. Eine Kopie der Auswahl im Gerätespeicher sorgt
+   dafür, dass sie nach dem Neuladen sofort dasteht, auch bevor der Server antwortet und
+   auch ohne Netz.
+
+**Grenze:** Sperrt ein iPhone jeglichen Website-Speicher («Alle Cookies blockieren»,
+geschlossenes privates Fenster), geht die Sitzung beim Neuladen verloren. Darum bleibt der
+Hinweis «Mach jetzt einen Screenshot» auf der Auswahl.
+
+**Nachweis für den Besuchsmorgen selbst:** In der Steuerung → Protokoll → «Pro Gerät» steht
+je Gerät die Geräteart. Bei den betroffenen iPhones sollten dort alle vier Slots belegt sein —
+die Plätze waren reserviert, sie wurden nur nicht angezeigt.
+
+### Fund 2: Betreuung — erfasste Anmeldungen waren nach dem Speichern weg
+
+- Nach **«+ Anmeldung erfassen»** stehen die **gewählten Kurse als Liste** da (Zeit,
+  Bereich, Fach, Zimmer), dazu Name und Personenzahl — mit «Bearbeiten» und «Nächste
+  Anmeldung erfassen».
+- Neuer Reiter **«Erfasste Anmeldungen»** für beide Rollen: alle am Info-Stand erfassten
+  Anmeldungen, live, durchsuchbar nach Name. Antippen → prüfen, **ändern** (Gruppengrösse,
+  Kurse, Name) oder **löschen** (mit Rückfrage). Ändern und Löschen laufen je in einer
+  Transaktion; die Zähler werden exakt verrechnet (im Emulator nach jedem Schritt geprüft).
+  Änderungen kommen ins Protokoll wie die Umbuchung eines Gasts.
+- `firestore.rules`: Die Betreuung darf am Info-Stand erfasste Anmeldungen (`quelle ==
+  'admin'`) jetzt auch ändern — anlegen und löschen durfte sie schon. Gast-Anmeldungen
+  bleiben ausgenommen. Sieben neue Fälle in `scripts/regeltest.mjs`.
+- Das Feld «Notiz (freiwillig)» heisst jetzt **«Name»**, weiterhin freiwillig. In der
+  Datenbank bleibt der Feldname `notiz`.
+- **Fehler behoben:** Wurde im Erfassen-Formular ein Bereich gewählt und danach wieder auf
+  «— nichts —» gestellt, scheiterte das Speichern mit «Das hat nicht geklappt» (Firestore
+  lehnt `undefined` ab). Im produktiven Stand nachgestellt; jetzt wird der Bereich sauber
+  als «nichts gewählt» gespeichert.
 
 ---
 

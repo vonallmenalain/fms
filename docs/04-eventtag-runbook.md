@@ -44,7 +44,8 @@ Zugriffe auf zwei Minuten statt auf zwei Sekunden — wirksamer als jede technis
 
 | Symptom | Lösung (dauert < 30 Sekunden) |
 |---|---|
-| «Ich habe kein Handy» | Admin → **+ Anmeldung erfassen** → Auswahl → Gästen aufschreiben oder abfotografieren lassen |
+| «Ich habe kein Handy» | Admin → **+ Anmeldung erfassen** → Auswahl + Name (freiwillig) → die angezeigte Kursliste zeigen oder abfotografieren lassen |
+| «Stimmt meine Anmeldung?» (am Stand erfasst) | Admin → **Erfasste Anmeldungen** → Name suchen → antippen → prüfen, ändern oder löschen |
 | «Meine Auswahl ist weg» | Seite über `fms.alae.app` erneut öffnen — die Auswahl kommt auf demselben Gerät automatisch zurück. Sonst: Admin → **+ Anmeldung erfassen** neu erfassen |
 | «Ich habe kein Internet mehr» | Seite trotzdem öffnen: Die App startet aus dem Speicher des Handys und zeigt die Anmeldung samt Zimmern. Buchen und Ändern geht erst wieder mit Verbindung — dafür Mobilfunk einschalten oder am Stand erfassen lassen. Nur ein Handy, das noch nie online auf der Seite war, bleibt aussen vor |
 | «Das Fach ist ausgebucht» | Nachbar-Angebot vorschlagen; im Notfall Admin → Kapazität +2 (Zimmergrösse beachten!) |

@@ -141,8 +141,17 @@ Aktualisiert sich in Echtzeit, ohne Neuladen. Genau das, was im Word-Doc als «L
 **7.2 Person ohne Handy eintragen** (der wichtigste Admin-Fall)
 Gleicher 4-Schritt-Flow wie für Gäste, aber:
 - Startet über den Button **«+ Anmeldung erfassen»**
-- Freies Notizfeld statt Name (z. B. `Gruppe Frau Meier`, `3 SuS ohne Handy`) — kein Klarname nötig
-- Am Schluss: Auswahl den Gästen zeigen oder vorlesen
+- Feld **«Name»**, freiwillig (z. B. `Familie Muster`, `Gruppe Frau Meier`) — erleichtert das
+  Wiederfinden; speichern geht auch ohne
+- Nach dem Speichern stehen die **gewählten Kurse als Liste** da (Zeit, Bereich, Fach,
+  Zimmer) → den Gästen zeigen, vorlesen oder abfotografieren lassen
+
+**7.2a Erfasste Anmeldungen** (seit dem Besuchsmorgen 2026, für beide Rollen)
+Eigener Reiter mit allen Anmeldungen, die über «+ Anmeldung erfassen» eingetragen wurden —
+live, neuste zuoberst, durchsuchbar nach Name. Antippen öffnet die Anmeldung: gebuchte Kurse
+ansehen, Gruppengrösse, Kurse und Name **ändern** oder die Anmeldung **löschen** (mit
+Rückfrage). Ändern und Löschen laufen je in einer einzigen Transaktion, die Plätze werden
+exakt verrechnet; Änderungen erscheinen im Protokoll wie die Umbuchung eines Gasts.
 
 **7.3 Notbremse & Steuerung** — nur für die Rolle `admin`
 - `Anmeldung offen / geschlossen` (Schalter) — z. B. erst ab 08:40 öffnen
@@ -168,7 +177,7 @@ Steuerung wird am Eventmorgen auf dem Handy gelesen, und eine Tabelle mit zwölf
 hiesse dort waagrecht schieben:
 - **Pro Gerät** — zugeklappt: Gerätenummer, Geräteart, Zahl der Vorgänge, Uhrzeit.
   Aufgeklappt: Kennung, Personen, Slots, belegte Plätze, die vier gewählten Angebote,
-  Notiz und die vollständige Liste der Vorgänge dieses Geräts.
+  Name (bei Erfassungen am Info-Stand) und die vollständige Liste der Vorgänge dieses Geräts.
 - **Verlauf** — eine Zeile je Vorgang, chronologisch über alle Geräte.
 
 **«Gerät 12» statt «iJovaGD9».** Die Firebase-Kennung ist eindeutig, aber unlesbar und
@@ -291,6 +300,11 @@ Bei den Ateliers entfällt die Klasse, dort steht nur Fach und Zimmer.
   Geräteart in der Form `iPhone · Safari` — ohne Versionsnummern, ohne die vollständige
   User-Agent-Zeile, **ohne IP-Adresse**. Die IP wäre ein Personendatum und würde das
   «kein Cookie-Banner nötig» oben kippen; sie wird deshalb nirgends erhoben.
+- **Einzige Ausnahme:** Bei Anmeldungen, die die Betreuung am Info-Stand erfasst, kann
+  freiwillig ein Name eingetragen werden. Er ist nur im Admin-Bereich sichtbar und wird
+  mit dem Zurücksetzen gelöscht.
+- Eine Kopie der eigenen Auswahl liegt im Local Storage des Geräts, damit sie nach dem
+  Neuladen sofort dasteht — auch ohne Netz.
 - Die anonyme ID ist eine Firebase-Zufalls-ID, keinem Menschen zuordenbar.
 - Keine Analytics, kein Google Analytics, keine Cookies ausser dem technisch nötigen
   Auth-Token im Local Storage → **kein Cookie-Banner nötig**.

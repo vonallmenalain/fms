@@ -3,7 +3,9 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { angebot, blockIds, type BlockId, type Wahl } from './programm';
-import { AusgebuchtFehler, RechteFehler, mitWiederholung, nacheinander } from './wiederholung';
+import {
+  AusgebuchtFehler, NichtMehrDaFehler, RechteFehler, mitWiederholung, nacheinander,
+} from './wiederholung';
 import { protokolliere, type Vorgangsnotiz } from './protokoll';
 import { gemerktesGeraet, vergissGeraet } from './geraet';
 
@@ -11,6 +13,8 @@ export interface Buchung {
   plaetze: number;
   wahl: Record<BlockId, string | null>;
   quelle: 'gast' | 'admin';
+  /** Name bei Anmeldungen vom Info-Stand, freiwillig. Der Feldname stammt aus der ersten
+   *  Fassung («Notiz») und bleibt, damit Rules und bestehende Daten weiter passen. */
   notiz: string | null;
   erstelltAm?: unknown;
   geaendertAm?: unknown;
@@ -19,12 +23,28 @@ export interface Buchung {
 export const leereWahl = (): Record<BlockId, string | null> =>
   Object.fromEntries(blockIds().map((b) => [b, null])) as Record<BlockId, string | null>;
 
+/**
+ * Auswahl aus einem Formular → vollständige Wahl. Ein abgewählter Block kommt dort als
+ * `undefined` an — und `undefined` lehnt Firestore ab: Wer am Info-Stand einen Block
+ * wählte und wieder auf «— nichts —» stellte, konnte vorher nicht speichern.
+ */
+export const wahlAus = (auswahl: Partial<Record<BlockId, string | null>>): Record<BlockId, string | null> =>
+  Object.fromEntries(blockIds().map((b) => [b, auswahl[b] || null])) as Record<BlockId, string | null>;
+
 export const neueBuchung = (plaetze: number, quelle: 'gast' | 'admin' = 'gast'): Buchung => ({
   plaetze,
   wahl: leereWahl(),
   quelle,
   notiz: null,
 });
+
+/** Zeigen zwei Stände dieselbe Anmeldung? Zeitstempel zählen nicht. */
+export function gleicheBuchung(a: Buchung | null, b: Buchung | null): boolean {
+  if (!a || !b) return a === b;
+  const bloecke = new Set([...Object.keys(a.wahl ?? {}), ...Object.keys(b.wahl ?? {})]) as Set<BlockId>;
+  return a.plaetze === b.plaetze
+    && [...bloecke].every((k) => (a.wahl?.[k] ?? null) === (b.wahl?.[k] ?? null));
+}
 
 const istRechteFehler = (f: unknown): boolean =>
   typeof f === 'object' && f !== null && (f as { code?: string }).code === 'permission-denied';
@@ -68,6 +88,9 @@ function schreibeSlot(
  *
  * WICHTIG: Firestore verlangt ALLE Lesevorgänge vor ALLEN Schreibvorgängen. Die drei
  * Abschnitte unten sind deshalb strikt getrennt.
+ *
+ * Gibt die Anmeldung so zurück, wie sie danach gespeichert ist. Der Bildschirm zeigt
+ * genau das sofort an, statt auf den Live-Listener zu warten — siehe hooks/useBuchung.ts.
  */
 export function waehle(
   buchungId: string,
@@ -75,7 +98,7 @@ export function waehle(
   neuesAngebot: string | null,
   vorgabePlaetze: number,
   quelle: 'gast' | 'admin' = 'gast',
-): Promise<void> {
+): Promise<Buchung> {
   // Was die Transaktion getan hat, für das Protokoll. In einem Merkerobjekt, weil die
   // Transaktion bei Andrang mehrmals durchläuft — es zählt ausschliesslich der letzte,
   // erfolgreiche Durchgang.
@@ -83,8 +106,9 @@ export function waehle(
 
   return nacheinander(() =>
     mitWiederholung(async () => {
+      let ergebnis: Buchung;
       try {
-        await runTransaction(db, async (tx) => {
+        ergebnis = await runTransaction(db, async (tx): Promise<Buchung> => {
           merker.notiz = null;
           const buchungRef = doc(db, 'bookings', buchungId);
 
@@ -102,7 +126,7 @@ export function waehle(
           const plaetze = nochNichtsGewaehlt && neuesAngebot ? vorgabePlaetze : buchung.plaetze;
           const altesAngebot = buchung.wahl?.[blockId] ?? null;
 
-          if (altesAngebot === neuesAngebot) return;
+          if (altesAngebot === neuesAngebot) return { ...buchung, wahl: { ...leereWahl(), ...buchung.wahl } };
 
           const neuRef = neuesAngebot ? doc(db, 'slots', neuesAngebot) : null;
           const altRef = altesAngebot ? doc(db, 'slots', altesAngebot) : null;
@@ -139,6 +163,7 @@ export function waehle(
             plaetze,
             slots: Object.values(wahlDanach).filter(Boolean).length,
           };
+          return { ...buchung, plaetze, wahl: wahlDanach };
         });
       } catch (fehler) {
         if (istRechteFehler(fehler)) throw new RechteFehler();
@@ -147,6 +172,7 @@ export function waehle(
       // Erst hier, nach der bestätigten Transaktion, und ohne `await`: Das Protokoll darf
       // die Buchung weder verzögern noch scheitern lassen. Siehe src/protokoll.ts.
       if (merker.notiz) protokolliere(buchungId, quelle, merker.notiz);
+      return ergebnis;
     }),
   );
 }
@@ -221,7 +247,7 @@ export async function erfasseAdminBuchung(
       tx.set(buchungRef, {
         ...basis,
         notiz: notiz.trim() || null,
-        wahl: { ...leereWahl(), ...auswahl },
+        wahl: wahlAus(auswahl),
         erstelltAm: serverTimestamp(),
         geaendertAm: serverTimestamp(),
       });
@@ -241,6 +267,77 @@ export async function erfasseAdminBuchung(
   });
 
   return { id: buchungRef.id };
+}
+
+/**
+ * Eine am Info-Stand erfasste Anmeldung ändern — Gruppengrösse, Wahl und Name in EINER
+ * Transaktion. Jeder bisherige Platz wird mit der bisherigen Gruppengrösse freigegeben,
+ * jeder neue mit der neuen belegt; bleibt ein Angebot gleich, verrechnet sich beides zu
+ * einer einzigen Änderung des Zählers.
+ *
+ * Die Dokument-ID bleibt dieselbe, damit das Protokoll die Anmeldung weiterhin als ein
+ * und denselben «Client» führt. Ins Protokoll kommt je geändertem Block eine Zeile — wie
+ * bei einem Gast, der umbucht.
+ */
+export async function aendereErfassteAnmeldung(
+  buchungId: string,
+  auswahl: Partial<Record<BlockId, string | null>>,
+  plaetze: number,
+  notiz: string,
+): Promise<void> {
+  const merker: { vorher: Buchung | null } = { vorher: null };
+  const wahl = wahlAus(auswahl);
+
+  await mitWiederholung(async () => {
+    await runTransaction(db, async (tx) => {
+      merker.vorher = null;
+      const buchungRef = doc(db, 'bookings', buchungId);
+
+      // ---------- Lesen ----------
+      const snap = await tx.get(buchungRef);
+      if (!snap.exists()) throw new NichtMehrDaFehler();
+      const alt = snap.data() as Buchung;
+      const differenz = new Map<string, number>();
+      const bloecke = new Set([...Object.keys(alt.wahl ?? {}), ...blockIds()]) as Set<BlockId>;
+      for (const b of bloecke) {
+        const bisher = alt.wahl?.[b];
+        if (bisher) differenz.set(bisher, (differenz.get(bisher) ?? 0) - alt.plaetze);
+        const neu = wahl[b];
+        if (neu) differenz.set(neu, (differenz.get(neu) ?? 0) + plaetze);
+      }
+      const staende = await Promise.all(
+        [...differenz].filter(([, d]) => d !== 0).map(async ([id, d]) =>
+          ({ id, d, ...(await leseSlot(tx, doc(db, 'slots', id), id)) })),
+      );
+
+      // ---------- Prüfen ----------
+      for (const s of staende) {
+        if (s.d > 0 && s.belegt + s.d > s.kapazitaet) throw new AusgebuchtFehler(s.id);
+      }
+
+      // ---------- Schreiben ----------
+      for (const s of staende) {
+        // Fehlt der Zähler eines Angebots, das freigegeben wird, gibt es nichts freizugeben.
+        if (s.neu && s.d < 0) continue;
+        schreibeSlot(tx, doc(db, 'slots', s.id), s.id, s, Math.max(0, s.belegt + s.d));
+      }
+      tx.update(buchungRef, { plaetze, wahl, notiz: notiz.trim() || null, geaendertAm: serverTimestamp() });
+      merker.vorher = alt;
+    });
+  });
+
+  const alt = merker.vorher;
+  if (!alt) return;
+  const slots = Object.values(wahl).filter(Boolean).length;
+  for (const b of blockIds()) {
+    const vorher = alt.wahl?.[b] ?? null;
+    const angebotId = wahl[b];
+    if (vorher === angebotId) continue;
+    protokolliere(buchungId, 'admin', {
+      vorgang: angebotId ? (vorher ? 'gewechselt' : 'gebucht') : 'freigegeben',
+      block: b, angebot: angebotId, vorher, plaetze, slots,
+    });
+  }
 }
 
 /**
