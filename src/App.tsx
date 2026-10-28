@@ -5,7 +5,7 @@ import { block, blockIds, programm, type BlockId } from './programm';
 import { useAppConfig } from './hooks/useAppConfig';
 import { useBuchung } from './hooks/useBuchung';
 import { useSlots } from './hooks/useSlots';
-import { setzePlaetze, uebernimmGeraeteAnmeldung, waehle } from './buchung';
+import { setzePlaetze, uebernimmGeraeteAnmeldung, waehle, type Buchung } from './buchung';
 import { AusgebuchtFehler, RechteFehler } from './wiederholung';
 import { angebot } from './programm';
 import { Banner, Laden, Meldung } from './ui/Bausteine';
@@ -52,7 +52,9 @@ function GastApp() {
   const [benutzer, setBenutzer] = useState<User | null>(null);
   const [authGeprueft, setAuthGeprueft] = useState(false);
   const { config, veraltet } = useAppConfig();
-  const { buchung, geladen: buchungGeladen } = useBuchung(benutzer?.uid ?? null);
+  const {
+    buchung, geladen: buchungGeladen, sicher: buchungSicher, merke,
+  } = useBuchung(benutzer?.uid ?? null);
   const { offline } = useVerbindung();
 
   // Jeder Bildschirmwechsel ist ein History-Eintrag — damit geht der Zurück-Knopf des
@@ -89,16 +91,17 @@ function GastApp() {
       .catch(() => { startGesetzt.current = true; setAuthGeprueft(true); });
   }, []);
 
-  // Bestehendes Ticket auf diesem Gerät? Dann direkt dorthin — einmalig beim Laden.
+  // Bestehendes Ticket auf diesem Gerät? Dann direkt dorthin — einmalig, sobald der Stand
+  // feststeht. Antwortet der Server erst, wenn die Person schon wählt, bleibt sie, wo sie ist.
   useEffect(() => {
-    if (!buchungGeladen || startGesetzt.current) return;
+    if (!buchungSicher || startGesetzt.current) return;
     startGesetzt.current = true;
     if (buchung) {
       setPlaetzeLokal(buchung.plaetze);
       // Ersetzen statt anhängen: Das ist der Einstiegsbildschirm dieses Besuchs, kein Schritt.
-      if (Object.values(buchung.wahl).some(Boolean)) ersetze('ticket');
+      if (Object.values(buchung.wahl).some(Boolean) && schritt === 'start') ersetze('ticket');
     }
-  }, [buchungGeladen, buchung, ersetze]);
+  }, [buchungSicher, buchung, ersetze, schritt]);
 
   // Die Gruppengrösse gehört dem Bildschirm: Sie wirkt sofort, gespeichert wird nebenbei.
   // Ohne diesen Merker holten die Rückmeldungen des Servers überholte Zwischenstände
@@ -169,7 +172,9 @@ function GastApp() {
       // Anmeldung erst hier — das verteilt die Anmeldungen über die Auswahlzeit.
       const u = benutzer ?? (await benutzerBereit());
       if (!benutzer) setBenutzer(u);
-      await waehle(u.uid, blockId, ziel, plaetze);
+      // Das Ergebnis der Transaktion sofort zeigen — nicht auf den Live-Listener warten,
+      // der auf manchen iPhones schweigt (siehe src/firebase.ts).
+      merke(u.uid, await waehle(u.uid, blockId, ziel, plaetze));
     } catch (fehler) {
       if (fehler instanceof AnmeldeAndrangFehler) {
         // Die Drosselung gilt je IP-Adresse — im Gast-WLAN teilen sich alle Geräte eine.
@@ -194,7 +199,7 @@ function GastApp() {
       tippLaeuft.current = false;
       setLaeuftFuer(null);
     }
-  }, [benutzer, buchung, plaetze, config.anmeldungOffen, ersetze]);
+  }, [benutzer, buchung, plaetze, config.anmeldungOffen, ersetze, merke]);
 
   const plaetzeAendern = useCallback((n: number) => {
     setPlaetzeLokal(n);                       // sofort, ohne Netz
@@ -223,7 +228,9 @@ function GastApp() {
     try {
       let alleFrei = true;
       for (const b of blockIds()) {
-        if (buchung.wahl[b]) alleFrei = (await waehlenStill(benutzer.uid, b)) && alleFrei;
+        if (!buchung.wahl[b]) continue;
+        const danach = await waehlenStill(benutzer.uid, b);
+        if (danach) merke(benutzer.uid, danach); else alleFrei = false;
       }
       // Ehrlich bleiben: Ist die Anmeldung inzwischen geschlossen, weist der Server die
       // Freigabe ab. Vorher meldete die App trotzdem Erfolg und warf die Person auf den
@@ -238,7 +245,7 @@ function GastApp() {
     } finally {
       setGibtFrei(false);
     }
-  }, [benutzer, buchung, ersetze, gibtFrei]);
+  }, [benutzer, buchung, ersetze, gibtFrei, merke]);
 
   // Der Ladebildschirm gehört ausschliesslich zum ERSTEN Aufbau: Dort muss feststehen, ob
   // dieses Gerät schon ein Ticket hat, sonst blitzt die Startseite auf und springt sofort
@@ -328,7 +335,7 @@ function GastApp() {
   );
 }
 
-/** Freigeben ohne Weiterspringen — für «alles zurücksetzen». `false` heisst: hat nicht geklappt. */
-async function waehlenStill(uid: string, blockId: BlockId): Promise<boolean> {
-  try { await waehle(uid, blockId, null, 1); return true; } catch { return false; }
+/** Freigeben ohne Weiterspringen — für «alles zurücksetzen». `null` heisst: hat nicht geklappt. */
+async function waehlenStill(uid: string, blockId: BlockId): Promise<Buchung | null> {
+  try { return await waehle(uid, blockId, null, 1); } catch { return null; }
 }

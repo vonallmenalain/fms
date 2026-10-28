@@ -2,7 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator, type User } from 'firebase/auth';
 import {
   connectFirestoreEmulator, getFirestore, initializeFirestore,
-  persistentLocalCache, persistentMultipleTabManager,
+  persistentLocalCache, persistentMultipleTabManager, type FirestoreSettings,
 } from 'firebase/firestore';
 import { merkeGeraet } from './geraet';
 
@@ -49,8 +49,38 @@ export const auth = getAuth(app);
  */
 const imBrowser = typeof window !== 'undefined' && typeof indexedDB !== 'undefined';
 
+/**
+ * iPhone und iPad (dort ist jeder Browser technisch ein Safari, auch Chrome) sowie Safari
+ * auf dem Mac. iPadOS meldet sich als Mac — erkennbar am Touchscreen.
+ */
+function istWebKit(): boolean {
+  const ua = navigator.userAgent;
+  const iOS = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const macSafari = /Safari\//.test(ua) && !/Chrome|Chromium|Edg|OPR|Android|CriOS|FxiOS/.test(ua);
+  return iOS || macSafari;
+}
+
+/**
+ * Fund vom Besuchsmorgen 28.10.2026: Auf einzelnen iPhones blieb die Auswahl nach dem
+ * Abschliessen leer, obwohl alle Buchungen gespeichert waren. Ursache ist ein Fehler in
+ * WebKit ab Safari/iOS 26.4 (firebase/firebase-js-sdk#9789, betrifft Firebase 11.10 und
+ * 12.x): Safari hält die Live-Daten, die Firestore über einen offenen Datenstrom schickt,
+ * zurück, bis nach bis zu 30 Sekunden ein Lebenszeichen des Servers sie freigibt — manche
+ * Änderungen kommen gar nie an. Gebucht wird dagegen über gewöhnliche Einzelanfragen; die
+ * klappten. Nur der Listener, aus dem Karten, Merkzettel und Auswahl lasen, schwieg.
+ *
+ * Abhilfe laut Firebase-Team: auf WebKit Long Polling statt Datenstrom. Jede Antwort ist
+ * dann eine abgeschlossene Anfrage, die Safari nicht zurückhalten kann. Die übrigen
+ * Browser behalten den sparsameren Datenstrom. `useFetchStreams` ist eine interne
+ * Einstellung des SDK und steht deshalb nicht im Typ.
+ */
+const transport = (imBrowser && istWebKit()
+  ? { experimentalForceLongPolling: true, useFetchStreams: false }
+  : {}) as FirestoreSettings;
+
 export const db = imBrowser
   ? initializeFirestore(app, {
+      ...transport,
       localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
     })
   : getFirestore(app);

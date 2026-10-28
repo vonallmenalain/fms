@@ -302,6 +302,17 @@ service cloud.firestore {
           // Gruppengrösse nur ändern, solange noch nichts gebucht ist
           && (request.resource.data.plaetze == resource.data.plaetze
               || (keineWahl(resource.data) && gueltigePlaetze(request.resource.data.plaetze))))
+        // Die Betreuung korrigiert am Info-Stand erfasste Anmeldungen unter «Erfasste
+        // Anmeldungen». Anlegen und Löschen durfte sie schon; Ändern an Ort und Stelle
+        // hält die Dokument-ID und damit das Protokoll zusammen. Gast-Anmeldungen bleiben
+        // ausgenommen, und eine erfasste Anmeldung bleibt eine erfasste.
+        || (istBetreuung()
+          && resource.data.quelle == 'admin'
+          && request.resource.data.quelle == 'admin'
+          && request.resource.data.keys().hasOnly(
+               ['plaetze', 'wahl', 'quelle', 'notiz', 'erstelltAm', 'geaendertAm'])
+          && gueltigePlaetze(request.resource.data.plaetze)
+          && gueltigeBuchung(request.resource.data))
         || istAdmin();
 
       /**

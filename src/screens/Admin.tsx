@@ -4,23 +4,25 @@ import {
   signInWithPopup, signOut, type User,
 } from 'firebase/auth';
 import {
-  collection, deleteDoc, deleteField, doc, getDocs, setDoc, writeBatch, onSnapshot,
+  collection, deleteDoc, deleteField, doc, getDocs, setDoc, writeBatch, onSnapshot, query, where,
 } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import {
   ART_TEXT, alleAngebote, alleBloecke, angebot, angeboteFuer, anpassungFuer, anzahlAnpassungen,
   basisAngebot, basisBlock, block, blockAnpassungFuer, blockIds, datumAngepasst, datumIso,
   datumLang, entfernteAngebote, entfernteBloecke, freierBlockSchluessel, neueAngebotId,
-  basisDatumIso, schluessel, zeitraum, NEUE_BLOCK_IDS,
-  type Angebot, type Anpassung, type Block, type BlockAnpassung, type BlockArt, type BlockId,
+  basisDatumIso, metaZeile, schluessel, zeitraum, NEUE_BLOCK_IDS,
+  type Angebot, type Anpassung, type Block, type BlockAnpassung, type BlockArt, type BlockId, type Wahl,
 } from '../programm';
 import { useAlleSlots, type Staende } from '../hooks/useSlots';
 import { useAppConfig } from '../hooks/useAppConfig';
 import { useBuchungen } from '../hooks/useBuchung';
 import { useProtokoll } from '../hooks/useProtokoll';
-import { erfasseAdminBuchung, loescheAnmeldung, type Buchung } from '../buchung';
+import {
+  aendereErfassteAnmeldung, erfasseAdminBuchung, loescheAnmeldung, type Buchung,
+} from '../buchung';
 import { VORGANG_TEXT, type LogEintrag } from '../protokoll';
-import { AusgebuchtFehler } from '../wiederholung';
+import { AusgebuchtFehler, NichtMehrDaFehler } from '../wiederholung';
 import { Kopf, Meldung } from '../ui/Bausteine';
 import { Uebersicht } from './Uebersicht';
 import {
@@ -31,7 +33,7 @@ import {
   type Anmeldewege, type EinladungsErgebnis, type Konto, type Rolle, type Zugang,
 } from '../zugang';
 
-type Reiter = 'uebersicht' | 'erfassen' | 'steuerung';
+type Reiter = 'uebersicht' | 'erfassen' | 'erfasste' | 'steuerung';
 
 /* ------------------------------------------------------------------ Helfer */
 
@@ -85,6 +87,8 @@ export default function Admin({ onRaus }: { onRaus: () => void }) {
   // undefined = noch nicht geprüft, null = kein Zugang
   const [rolle, setRolle] = useState<Rolle | null | undefined>(undefined);
   const [reiter, setReiter] = useState<Reiter>('uebersicht');
+  // Die Anmeldung, die unter «Erfasste Anmeldungen» gerade offen ist — oder die Liste.
+  const [offeneAnmeldung, setOffeneAnmeldung] = useState<string | null>(null);
   const [meldung, setMeldung] = useState<string | null>(null);
   // Zählt hoch, sobald die E-Mail-Bestätigung geprüft wurde. `benutzer` bleibt dabei
   // dasselbe Objekt — ohne diesen Merker zeichnete React den Bildschirm nicht neu.
@@ -133,6 +137,7 @@ export default function Admin({ onRaus }: { onRaus: () => void }) {
   const reiterListe: [Reiter, string][] = [
     ['uebersicht', 'Übersicht'],
     ['erfassen', '+ Anmeldung erfassen'],
+    ['erfasste', 'Erfasste Anmeldungen'],
     ...(istAdmin ? [['steuerung', 'Steuerung'] as [Reiter, string]] : []),
   ];
   // Rolle nachträglich verkleinert? Dann darf der offene Reiter nicht stehen bleiben.
@@ -158,7 +163,8 @@ export default function Admin({ onRaus }: { onRaus: () => void }) {
       <div className="reiter-zeile">
         <div className="reiter" role="tablist">
           {reiterListe.map(([id, text]) => (
-            <button key={id} role="tab" aria-selected={offen === id} onClick={() => setReiter(id)}>{text}</button>
+            <button key={id} role="tab" aria-selected={offen === id}
+              onClick={() => { setOffeneAnmeldung(null); setReiter(id); }}>{text}</button>
           ))}
         </div>
         <button className="knopf knopf--still knopf--klein" onClick={onRaus}>
@@ -167,7 +173,13 @@ export default function Admin({ onRaus }: { onRaus: () => void }) {
       </div>
 
       {offen === 'uebersicht' && <AdminUebersicht />}
-      {offen === 'erfassen' && <Erfassen melde={setMeldung} />}
+      {offen === 'erfassen' && (
+        <Erfassen melde={setMeldung}
+          zuErfassten={(id) => { setOffeneAnmeldung(id); setReiter('erfasste'); }} />
+      )}
+      {offen === 'erfasste' && (
+        <Erfasste melde={setMeldung} offen={offeneAnmeldung} setOffen={setOffeneAnmeldung} />
+      )}
       {offen === 'steuerung' && istAdmin && <Steuerung melde={setMeldung} ich={benutzer} />}
 
       {meldung && <Meldung text={meldung} onWeg={() => setMeldung(null)} />}
@@ -623,44 +635,102 @@ function AdminUebersicht() {
 
 /* ------------------------------------------------------------------ Erfassen */
 
-function Erfassen({ melde }: { melde: (t: string) => void }) {
+/** Was im Formular steht — für eine neue Anmeldung wie für eine bestehende. */
+interface Entwurf { plaetze: number; auswahl: Partial<Record<BlockId, string>>; name: string }
+
+const leererEntwurf = (): Entwurf => ({ plaetze: 1, auswahl: {}, name: '' });
+
+/** «1 Person», nicht «1 Personen». */
+const personenZahl = (n: number): string => `${n} ${n === 1 ? 'Person' : 'Personen'}`;
+
+/** Uhrzeit ohne Sekunden — für Listen, in denen man nur ungefähr wissen will, wann. */
+const uhrzeitKurz = (wert: unknown): string =>
+  alsDatum(wert)?.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) ?? '';
+
+const speicherFehler = (f: unknown): string =>
+  f instanceof AusgebuchtFehler ? `${angebot(f.angebotId)?.fach ?? 'Ein Angebot'} ist inzwischen ausgebucht.`
+  : f instanceof NichtMehrDaFehler ? 'Diese Anmeldung gibt es nicht mehr — vermutlich wurde sie inzwischen gelöscht.'
+  : 'Das hat nicht geklappt. Bitte nochmals versuchen.';
+
+function Erfassen({ melde, zuErfassten }: {
+  melde: (t: string) => void;
+  /** Wechselt zu «Erfasste Anmeldungen» — mit einer bestimmten Anmeldung offen oder zur Liste. */
+  zuErfassten: (id: string | null) => void;
+}) {
   const staende = useAlleSlots();
-  const [plaetze, setPlaetze] = useState(1);
-  const [notiz, setNotiz] = useState('');
-  const [auswahl, setAuswahl] = useState<Partial<Record<BlockId, string>>>({});
+  const [entwurf, setEntwurf] = useState<Entwurf>(leererEntwurf);
   const [laeuft, setLaeuft] = useState(false);
-  const [fertig, setFertig] = useState(false);
+  // Was eben gespeichert wurde — es bleibt stehen, bis die nächste Anmeldung beginnt.
+  const [fertig, setFertig] = useState<(Entwurf & { id: string }) | null>(null);
+  const etwasGewaehlt = Object.values(entwurf.auswahl).some(Boolean);
 
   const speichern = async () => {
     setLaeuft(true);
     try {
-      await erfasseAdminBuchung(auswahl, plaetze, notiz);
-      setFertig(true);
-      setAuswahl({}); setNotiz(''); setPlaetze(1);
+      const { id } = await erfasseAdminBuchung(entwurf.auswahl, entwurf.plaetze, entwurf.name);
+      setFertig({ ...entwurf, name: entwurf.name.trim(), id });
+      setEntwurf(leererEntwurf());
     } catch (f) {
-      melde(f instanceof AusgebuchtFehler
-        ? `${angebot(f.angebotId)?.fach ?? 'Ein Angebot'} ist inzwischen ausgebucht.`
-        : 'Das hat nicht geklappt. Bitte nochmals versuchen.');
+      melde(speicherFehler(f));
     } finally { setLaeuft(false); }
   };
 
+  // Nach dem Speichern stehen die gewählten Kurse als Liste da — zum Vorlesen oder
+  // Abfotografieren. Vorher stand hier nur «erfasst», und die Auswahl war weg.
   if (fertig) {
     return (
-      <div className="stapel">
-        <div className="hinweis"><b>Anmeldung erfasst.</b> Die Plätze sind reserviert.</div>
-        <p className="klein">Am besten den Gästen die Auswahl kurz aufschreiben oder zeigen.</p>
-        <button className="knopf knopf--haupt" onClick={() => setFertig(false)}>Nächste Anmeldung erfassen</button>
+      <div className="stapel" style={{ maxWidth: 560 }}>
+        <div className="hinweis">
+          <b>Anmeldung erfasst{fertig.name ? ` – ${fertig.name}` : ''}.</b>{' '}
+          {personenZahl(fertig.plaetze)}, die Plätze sind reserviert:
+        </div>
+        <KursListe wahl={fertig.auswahl} />
+        <p className="klein">Am besten den Gästen die Liste zeigen oder abfotografieren lassen.</p>
+        <div className="knopfzeile">
+          <button className="knopf knopf--haupt" onClick={() => setFertig(null)}>Nächste Anmeldung erfassen</button>
+          <button className="knopf knopf--rand" onClick={() => zuErfassten(fertig.id)}>Bearbeiten</button>
+        </div>
+        <button className="knopf knopf--still" style={{ alignSelf: 'start' }} onClick={() => zuErfassten(null)}>
+          Alle erfassten Anmeldungen →
+        </button>
       </div>
     );
   }
 
   return (
     <div className="stapel" style={{ maxWidth: 560 }}>
-      <p className="lauftext">Für Gäste ohne Handy. Es braucht keinen Namen — die Notiz ist nur für euch.</p>
+      <p className="lauftext">
+        Für Gäste ohne Handy. Der Name ist freiwillig, hilft aber, die Anmeldung unter
+        «Erfasste Anmeldungen» wiederzufinden.
+      </p>
 
+      <AnmeldeFelder entwurf={entwurf} setEntwurf={setEntwurf} staende={staende} />
+
+      <button className="knopf knopf--haupt knopf--breit" disabled={laeuft || !etwasGewaehlt} onClick={speichern}>
+        Anmeldung erfassen
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Gruppengrösse, die Bereiche und der Name — für eine neue wie für eine bestehende
+ * Anmeldung. Beim Ändern (`bisher`) zählen die eigenen bisherigen Plätze als frei: Wer
+ * dasselbe Angebot behält, soll nicht an der eigenen Belegung scheitern.
+ */
+function AnmeldeFelder({ entwurf, setEntwurf, staende, bisher }: {
+  entwurf: Entwurf;
+  setEntwurf: (f: (e: Entwurf) => Entwurf) => void;
+  staende: Staende;
+  bisher?: Buchung;
+}) {
+  const { plaetze, auswahl, name } = entwurf;
+  return (
+    <>
       <div className="feld">
         <label htmlFor="anzahl">Anzahl Personen</label>
-        <select id="anzahl" value={plaetze} onChange={(e) => setPlaetze(Number(e.target.value))}>
+        <select id="anzahl" value={plaetze}
+          onChange={(e) => setEntwurf((v) => ({ ...v, plaetze: Number(e.target.value) }))}>
           {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
       </div>
@@ -671,12 +741,13 @@ function Erfassen({ melde }: { melde: (t: string) => void }) {
           <select
             id={`w-${b.id}`}
             value={auswahl[b.id] ?? ''}
-            onChange={(e) => setAuswahl((v) => ({ ...v, [b.id]: e.target.value || undefined }))}
+            onChange={(e) => setEntwurf((v) => ({ ...v, auswahl: { ...v.auswahl, [b.id]: e.target.value || undefined } }))}
           >
             <option value="">— nichts —</option>
             {angeboteFuer(b.id).map((a) => {
               const s = staende[a.id];
-              const frei = Math.max(0, (s?.kapazitaet ?? a.kapazitaet) - (s?.belegt ?? 0));
+              const eigene = bisher?.wahl?.[b.id] === a.id ? bisher.plaetze : 0;
+              const frei = Math.max(0, (s?.kapazitaet ?? a.kapazitaet) - (s?.belegt ?? 0) + eigene);
               return (
                 <option key={a.id} value={a.id} disabled={frei < plaetze}>
                   {a.fach}{a.klasse ? ` · ${a.klasse}` : ''} · {a.raum} — {frei < plaetze ? 'zu wenig Platz' : `${frei} frei`}
@@ -688,16 +759,202 @@ function Erfassen({ melde }: { melde: (t: string) => void }) {
       ))}
 
       <div className="feld">
-        <label htmlFor="notiz">Notiz (freiwillig)</label>
+        <label htmlFor="name">Name</label>
         {/* Dieselbe Grenze wie in firestore.rules — hier abgefangen, statt den
             Server ablehnen zu lassen, wenn jemand einen Roman hineinschreibt. */}
-        <input id="notiz" maxLength={300} value={notiz} onChange={(e) => setNotiz(e.target.value)}
-          placeholder="z. B. 3 SuS ohne Handy" />
+        <input id="name" maxLength={300} value={name} autoComplete="off" placeholder="z. B. Familie Muster"
+          onChange={(e) => setEntwurf((v) => ({ ...v, name: e.target.value }))} />
+        <span className="mini">Freiwillig.</span>
+      </div>
+    </>
+  );
+}
+
+/** Die gewählten Kurse einer Anmeldung, im Aussehen der Auswahl, die Gäste sehen. */
+function KursListe({ wahl }: { wahl: Wahl }) {
+  return (
+    <div className="ticket">
+      {alleBloecke().map((b) => {
+        const a = angebot(wahl[b.id]);
+        return (
+          <div className="ticket-karte" data-leer={a ? '0' : '1'} key={b.id}>
+            <span className="ticket-zeit">{b.von}<br />{b.bis}</span>
+            <span className="ticket-block">{b.label}</span>
+            <span className="ticket-fach">
+              {a
+                ? <><span className="ticket-haken" aria-hidden="true">✓</span>{a.fach}</>
+                : <span className="ticket-leer">nichts gewählt</span>}
+            </span>
+            <span className="ticket-ort">{a ? metaZeile(a) : 'noch offen'}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ Erfasste Anmeldungen */
+
+type Erfasst = Buchung & { id: string };
+
+/**
+ * Alle Anmeldungen, die am Info-Stand erfasst wurden — live, neuste zuoberst. Antippen
+ * öffnet eine Anmeldung zum Prüfen, Ändern oder Löschen.
+ *
+ * Für beide Rollen: Wer am Info-Stand erfasst, muss einen Vertipper auch selbst
+ * korrigieren können, ohne die Administration zu holen (siehe firestore.rules).
+ */
+function Erfasste({ melde, offen, setOffen }: {
+  melde: (t: string) => void;
+  offen: string | null;
+  setOffen: (id: string | null) => void;
+}) {
+  const [liste, setListe] = useState<Erfasst[] | null>(null);
+  const [suche, setSuche] = useState('');
+
+  useEffect(() => onSnapshot(
+    query(collection(db, 'bookings'), where('quelle', '==', 'admin')),
+    (s) => setListe(s.docs
+      .map((d) => ({ id: d.id, ...(d.data({ serverTimestamps: 'estimate' }) as Buchung) }))
+      .sort((x, y) => zeitZahl(y.erstelltAm) - zeitZahl(x.erstelltAm))),
+    () => setListe([]),
+  ), []);
+
+  const aktuell = offen ? liste?.find((b) => b.id === offen) : undefined;
+
+  // Hat eine andere Lehrperson die offene Anmeldung gelöscht, geht es zurück zur Liste.
+  useEffect(() => {
+    if (offen && liste && !aktuell) setOffen(null);
+  }, [offen, liste, aktuell, setOffen]);
+
+  if (aktuell) {
+    return <Bearbeiten key={aktuell.id} b={aktuell} melde={melde} onZurueck={() => setOffen(null)} />;
+  }
+
+  const begriff = suche.trim().toLowerCase();
+  const sichtbar = (liste ?? []).filter((b) => !begriff || (b.notiz ?? '').toLowerCase().includes(begriff));
+  const personen = (liste ?? []).reduce((n, b) => n + (b.plaetze || 0), 0);
+
+  return (
+    <div className="stapel" style={{ maxWidth: 720 }}>
+      <p className="lauftext">
+        Alle Anmeldungen, die über «+ Anmeldung erfassen» eingetragen wurden
+        {liste && <> — <b>{liste.length}</b> {liste.length === 1 ? 'Anmeldung' : 'Anmeldungen'},{' '}
+          <b>{personen}</b> {personen === 1 ? 'Person' : 'Personen'}</>}.
+        Antippen, um sie zu prüfen, zu ändern oder zu löschen.
+      </p>
+
+      {!!liste?.length && (
+        <div className="feld">
+          <label htmlFor="suche">Nach Name suchen</label>
+          <input id="suche" type="search" value={suche} autoComplete="off"
+            onChange={(e) => setSuche(e.target.value)} placeholder="z. B. Muster" />
+        </div>
+      )}
+
+      {liste === null && <p className="mini">Wird geladen …</p>}
+      {liste?.length === 0 && <div className="hinweis">Noch keine Anmeldungen erfasst.</div>}
+      {!!liste?.length && !sichtbar.length && <div className="hinweis">Kein Name passt zur Suche.</div>}
+
+      <div className="protokoll-liste">
+        {sichtbar.map((b) => {
+          const kurse = alleBloecke().filter((blk) => angebot(b.wahl?.[blk.id]))
+            .map((blk) => `${blk.von} ${angebot(b.wahl[blk.id])!.fach}`);
+          return (
+            <div className="pz" key={b.id}>
+              <button type="button" className="pz-kopf" onClick={() => setOffen(b.id)}>
+                <span className="pz-pfeil" aria-hidden="true">›</span>
+                <span className="pz-titel">{b.notiz || <span className="ticket-leer">ohne Name</span>}</span>
+                <span className="pz-rechts">{personenZahl(b.plaetze)}</span>
+                <span className="pz-unter">{kurse.length ? kurse.join('  ·  ') : 'keine Kurse gewählt'}</span>
+                <span className="pz-zeit">{uhrzeitKurz(b.erstelltAm)}</span>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Eine erfasste Anmeldung prüfen, ändern oder löschen. */
+function Bearbeiten({ b, melde, onZurueck }: {
+  b: Erfasst;
+  melde: (t: string) => void;
+  onZurueck: () => void;
+}) {
+  const staende = useAlleSlots();
+  const [entwurf, setEntwurf] = useState<Entwurf>(() => ({
+    plaetze: b.plaetze,
+    auswahl: Object.fromEntries(blockIds().filter((k) => b.wahl?.[k]).map((k) => [k, b.wahl[k]!])),
+    name: b.notiz ?? '',
+  }));
+  const [laeuft, setLaeuft] = useState(false);
+  const [fragtLoeschen, setFragtLoeschen] = useState(false);
+
+  const ausfuehren = async (vorgang: () => Promise<void>, erfolg: string) => {
+    setLaeuft(true);
+    try {
+      await vorgang();
+      melde(erfolg);
+      onZurueck();
+    } catch (f) {
+      melde(speicherFehler(f));
+      setLaeuft(false);
+    }
+  };
+
+  return (
+    <div className="stapel" style={{ maxWidth: 560 }}>
+      <button className="knopf knopf--still knopf--klein" style={{ alignSelf: 'start' }} onClick={onZurueck}>
+        ← Zurück zur Liste
+      </button>
+      <div className="stapel">
+        <h2>{b.notiz || 'Anmeldung ohne Name'}</h2>
+        <p className="mini">
+          {personenZahl(b.plaetze)}{uhrzeitKurz(b.erstelltAm) && ` · erfasst um ${uhrzeitKurz(b.erstelltAm)}`}
+        </p>
       </div>
 
-      <button className="knopf knopf--haupt knopf--breit" disabled={laeuft} onClick={speichern}>
-        Anmeldung erfassen
-      </button>
+      <h3>Gebucht</h3>
+      <KursListe wahl={b.wahl ?? {}} />
+
+      <hr className="trenner" />
+      <h3>Ändern</h3>
+      <AnmeldeFelder entwurf={entwurf} setEntwurf={setEntwurf} staende={staende} bisher={b} />
+      <div className="knopfzeile">
+        <button className="knopf knopf--haupt" disabled={laeuft} onClick={() => ausfuehren(
+          () => aendereErfassteAnmeldung(b.id, entwurf.auswahl, entwurf.plaetze, entwurf.name),
+          'Änderungen gespeichert.',
+        )}>
+          Änderungen speichern
+        </button>
+        <button className="knopf knopf--rand" disabled={laeuft} onClick={onZurueck}>Abbrechen</button>
+      </div>
+
+      <hr className="trenner" />
+      {/* Löschen ist nicht rückgängig zu machen — darum erst die Rückfrage, wie beim Gast. */}
+      {fragtLoeschen ? (
+        <div className="hinweis hinweis--warnung stapel">
+          <p><b>Anmeldung wirklich löschen?</b> Die Plätze werden für andere frei — das lässt
+            sich nicht rückgängig machen.</p>
+          <div className="knopfzeile">
+            <button className="knopf knopf--gefahr" disabled={laeuft} onClick={() => ausfuehren(
+              () => loescheAnmeldung(b.id), 'Anmeldung gelöscht, die Plätze sind wieder frei.',
+            )}>
+              Ja, löschen
+            </button>
+            <button className="knopf knopf--rand" disabled={laeuft} onClick={() => setFragtLoeschen(false)}>
+              Abbrechen
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button className="knopf knopf--gefahr" style={{ alignSelf: 'start' }} disabled={laeuft}
+          onClick={() => setFragtLoeschen(true)}>
+          Anmeldung löschen
+        </button>
+      )}
     </div>
   );
 }
@@ -2055,13 +2312,13 @@ function GeraeteEintrag(
             {b && alleBloecke().map((blk) => (
               <Feld key={blk.id} name={blk.label}>{angebotKurz(b.wahl?.[blk.id])}</Feld>
             ))}
-            {b?.notiz && <Feld name="Notiz">{b.notiz}</Feld>}
+            {b?.notiz && <Feld name="Name">{b.notiz}</Feld>}
           </dl>
 
           {!b && (
             <p className="mini">
               Unter dieser Kennung steht keine Anmeldung mehr: Entweder wurde alles wieder
-              freigegeben, oder sie ist in ein Konto übernommen worden.
+              freigegeben, sie wurde gelöscht, oder sie ist in ein Konto übernommen worden.
             </p>
           )}
 

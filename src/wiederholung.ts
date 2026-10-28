@@ -21,6 +21,12 @@ export class RechteFehler extends Error {
   constructor() { super('Schreibvorgang vom Server abgelehnt'); }
 }
 
+/** Die Anmeldung gibt es nicht mehr — etwa, weil eine andere Lehrperson sie gelöscht hat. */
+export class NichtMehrDaFehler extends Error {
+  readonly name = 'NichtMehrDaFehler';
+  constructor() { super('Anmeldung gibt es nicht mehr'); }
+}
+
 const streuung = (ms: number) => ms * (0.6 + Math.random() * 0.8);
 
 export async function mitWiederholung<T>(vorgang: () => Promise<T>): Promise<T> {
@@ -30,7 +36,8 @@ export async function mitWiederholung<T>(vorgang: () => Promise<T>): Promise<T> 
       return await vorgang();
     } catch (fehler) {
       // Fachliche Ergebnisse nicht wiederholen.
-      if (fehler instanceof AusgebuchtFehler || fehler instanceof RechteFehler) throw fehler;
+      if (fehler instanceof AusgebuchtFehler || fehler instanceof RechteFehler
+        || fehler instanceof NichtMehrDaFehler) throw fehler;
       letzter = fehler;
       if (versuch === WARTEZEITEN_MS.length) break;
       await new Promise((r) => setTimeout(r, streuung(WARTEZEITEN_MS[versuch])));

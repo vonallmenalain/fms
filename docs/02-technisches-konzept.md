@@ -97,7 +97,7 @@ Vier Collections plus ein Konfigdokument. Alles bewusst flach.
   "erstelltAm": <Timestamp>,
   "geaendertAm": <Timestamp>,
   "quelle": "gast",                   // "gast" | "admin"
-  "notiz": null                       // nur bei quelle=admin, z. B. "3 SuS ohne Handy"
+  "notiz": null                       // nur bei quelle=admin: freiwilliger Name, z. B. "Familie Muster"
 }
 ```
 

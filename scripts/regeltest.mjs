@@ -121,6 +121,21 @@ await pruefe('Fremde sehen sie NICHT', () => assertFails(getDocs(collection(frem
 await pruefe('Betreuung erfasst Anmeldung (quelle admin)', () => assertSucceeds(setDoc(doc(betreuung, 'bookings/vomstand1'),
   { plaetze: 2, wahl: { a1: null, a2: null, l1: null, l2: null }, quelle: 'admin', notiz: null, erstelltAm: new Date(), geaendertAm: new Date() })));
 await pruefe('Gast darf eine fremde Anmeldung NICHT löschen', () => assertFails(deleteDoc(doc(gast, 'bookings/vomstand1'))));
+// «Erfasste Anmeldungen»: Die Betreuung korrigiert ihre Erfassungen an Ort und Stelle.
+await pruefe('Betreuung ändert eine erfasste Anmeldung', () => assertSucceeds(updateDoc(doc(betreuung, 'bookings/vomstand1'),
+  { plaetze: 3, wahl: { a1: 'a1-x', a2: null, l1: null, l2: null }, notiz: 'Familie Muster', geaendertAm: new Date() })));
+await pruefe('… aber nicht in eine Gast-Anmeldung umwandeln', () => assertFails(updateDoc(doc(betreuung, 'bookings/vomstand1'),
+  { quelle: 'gast' })));
+await pruefe('… und keine erfundene Angebots-ID eintragen', () => assertFails(updateDoc(doc(betreuung, 'bookings/vomstand1'),
+  { wahl: { a1: 'l1-falsch', a2: null, l1: null, l2: null } })));
+await pruefe('… und nicht mehr als 4 Personen', () => assertFails(updateDoc(doc(betreuung, 'bookings/vomstand1'),
+  { plaetze: 5 })));
+await pruefe('… und keinen Roman als Name', () => assertFails(updateDoc(doc(betreuung, 'bookings/vomstand1'),
+  { notiz: 'x'.repeat(301) })));
+await pruefe('Betreuung darf eine Gast-Anmeldung NICHT ändern', () => assertFails(updateDoc(doc(betreuung, 'bookings/gast1'),
+  { plaetze: 4 })));
+await pruefe('Gast darf eine erfasste Anmeldung NICHT ändern', () => assertFails(updateDoc(doc(gast, 'bookings/vomstand1'),
+  { plaetze: 1 })));
 // Neu erlaubt: Ohne das könnte die Betreuung einen eigenen Vertipper am Info-Stand nie
 // korrigieren — und die Übernahme der eigenen Gast-Anmeldung (unten) ginge auch nicht.
 await pruefe('Betreuung darf eine Anmeldung löschen', () => assertSucceeds(deleteDoc(doc(betreuung, 'bookings/vomstand1'))));
